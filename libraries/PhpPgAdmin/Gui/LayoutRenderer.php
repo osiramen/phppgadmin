@@ -81,6 +81,8 @@ class LayoutRenderer extends AbstractContext
 			<script src="js/lib/ace/src-min-noconflict/mode-pgsql.js" defer type="text/javascript"></script>
 			<script src="js/core/ace-mode-plpgsql-lite.js" defer type="text/javascript"></script>
 			<script src="js/lib/lz-string/lz-string.js" defer type="text/javascript"></script>
+			<script src="js/lib/highlight/highlight.min.js" defer type="text/javascript"></script>
+			<script src="js/lib/highlight/languages/pgsql.min.js" defer type="text/javascript"></script>
 			<script src="js/core/frameset.js" defer type="text/javascript"></script>
 			<script src="js/core/misc.js" defer type="text/javascript"></script>
 			<script src="js/core/autocomplete-fk.js" defer type="text/javascript"></script>
@@ -542,12 +544,12 @@ EOT;
 				$out = $str;
 				break;
 			case 'sql':
-				$tag = 'div';
+				$tag = 'pre';
 				$class = 'sql-viewer';
 				$out = htmlspecialchars($str);
 				break;
 			case 'plpgsql':
-				$tag = 'div';
+				$tag = 'pre';
 				$class = 'sql-viewer';
 				$attr = 'data-mode="plpgsql"';
 				$out = htmlspecialchars($str);

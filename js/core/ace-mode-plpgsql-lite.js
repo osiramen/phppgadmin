@@ -86,6 +86,23 @@ ace.define(
 				},
 			];
 
+			// Highlight Postgres data types as a distinct token class
+			// Use a string alternation so it integrates with existing rule handling
+			var PG_TYPES =
+				"smallint|integer|bigint|decimal|numeric|real|double\\s+precision|smallserial|serial|bigserial|money|character\\s+varying|varchar|character|char|text|citext|bytea|timestamp\\s+with\\s+time\\s+zone|timestamp\\s+without\\s+time\\s+zone|timestamp|timestamptz|date|time\\s+with\\s+time\\s+zone|time\\s+without\\s+time\\s+zone|time|timetz|interval|cidr|inet|macaddr|macaddr8|json|jsonb|xml|point|line|lseg|box|path|polygon|circle|bit\\s+varying|varbit|bit|uuid|tsvector|tsquery|int4range|int8range|numrange|tsrange|tstzrange|daterange|oid|regproc|regprocedure|regoper|regoperator|regclass|regtype|regrole|regnamespace|regconfig|regdictionary|any|anyelement|anyarray|anynonarray|anyenum|anyrange|cstring|internal|record|void|trigger|event_trigger|fdw_handler|index_am_handler|tsm_handler|opaque|unknown";
+
+			var typeRule = {
+				token: "support.type",
+				// whole-word match
+				regex: "\\b(?:" + PG_TYPES + ")\\b",
+			};
+
+			["start", "statement"].forEach(function (stateName) {
+				if (Array.isArray(rules[stateName])) {
+					rules[stateName].unshift(typeRule);
+				}
+			});
+
 			this.normalizeRules();
 		};
 

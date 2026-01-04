@@ -348,7 +348,7 @@
 	/**
 	 * @param {HTMLElement} element
 	 */
-	const createSqlViewer = function (element) {
+	const _createSqlViewer = function (element) {
 		if (element.classList.contains("ace_editor")) {
 			// Editor already created
 			return;
@@ -383,12 +383,33 @@
 		editor.renderer.setOption("vScrollBarAlwaysVisible", false);
 		editor.renderer.setOption("maxPixelWidth", 0);
 
-		// Wrap neu triggern
+		// Trigger word wrap
 		editor.session.setUseWrapMode(true);
 		editor.setOption("wrap", "free");
 
-		// Neu layouten
+		// Layout fix
 		editor.resize(true);
+	};
+
+	/**
+	 * @param {HTMLElement} element
+	 */
+	const createSqlViewer = function (element) {
+		if (element.dataset.hljsInitialized) {
+			return;
+		}
+		element.dataset.hljsInitialized = "1";
+
+		const mode = element.dataset.mode || "pgsql";
+		element.classList.add("language-" + mode);
+
+		hljs.highlightElement(element);
+
+		// Quoted identifiers
+		element.innerHTML = element.innerHTML.replace(
+			/"([\w.]+)"/g,
+			'<span class="hljs-quoted-identifier">"$1"</span>'
+		);
 	};
 
 	/**
@@ -471,4 +492,30 @@
 	flatpickr.localize(flatpickr.l10ns.default);
 	//createSqlEditors(document.documentElement);
 	//createDateAndTimePickers(document.documentElement);
+
+	hljs.registerLanguage("pgsql", function (hljs) {
+		const base = hljs.getLanguage("pgsql");
+
+		// Kopie der bestehenden Grammatik
+		const newGrammar = Object.assign({}, base);
+
+		// Neue Funktionserkennungs-Regel hinzufügen
+		newGrammar.contains = [
+			{
+				className: "function",
+				begin: /\b[a-zA-Z_][a-zA-Z0-9_]*\s*(?=\()/, // identifier followed by "("
+			},
+			{
+				className: "string",
+				begin: /\$\$/,
+			},
+			{
+				className: "symbol",
+				begin: /\$\d+/,
+			},
+			...base.contains,
+		];
+
+		return newGrammar;
+	});
 })();

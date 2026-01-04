@@ -686,7 +686,8 @@ tr[class^="data"] td img.icon {
 	font-size: 18px;
 }
 
-.empty-result {
+.empty-result,
+.nodata {
 	margin-top: 2em;
 	margin-bottom: 2em;
 	font-size: 110%;

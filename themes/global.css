@@ -250,7 +250,7 @@ div.fk_value {
 /** Syntax highlighting **/
 .comment,
 .comment_cell {
-	color: #008080;
+	color: #318495;
 }
 
 .keyword {
@@ -362,6 +362,15 @@ td[class^="opbutton"] img.icon {
 .ace_editor .ace_selection {
 	background: rgba(0, 123, 255, 0.3) !important;
 	color: #fff !important;
+}
+
+.ace_editor .ace_keyword {
+	color: #0242c3;
+}
+
+/* Postgres data type highlighting in ACE editor */
+.ace_editor .ace_support.ace_type {
+	color: #c11a87;
 }
 
 a.orderby {
@@ -590,4 +599,59 @@ legend {
 .job-actions {
 	flex: 0 0 auto;
 	white-space: nowrap;
+}
+
+/* Base styling for code blocks */
+pre code.hljs {
+	display: block;
+	background: transparent !important;
+	padding: 0;
+	margin: 0;
+	white-space: pre-wrap;
+	word-break: break-word;
+	font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+	font-size: 13px;
+	line-height: 1.45;
+}
+
+.hljs {
+	color: #000;
+	background: transparent !important;
+}
+
+.hljs-comment,
+.hljs-quote {
+	color: #4c886b;
+	font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-built_in,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-section,
+.hljs-link {
+	color: #0242c3;
+}
+
+.hljs-string,
+.hljs-title,
+.hljs-name,
+.hljs-type {
+	color: #c11a87;
+}
+
+.hljs-number,
+.hljs-attr,
+.hljs-symbol,
+.hljs-bullet {
+	color: #c1571a;
+}
+
+.hljs-function {
+	color: #3c4c72;
+}
+
+.hljs-quoted-identifier {
+	color: #318495;
 }
