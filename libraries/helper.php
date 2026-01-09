@@ -2,12 +2,61 @@
 
 use PhpPgAdmin\Core\AppContainer;
 
+/**
+ * Transforms raw binary data into PostgreSQL COPY-compatible octal escapes.
+ *
+ * Example:
+ *   "\xDE\xAD\xBE\xEF" → "\\336\\255\\276\\357"
+ *
+ * COPY expects exactly this format.
+ */
+function bytea_to_octal(string $data): string
+{
+	if ($data === '') {
+		return '';
+	}
+
+	static $map = null;
+	if ($map === null) {
+		$map = [];
+		for ($i = 0; $i < 256; $i++) {
+			if ($i >= 32 && $i <= 126) {
+				if ($i === 92) {
+					// backslash
+					$map["\\"] = '\\\\';
+				} else {
+					// printable except backslash
+					$map[chr($i)] = chr($i);
+				}
+			} else { // non-printable
+				$map[chr($i)] = sprintf("\\%03o", $i);
+			}
+		}
+	}
+
+	return strtr($data, $map);
+}
+
+
+/**
+ * Escape a string for use as a PostgreSQL identifier (e.g., table or column name)
+ * @param string $id
+ * @return string
+ */
 function pg_escape_id($id = ''): string
 {
 	$pg = AppContainer::getPostgres();
 	return pg_escape_identifier($pg->conn->_connectionID, $id);
 }
 
+/**
+ * HTML-escape a string
+ * @param string|null $string
+ * @param int $flags
+ * @param string $encoding
+ * @param bool $double_encode
+ * @return string
+ */
 function html_esc(
 	$string,
 	$flags = ENT_QUOTES | ENT_SUBSTITUTE,
@@ -206,9 +255,9 @@ function isSqlReadQuery($sql)
 		}
 
 		$isRead = str_starts_with($upper, "SELECT") ||
-		str_starts_with($upper, "WITH") ||
-		str_starts_with($upper, "SET") ||
-		str_starts_with($upper, "SHOW");
+			str_starts_with($upper, "WITH") ||
+			str_starts_with($upper, "SET") ||
+			str_starts_with($upper, "SHOW");
 
 		if ($isRead) {
 			continue;
@@ -218,7 +267,7 @@ function isSqlReadQuery($sql)
 		if ($isRead) {
 			$rest = trim(substr($upper, 7));
 			$isRead = str_starts_with($rest, "SELECT") ||
-			str_starts_with($rest, "WITH");
+				str_starts_with($rest, "WITH");
 			if ($isRead) {
 				continue;
 			}

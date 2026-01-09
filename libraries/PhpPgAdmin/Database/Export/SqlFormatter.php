@@ -166,34 +166,3 @@ class SqlFormatter extends OutputFormatter
     }
 
 }
-
-/**
- * Transforms raw binary data into PostgreSQL COPY-compatible octal escapes.
- *
- * Example:
- *   "\xDE\xAD\xBE\xEF" → "\\336\\255\\276\\357"
- *
- * COPY expects exactly this format.
- */
-function bytea_to_octal(string $data): string
-{
-    if ($data === '') {
-        return '';
-    }
-
-    static $map = null;
-    if ($map === null) {
-        $map = [];
-        for ($i = 0; $i < 256; $i++) {
-            if ($i >= 32 && $i <= 126 && $i !== 92) { // printable except backslash
-                $map[chr($i)] = chr($i);
-            } elseif ($i === 92) { // backslash
-                $map["\\"] = '\\\\';
-            } else { // non-printable
-                $map[chr($i)] = sprintf("\\%03o", $i);
-            }
-        }
-    }
-
-    return strtr($data, $map);
-}

@@ -2,259 +2,314 @@
 
 namespace PhpPgAdmin\Database\Import;
 
-use PhpPgAdmin\Database\Import\CompressionReader;
-use PhpPgAdmin\Database\Import\LocalFileReader;
-use PhpPgAdmin\Database\Import\GzipReader;
-use PhpPgAdmin\Database\Import\Bzip2Reader;
-use PhpPgAdmin\Database\Import\ZipEntryReader;
-
 class SqlParser
 {
     /**
-     * Parse a chunk from file starting at $offset. Returns:
-     * [
-     *  'statements' => array of complete SQL statements (including terminators),
-     *  'consumed' => number of bytes read from file (int),
-     *  'eof' => bool,
-     *  'remainder' => leftover partial SQL string to carry across requests
-     * ]
+     * Returns epoch milliseconds for log timestamps.
      */
-    public static function parseChunk(string $filePath, int $offset, int $maxBytes, string $existingBuffer = ''): array
+    private static function nowMs(): int
     {
-        // Prefer Reader-based parsing which supports zip/gzip/bzip2 streams.
-        try {
-            $type = CompressionReader::detect($filePath);
-            switch ($type) {
-                case 'zip':
-                    $zip = new \ZipArchive();
-                    $entry = null;
-                    if ($zip->open($filePath) === true) {
-                        for ($i = 0; $i < $zip->numFiles; $i++) {
-                            $name = $zip->getNameIndex($i);
-                            if (substr($name, -1) !== '/') { // skip directories
-                                $entry = $name;
-                                break;
-                            }
-                        }
-                        $zip->close();
-                    }
-                    if ($entry === null) {
-                        throw new \Exception('No suitable entry in zip');
-                    }
-                    $reader = new ZipEntryReader($filePath, $entry);
-                    break;
-                case 'gzip':
-                    $reader = new GzipReader($filePath);
-                    break;
-                case 'bzip2':
-                    $reader = new Bzip2Reader($filePath);
-                    break;
-                default:
-                    $reader = new LocalFileReader($filePath);
-                    break;
-            }
-
-            if ($offset > 0) {
-                $reader->seek($offset);
-            }
-
-            $res = self::parseFromReader($reader, $maxBytes, $existingBuffer);
-            $reader->close();
-            return $res;
-        } catch (\Exception $e) {
-            // Fall back to original file-based logic on any reader error
-        }
-
-        // Fallback: read directly from file path (legacy behaviour)
-        $type = CompressionReader::detect($filePath);
-        $data = '';
-        $eof = false;
-        if ($type === 'gzip' && function_exists('gzopen')) {
-            $h = @gzopen($filePath, 'rb');
-            if ($h === false) {
-                return ['statements' => [], 'consumed' => 0, 'eof' => true, 'remainder' => $existingBuffer];
-            }
-            @gzseek($h, $offset);
-            $data = gzread($h, $maxBytes);
-            $eof = gzeof($h);
-            gzclose($h);
-        } else {
-            $h = @fopen($filePath, 'rb');
-            if ($h === false) {
-                return ['statements' => [], 'consumed' => 0, 'eof' => true, 'remainder' => $existingBuffer];
-            }
-            fseek($h, $offset);
-            $data = fread($h, $maxBytes);
-            $eof = feof($h);
-            fclose($h);
-        }
-
-        $buf = $existingBuffer . $data;
-        $len = strlen($buf);
-        if ($len === 0) {
-            return ['statements' => [], 'consumed' => 0, 'eof' => $eof, 'remainder' => $existingBuffer];
-        }
-
-        $statements = [];
-        $start = 0;
-        $inSingle = false;
-        $inDouble = false;
-        $inBlock = false;
-        $inDollar = null;
-
-        for ($i = 0; $i < $len; $i++) {
-            $c = $buf[$i];
-
-            // inside block comment: look for */
-            if ($inBlock) {
-                if ($c === '*' && ($i + 1) < $len && $buf[$i + 1] === '/') {
-                    $inBlock = false;
-                    $i++;
-                }
-                continue;
-            }
-
-            // inside single-quoted string: handle doubled single-quotes as escape
-            if ($inSingle) {
-                if ($c === "'") {
-                    if (($i + 1) < $len && $buf[$i + 1] === "'") {
-                        // escaped '' -> skip the second quote
-                        $i++;
-                        continue;
-                    }
-                    $inSingle = false;
-                }
-                continue;
-            }
-
-            // inside double-quoted identifier: handle doubled double-quotes
-            if ($inDouble) {
-                if ($c === '"') {
-                    if (($i + 1) < $len && $buf[$i + 1] === '"') {
-                        $i++;
-                        continue;
-                    }
-                    $inDouble = false;
-                }
-                continue;
-            }
-
-            // inside dollar-quoted string
-            if ($inDollar !== null) {
-                $tag = $inDollar;
-                $tlen = strlen($tag);
-                if ($tlen > 0 && substr($buf, $i, $tlen) === $tag) {
-                    $inDollar = null;
-                    $i += $tlen - 1;
-                }
-                continue;
-            }
-
-            // not inside any quote/comment
-            // detect start of block comment /*
-            if ($c === '/' && ($i + 1) < $len && $buf[$i + 1] === '*') {
-                $inBlock = true;
-                $i++;
-                continue;
-            }
-
-            // detect line comment --
-            if ($c === '-' && ($i + 1) < $len && $buf[$i + 1] === '-') {
-                // skip until end of line
-                $i += 2;
-                while ($i < $len && $buf[$i] !== "\n") {
-                    $i++;
-                }
-                continue;
-            }
-
-            if ($c === "'") {
-                $inSingle = true;
-                continue;
-            }
-            if ($c === '"') {
-                $inDouble = true;
-                continue;
-            }
-
-            if ($c === '$') {
-                // try to detect dollar-quote tag e.g. $tag$
-                $rest = substr($buf, $i);
-                if (preg_match('/^\$[A-Za-z0-9_]*\$/', $rest, $m)) {
-                    $inDollar = $m[0];
-                    $i += strlen($inDollar) - 1;
-                    continue;
-                }
-            }
-
-            // If a statement starts with COPY ... FROM stdin, capture until \.
-            if ($i === $start) {
-                // check for COPY at statement start
-                if (preg_match('/^\s*COPY\b/i', substr($buf, $start))) {
-                    // search for terminator pattern: "newline backslash dot newline" with optional CR
-                    if (preg_match('/\r?\n\\\.\r?\n/', $buf, $m, PREG_OFFSET_CAPTURE, $start)) {
-                        $pos = $m[0][1];
-                        $matchLen = strlen($m[0][0]);
-                        $stmt = substr($buf, $start, $pos + $matchLen - $start);
-                        $statements[] = $stmt;
-                        $start = $pos + $matchLen;
-                        $i = $start - 1;
-                        continue;
-                    } else {
-                        // need more data to complete COPY block
-                        break;
-                    }
-                }
-            }
-
-            // semicolon ends statement when outside of quotes/comments
-            if ($c === ';') {
-                $stmt = substr($buf, $start, $i - $start + 1);
-                $statements[] = $stmt;
-                $start = $i + 1;
-            }
-        }
-
-        $remainder = '';
-        // If there's leftover after last complete statement, keep as remainder
-        if ($start < $len) {
-            $remainder = substr($buf, $start);
-        }
-
-        // consumed bytes from file = bytes read from file (not counting existingBuffer)
-        $consumed = strlen($data);
-
-        return ['statements' => $statements, 'consumed' => $consumed, 'eof' => $eof, 'remainder' => $remainder];
+        return (int) (microtime(true) * 1000);
     }
 
     /**
-     * Parse from a ReaderInterface instance. This mirrors parseChunk but reads
-     * from the provided reader instead of directly from a file path.
+     * Attempt to stream/split an INSERT ... VALUES statement at $start.
      *
-     * @param ReaderInterface $reader
-     * @param int $maxBytes
-     * @param string $existingBuffer
-     * @return array
+     * Conservative rules (to preserve correctness):
+     * - Only emits tuples that are followed by an explicit ',' or ';' within the current buffer.
+     * - If after a tuple we see something other than ',', ';', or end-of-buffer, streaming is aborted.
+     *   (This avoids breaking statements with trailing clauses like ON CONFLICT / RETURNING).
+     *
+     * Returns null if not applicable or if more data is needed.
+     *
+     * On full statement termination (";" seen), returns:
+     *  ['statements' => string[], 'newStart' => int]
+     *
+     * On partial progress (no ';' yet, but at least one tuple emitted), returns:
+     *  ['statements' => string[], 'remainder' => string]
      */
-    public static function parseFromReader($reader, int $maxBytes, string $existingBuffer = ''): array
+    private static function tryStreamInsertValues(string $buf, int $start, int $len, int $maxTuplesPerStmt = 500, int $maxStmtBytes = 262144): ?array
     {
-        $data = $reader->read($maxBytes);
-        $eof = $reader->eof();
+        $sub = substr($buf, $start);
+        // quick filter: must look like INSERT ... VALUES
+        if (!preg_match('/^\s*INSERT\s+INTO\b.*?\bVALUES\b/si', $sub)) {
+            return null;
+        }
 
+        if (!preg_match('/\bVALUES\b/si', $sub, $kv, PREG_OFFSET_CAPTURE)) {
+            return null;
+        }
+
+        $valuesPosAbs = $start + $kv[0][1] + strlen($kv[0][0]);
+        if ($valuesPosAbs >= $len) {
+            return null;
+        }
+
+        $header = substr($buf, $start, $valuesPosAbs - $start);
+
+        $out = [];
+        $batch = [];
+        $batchBytes = 0;
+        $batchTuples = 0;
+
+        $j = $valuesPosAbs;
+        // skip whitespace after VALUES
+        while ($j < $len && ($buf[$j] === " " || $buf[$j] === "\t" || $buf[$j] === "\r" || $buf[$j] === "\n" || $buf[$j] === "\f")) {
+            $j++;
+        }
+
+        $tupleStart = null;
+        $depth = 0;
+        $inS = false;
+        $inD = false;
+        $inDol = null;
+
+        $tailPos = null; // position after ',' following last emitted tuple
+
+        $flush = function (bool $final = false) use (&$out, &$batch, &$batchBytes, &$batchTuples, $header) {
+            if (empty($batch)) {
+                return;
+            }
+            // Keep formatting compact; db accepts it.
+            $out[] = rtrim($header) . ' ' . implode(',', $batch) . ';';
+            $batch = [];
+            $batchBytes = 0;
+            $batchTuples = 0;
+        };
+
+        while ($j < $len) {
+            $ch = $buf[$j];
+
+            if ($inS) {
+                // Handle backslash escapes (e.g. E'...\'...') by skipping the escaped char.
+                if ($ch === "\\") {
+                    if (($j + 1) < $len) {
+                        $j += 2;
+                        continue;
+                    }
+                    $j++;
+                    continue;
+                }
+                if ($ch === "'") {
+                    if (($j + 1) < $len && $buf[$j + 1] === "'") {
+                        $j += 2;
+                        continue;
+                    }
+                    $inS = false;
+                }
+                $j++;
+                continue;
+            }
+
+            if ($inD) {
+                if ($ch === '"') {
+                    if (($j + 1) < $len && $buf[$j + 1] === '"') {
+                        $j += 2;
+                        continue;
+                    }
+                    $inD = false;
+                }
+                $j++;
+                continue;
+            }
+
+            if ($inDol !== null) {
+                $tlen = strlen($inDol);
+                if ($tlen > 0 && ($j + $tlen) <= $len && substr($buf, $j, $tlen) === $inDol) {
+                    $inDol = null;
+                    $j += $tlen;
+                    continue;
+                }
+                $j++;
+                continue;
+            }
+
+            if ($ch === '$') {
+                $rest = substr($buf, $j);
+                if (preg_match('/^\$[A-Za-z0-9_]*\$/', $rest, $mm)) {
+                    $inDol = $mm[0];
+                    $j += strlen($inDol);
+                    continue;
+                }
+            }
+
+            if ($ch === "'") {
+                $inS = true;
+                $j++;
+                continue;
+            }
+            if ($ch === '"') {
+                $inD = true;
+                $j++;
+                continue;
+            }
+
+            if ($ch === '(') {
+                if ($depth === 0) {
+                    $tupleStart = $j;
+                }
+                $depth++;
+                $j++;
+                continue;
+            }
+
+            if ($ch === ')') {
+                if ($depth > 0) {
+                    $depth--;
+                    if ($depth === 0 && $tupleStart !== null) {
+                        $tupleEnd = $j + 1;
+
+                        // Find delimiter after tuple end
+                        $k = $tupleEnd;
+                        while ($k < $len && ($buf[$k] === " " || $buf[$k] === "\t" || $buf[$k] === "\r" || $buf[$k] === "\n" || $buf[$k] === "\f")) {
+                            $k++;
+                        }
+                        if ($k >= $len) {
+                            // Need more data to decide if this is followed by ',' ';' or a trailing clause.
+                            break;
+                        }
+
+                        $delim = $buf[$k];
+                        if ($delim !== ',' && $delim !== ';') {
+                            // Likely ON CONFLICT / RETURNING; do not stream.
+                            return null;
+                        }
+
+                        $tupleText = substr($buf, $tupleStart, $tupleEnd - $tupleStart);
+                        $batch[] = $tupleText;
+                        $batchTuples++;
+                        $batchBytes += strlen($tupleText) + 1;
+                        $tupleStart = null;
+
+                        if ($delim === ',') {
+                            $tailPos = $k + 1;
+                            // Flush if batch is big enough.
+                            if ($batchTuples >= $maxTuplesPerStmt || $batchBytes >= $maxStmtBytes) {
+                                $flush(false);
+                            }
+                            $j = $tailPos;
+                            continue;
+                        }
+
+                        // delim is ';' => statement ended
+                        $flush(true);
+                        $newStart = self::skipNoise($buf, $k + 1, $len);
+                        return ['statements' => $out, 'newStart' => $newStart];
+                    }
+                }
+                $j++;
+                continue;
+            }
+
+            $j++;
+        }
+
+        // Partial: we only make progress if we flushed at least one statement, or we have tuples
+        // that we know are followed by ',' (tailPos is set).
+        if (!empty($batch)) {
+            // Only flush if we know we can safely advance (tailPos indicates a comma after last tuple).
+            if ($tailPos !== null) {
+                $flush(false);
+            }
+        }
+
+        if (empty($out) || $tailPos === null) {
+            // No safe progress yet.
+            return null;
+        }
+
+        $tail = ltrim(substr($buf, $tailPos));
+        $remainder = rtrim($header) . ' ' . $tail;
+
+        return ['statements' => $out, 'remainder' => $remainder];
+    }
+
+    /**
+     * Skip whitespace, comments, and psql meta-commands (\\... lines) starting at $pos.
+     * Returns the next position where a real SQL token may begin.
+     */
+    private static function skipNoise(string $buf, int $pos, int $len, ?array &$meta = null): int
+    {
+        while ($pos < $len) {
+            // skip whitespace
+            while ($pos < $len && ($buf[$pos] === " " || $buf[$pos] === "\t" || $buf[$pos] === "\r" || $buf[$pos] === "\n" || $buf[$pos] === "\f")) {
+                $pos++;
+            }
+            if ($pos >= $len)
+                break;
+
+            // line comment --
+            if ($buf[$pos] === '-' && ($pos + 1) < $len && $buf[$pos + 1] === '-') {
+                $pos += 2;
+                while ($pos < $len && $buf[$pos] !== "\n") {
+                    $pos++;
+                }
+                continue;
+            }
+
+            // block comment /* ... */
+            if ($buf[$pos] === '/' && ($pos + 1) < $len && $buf[$pos + 1] === '*') {
+                $end = strpos($buf, '*/', $pos + 2);
+                if ($end === false) {
+                    // Unclosed block comment; treat as noise till end
+                    return $len;
+                }
+                $pos = $end + 2;
+                continue;
+            }
+
+            // psql meta-command line starting with backslash
+            if ($buf[$pos] === '\\') {
+                $startLine = $pos;
+                while ($pos < $len && $buf[$pos] !== "\n") {
+                    $pos++;
+                }
+                if ($meta !== null) {
+                    $meta[] = rtrim(substr($buf, $startLine, $pos - $startLine), "\r\n");
+                }
+                continue;
+            }
+
+            break; // nothing skipped => meaningful token at $pos
+        }
+        return $pos;
+    }
+
+
+    /**
+     * Parse from a raw string chunk plus existing buffer. Useful for HTTP streaming.
+     * Returns same structure as parseFromReader; 'eof' is false by default.
+     */
+    public static function parseFromString(string $data, string $existingBuffer = '', bool $eof = false): array
+    {
+        // Reuse the logic of parseFromReader by inlining the same steps
         $buf = $existingBuffer . $data;
         $len = strlen($buf);
+        $meta = [];
         if ($len === 0) {
-            return ['statements' => [], 'consumed' => 0, 'eof' => $eof, 'remainder' => $existingBuffer];
+            return [
+                'statements' => [],
+                'consumed' => 0,
+                'eof' => $eof,
+                'remainder' => $existingBuffer,
+                'meta' => $meta,
+                'standard_conforming_strings' => true,
+            ];
         }
 
         $statements = [];
-        $start = 0;
+        $start = self::skipNoise($buf, 0, $len, $meta);
         $inSingle = false;
+        $stringBackslashEscapes = false;
         $inDouble = false;
         $inBlock = false;
         $inDollar = null;
+        $stdConforming = true;
 
         for ($i = 0; $i < $len; $i++) {
+            if ($i < $start) {
+                $i = $start;
+            }
             $c = $buf[$i];
 
             if ($inBlock) {
@@ -266,12 +321,19 @@ class SqlParser
             }
 
             if ($inSingle) {
+                if ($stringBackslashEscapes && $c === "\\") {
+                    if (($i + 1) < $len) {
+                        $i++;
+                    }
+                    continue;
+                }
                 if ($c === "'") {
                     if (($i + 1) < $len && $buf[$i + 1] === "'") {
                         $i++;
                         continue;
                     }
                     $inSingle = false;
+                    $stringBackslashEscapes = false;
                 }
                 continue;
             }
@@ -308,11 +370,23 @@ class SqlParser
                 while ($i < $len && $buf[$i] !== "\n") {
                     $i++;
                 }
+                // Re-align start if we're still at statement start
+                if ($start === $i) {
+                    $start = self::skipNoise($buf, $start, $len, $meta);
+                }
                 continue;
             }
 
             if ($c === "'") {
+                $isEscapeLiteral = false;
+                if ($i > 0 && ($buf[$i - 1] === 'E' || $buf[$i - 1] === 'e')) {
+                    $prev = ($i - 2) >= 0 ? $buf[$i - 2] : '';
+                    if (!preg_match('/[A-Za-z0-9_]/', $prev)) {
+                        $isEscapeLiteral = true;
+                    }
+                }
                 $inSingle = true;
+                $stringBackslashEscapes = (!$stdConforming) || $isEscapeLiteral;
                 continue;
             }
             if ($c === '"') {
@@ -330,17 +404,53 @@ class SqlParser
             }
 
             if ($i === $start) {
+                // Skip psql meta-commands at statement start
+                if ($buf[$start] === '\\') {
+                    $lineStart = $start;
+                    while ($i < $len && $buf[$i] !== "\n") {
+                        $i++;
+                    }
+                    $meta[] = rtrim(substr($buf, $lineStart, $i - $lineStart), "\r\n");
+                    $start = self::skipNoise($buf, $i + 1, $len, $meta);
+                    $i = $start - 1;
+                    continue;
+                }
+                // COPY streaming
                 if (preg_match('/^\s*COPY\b/i', substr($buf, $start))) {
                     if (preg_match('/\r?\n\\\.\r?\n/', $buf, $m, PREG_OFFSET_CAPTURE, $start)) {
                         $pos = $m[0][1];
                         $matchLen = strlen($m[0][0]);
                         $stmt = substr($buf, $start, $pos + $matchLen - $start);
                         $statements[] = $stmt;
-                        $start = $pos + $matchLen;
+                        $start = self::skipNoise($buf, $pos + $matchLen, $len);
                         $i = $start - 1;
                         continue;
                     } else {
                         break;
+                    }
+                }
+                // INSERT ... VALUES streaming
+                $ins = self::tryStreamInsertValues($buf, $start, $len);
+                if (is_array($ins)) {
+                    if (!empty($ins['statements'])) {
+                        foreach ($ins['statements'] as $s) {
+                            $statements[] = $s;
+                        }
+                    }
+                    if (isset($ins['newStart'])) {
+                        $start = (int) $ins['newStart'];
+                        $i = $start - 1;
+                        continue;
+                    }
+                    if (isset($ins['remainder'])) {
+                        return [
+                            'statements' => $statements,
+                            'consumed' => strlen($data),
+                            'eof' => $eof,
+                            'remainder' => (string) $ins['remainder'],
+                            'meta' => $meta,
+                            'standard_conforming_strings' => $stdConforming,
+                        ];
                     }
                 }
             }
@@ -348,7 +458,13 @@ class SqlParser
             if ($c === ';') {
                 $stmt = substr($buf, $start, $i - $start + 1);
                 $statements[] = $stmt;
-                $start = $i + 1;
+                $stmtTrim = strtolower(trim($stmt, " \t\n\r;"));
+                if (preg_match('/^set\s+standard_conforming_strings\s*=\s*off/', $stmtTrim)) {
+                    $stdConforming = false;
+                } elseif (preg_match('/^set\s+standard_conforming_strings\s*=\s*on/', $stmtTrim)) {
+                    $stdConforming = true;
+                }
+                $start = self::skipNoise($buf, $i + 1, $len, $meta);
             }
         }
 
@@ -356,9 +472,15 @@ class SqlParser
         if ($start < $len) {
             $remainder = substr($buf, $start);
         }
-
         $consumed = strlen($data);
 
-        return ['statements' => $statements, 'consumed' => $consumed, 'eof' => $eof, 'remainder' => $remainder];
+        return [
+            'statements' => $statements,
+            'consumed' => $consumed,
+            'eof' => $eof,
+            'remainder' => $remainder,
+            'meta' => $meta,
+            'standard_conforming_strings' => $stdConforming,
+        ];
     }
 }

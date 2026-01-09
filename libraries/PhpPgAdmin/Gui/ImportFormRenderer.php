@@ -13,6 +13,7 @@ class ImportFormRenderer extends AbstractContext
     {
         $lang = $this->lang();
         $conf = $this->conf();
+        $misc = $this->misc();
         $importCfg = $conf['import'] ?? [];
         $maxSize = (int) ($importCfg['upload_max_size'] ?? 0);
         $chunkSize = (int) ($importCfg['upload_chunk_size'] ?? ($importCfg['chunk_size'] ?? 0));
@@ -38,11 +39,11 @@ class ImportFormRenderer extends AbstractContext
         $roleActions = new RoleActions($pg);
         $isSuper = $roleActions->isSuperUser();
         ?>
-        <form id="importForm" method="post" enctype="multipart/form-data" action="dbimport.php?action=upload">
+        <form id="importForm" method="post" enctype="multipart/form-data" action="#">
             <input type="hidden" name="scope" id="import_scope" value="<?= htmlspecialchars($scope) ?>" />
             <input type="hidden" name="scope_ident" id="import_scope_ident"
                 value="<?= htmlspecialchars($options['scope_ident'] ?? '') ?>" />
-            <input type="hidden" name="server" id="import_server" value="<?= htmlspecialchars($_REQUEST['server'] ?? '') ?>" />
+            <?= $misc->form ?>
 
             <fieldset>
                 <legend><?= $lang['struploadfile'] ?></legend>
@@ -88,11 +89,10 @@ class ImportFormRenderer extends AbstractContext
                         <?= $lang['strimporterrorlog'] ?? 'Log errors and continue' ?></label></div>
                 <div><label><input type="radio" name="opt_error_mode" value="ignore" />
                         <?= $lang['strimporterrorignore'] ?? 'Ignore errors (not recommended)' ?></label></div>
-            </fieldset>
-
-            <fieldset>
-                <legend><?= $lang['strautostart'] ?? 'Auto-start import after upload' ?></legend>
-                <label><input type="checkbox" name="opt_auto_start" id="opt_auto_start" <?= ($importCfg['auto_start_default'] ?? false) ? 'checked' : '' ?> /> <?= $lang['strautostart'] ?? 'Auto-start import after upload' ?></label>
+                <div style="margin-top:6px"><label>
+                        <?= $lang['strskipstatements'] ?? 'Skip statements' ?>:
+                        <input type="number" name="skip_statements" value="0" min="0" style="width:80px" />
+                    </label></div>
             </fieldset>
 
             <div class="form-group">
@@ -100,8 +100,7 @@ class ImportFormRenderer extends AbstractContext
             </div>
         </form>
 
-        <div id="importUI" data-server="<?= htmlspecialchars($_REQUEST['server'] ?? '') ?>"
-            style="display:none;margin-top:16px">
+        <div id="importUI" style="display:none;margin-top:16px">
             <div id="uploadPhase">
                 <h4><?= $lang['strupload'] ?>         <?= $lang['strprogress'] ?? 'Progress' ?></h4>
                 <progress id="uploadProgress" value="0" max="100" style="width:100%"></progress>
@@ -125,49 +124,7 @@ class ImportFormRenderer extends AbstractContext
             </div>
         </div>
 
-        <div id="uploadedJobs" style="margin-top:12px">
-            <h4><?= $lang['struploads'] ?? 'Uploaded Jobs' ?></h4>
-            <?php if ($isSuper): ?>
-                <div style="margin-bottom:8px">
-                    <label><input type="checkbox" id="opt_show_all" />
-                        <?= $lang['strshowalljobs'] ?? 'Show all jobs (admin only)' ?></label>
-                </div>
-            <?php endif; ?>
-            <div id="uploadedJobsList">Loading...</div>
-        </div>
-
-        <template id="job-row-template">
-            <div class="import-job-row">
-                <div class="job-info"></div>
-                <div class="job-actions">
-                    <button class="job-btn view">View</button>
-                    <button class="job-btn start">Start</button>
-                    <button class="job-btn cancel">Pause</button>
-                    <button class="job-btn resume">Resume</button>
-                    <button class="job-btn delete">Delete</button>
-                </div>
-            </div>
-        </template>
-
-        <!-- Static modals for import UI (hidden by default) -->
-        <div id="entrySelectorModal" class="import-panel"
-            style="display:none;margin-top:12px;border:1px solid #ddd;padding:10px;background:#fff;">
-            <h3 style="margin-top:0;"><?= $lang['strselectzipentry'] ?? 'Select file from ZIP to import' ?></h3>
-            <div class="form-group">
-                <label for="entrySelect"><?= $lang['strfilename'] ?? 'Filename' ?></label>
-                <select id="entrySelect" style="width:100%"></select>
-            </div>
-            <div class="form-group">
-                <label><input type="checkbox" id="import_all_chk" />
-                    <?= $lang['strimportall'] ?? 'Import all entries alphabetically' ?></label>
-            </div>
-            <div style="margin-top:8px">
-                <button id="entryImportBtn"><?= $lang['strimport'] ?? 'Import' ?></button>
-                <button id="entryCancelBtn" style="margin-left:8px"><?= $lang['strcancel'] ?? 'Cancel' ?></button>
-            </div>
-        </div>
-
-        <script type="module" src="js/import.js"></script>
+        <script type="module" src="js/import/stream_upload.js"></script>
         <?php
     }
 }

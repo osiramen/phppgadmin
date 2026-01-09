@@ -11,8 +11,9 @@ class StatementClassifier
      */
     public static function classify(string $sql, string $currentUser = ''): string
     {
+        // Avoid creating large lowercase copies of huge statements (e.g., COPY blocks)
+        // Work on the original string with case-insensitive regexes anchored at start.
         $s = ltrim($sql);
-        $low = strtolower($s);
 
         // connection change: psql meta-command like \connect or \c
         if (preg_match('/^\\\\?c(onnect)?\b/i', $s) || preg_match('/^\\c\b/i', $s)) {
@@ -28,7 +29,7 @@ class StatementClassifier
         }
 
         // DROP statements
-        if (preg_match('/^drop\b/i', $low))
+        if (preg_match('/^drop\b/i', $s))
             return 'drop';
 
         // Cluster-wide objects

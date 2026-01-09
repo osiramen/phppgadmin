@@ -217,9 +217,16 @@ class Misc extends AbstractContext
 		// we work on UTF-8 only encoding
 		$postgres->execute("SET client_encoding TO 'UTF-8'");
 
-		if ($postgres->hasByteaHexDefault()) {
-			$postgres->execute("SET bytea_output TO escape");
+		// Enable standard conforming strings for versions < 9.1
+		// Since 9.1, this is already the default
+		if ($majorVersion < 9.1) {
+			$postgres->execute("SET standard_conforming_strings = on");
 		}
+
+		//if ($postgres->hasByteaHexDefault()) {
+		//	$postgres->execute("SET bytea_output TO escape");
+		//}
+
 
 		return $postgres;
 	}

@@ -104,6 +104,7 @@ function frameSetHandler() {
 			return new Promise((resolve, reject) => {
 				const newScript = document.createElement("script");
 				newScript.src = oldScript.src;
+				newScript.type = oldScript.type || "text/javascript";
 				newScript.onload = resolve;
 				newScript.onerror = reject;
 				content.appendChild(newScript);
