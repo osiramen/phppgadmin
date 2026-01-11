@@ -18,6 +18,8 @@ class CsvFormatter extends OutputFormatter
     /** @var \PhpPgAdmin\Database\Postgres */
     private $pg;
 
+    private $exportNulls;
+
     /**
      * Format ADORecordSet as CSV
      * @param \ADORecordSet $recordset ADORecordSet
@@ -30,15 +32,18 @@ class CsvFormatter extends OutputFormatter
         }
 
         $this->pg = $this->postgres();
+        $this->exportNulls = $metadata['export_nulls'] ?? '';
 
         // Detect bytea columns once
         $is_bytea = [];
+        $is_json = [];
         $col_count = count($recordset->fields);
 
         for ($i = 0; $i < $col_count; $i++) {
             $finfo = $recordset->fetchField($i);
             $type = strtolower($finfo->type ?? '');
             $is_bytea[$i] = ($type === 'bytea');
+            $is_json[$i] = ($type === 'json' || $type === 'jsonb');
         }
 
         // Header
@@ -51,7 +56,7 @@ class CsvFormatter extends OutputFormatter
 
         // Rows
         while (!$recordset->EOF) {
-            $this->write($this->csvLineRecord($recordset->fields, $is_bytea));
+            $this->write($this->csvLineRecord($recordset->fields, $is_bytea, $is_json));
             $recordset->moveNext();
         }
     }
@@ -76,7 +81,7 @@ class CsvFormatter extends OutputFormatter
     /**
      * CSV line for data rows (with bytea support)
      */
-    private function csvLineRecord(array $fields, array $is_bytea): string
+    private function csvLineRecord(array $fields, array $is_bytea, array $is_json): string
     {
         $out = '';
         $sep = '';
@@ -85,16 +90,20 @@ class CsvFormatter extends OutputFormatter
             $out .= $sep;
 
             if ($value === null) {
-                // empty field
-                // nothing appended
+                // append NULL representation
+                $value = $this->exportNulls;
+            } elseif ($is_json[$i]) {
+                // JSON → special escaping for CSV
+                $value = $this->escapeJsonForCsv($value);
             } else {
                 if ($is_bytea[$i]) {
                     // bytea → escapeBytea → then CSV-escape
                     $value = $this->pg->escapeBytea($value);
                 }
-                $out .= $this->csvField($value);
+                $value = $this->csvField($value);
             }
 
+            $out .= $value;
             $sep = ',';
         }
 
@@ -115,5 +124,19 @@ class CsvFormatter extends OutputFormatter
 
         return $value;
     }
+
+    private function escapeJsonForCsv(string $json): string
+    {
+        // Escape literal newlines in JSON to prevent reimport corruption
+        $json = str_replace("\n", "\\n", $json);
+
+        // Preserve escaped quotes in JSON while CSV-escaping outer quotes
+        $temp = str_replace('\\"', "\x1A", $json);
+        $temp = str_replace('"', '""', $temp);
+        $escaped = str_replace("\x1A", '\\"', $temp);
+
+        return '"' . $escaped . '"';
+    }
+
 
 }

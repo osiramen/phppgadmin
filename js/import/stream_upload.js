@@ -79,6 +79,18 @@ async function startStreamUpload() {
 		if (ck && ck.checked) opts[n] = 1;
 	}
 
+	// Data-import specific options
+	const formatSelect = importForm["format"];
+	const format = formatSelect?.value ?? "csv";
+	const useHeader = !!importForm["use_header"]?.checked;
+	const allowedNulls = [];
+	const nullInputs = importForm.querySelectorAll(
+		"input[name^='allowednulls']"
+	);
+	nullInputs.forEach((inp) => {
+		if (inp.checked) allowedNulls.push(inp.value);
+	});
+
 	// Error handling mode
 	const errorModeInput = document.querySelector(
 		"input[name='opt_error_mode']:checked"
@@ -122,6 +134,7 @@ async function startStreamUpload() {
 		: null;
 	const chunkSize = (chunkAttr && parseInt(chunkAttr, 10)) || 5 * 1024 * 1024;
 
+	let totalRetries = 0;
 	let offset = 0;
 	let bytesRead = 0; // track compressed input bytes for progress
 	let remainder = ""; // server-provided incomplete tail
@@ -191,12 +204,16 @@ async function startStreamUpload() {
 		if (isFinal) params.set("eof", "1");
 		params.set("import_session_id", importSessionId);
 		params.set("chunk_hash", chunkHash);
+		params.set("format", format);
+		if (useHeader) params.set("use_header", "1");
+		allowedNulls.forEach((v) => params.append("allowednulls[]", v));
 		for (const [k, v] of Object.entries(opts)) params.set(k, String(v));
 		if (scope) params.set("scope", scope);
 		if (scopeIdent) params.set("scope_ident", scopeIdent);
 
+		const urlBase = importForm.dataset.action;
 		const url = appendServerToUrl(
-			"dbimport.php?action=process_chunk&" + params.toString()
+			`${urlBase}?action=process_chunk&${params.toString()}`
 		);
 
 		// Retry loop with exponential backoff
@@ -204,6 +221,7 @@ async function startStreamUpload() {
 		const maxRetryDelay = 30000; // max 30 seconds between retries
 		while (true) {
 			if (stopRequested) {
+				logImport("Upload stopped by user.", "warning");
 				throw new Error("Upload stopped by user");
 			}
 
@@ -268,6 +286,7 @@ async function startStreamUpload() {
 				// Wait before retry, but check stopRequested periodically
 				for (let i = 0; i < delay; i += 100) {
 					if (stopRequested) {
+						logImport("Upload stopped by user.", "warning");
 						throw new Error("Upload stopped by user during retry");
 					}
 					await new Promise((r) => setTimeout(r, 100));
@@ -371,6 +390,7 @@ async function startStreamUpload() {
 		while (true) {
 			const { value, done } = await reader.read();
 			if (stopRequested) {
+				logImport("Upload stopped by user.", "warning");
 				reader.cancel();
 				return;
 			}

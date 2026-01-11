@@ -11,7 +11,7 @@ class PlainStrategy implements CompressionStrategy
         }
 
         header('Content-Type: application/octet-stream');
-        header("Content-Disposition: attachment; filename={$filename}.sql");
+        header("Content-Disposition: attachment; filename={$filename}");
 
         $stream = fopen('php://output', 'wb');
 

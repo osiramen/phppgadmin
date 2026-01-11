@@ -227,7 +227,9 @@ function doImport($msg = '')
 	$misc->printMsg($msg);
 
 	$renderer = new ImportFormRenderer();
-	$renderer->renderDataImportForm('table');
+	$renderer->renderDataImportForm('table', [
+		'table' => $_REQUEST['table'],
+	]);
 }
 
 function doAddColumn($msg = '')

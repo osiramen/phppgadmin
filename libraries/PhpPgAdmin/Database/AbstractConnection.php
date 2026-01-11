@@ -123,6 +123,16 @@ abstract class AbstractConnection extends AbstractContext
 	}
 
 	/**
+	 * Quotes an identifier (table, field, etc.)
+	 * @param string $id The identifier to quote
+	 * @return string The quoted identifier
+	 */
+	public function quoteIdentifier($id = ''): string
+	{
+		return pg_escape_identifier($this->conn->_connectionID, $id);
+	}
+
+	/**
 	 * Escapes a literal value
 	 * @param string $literal The literal to escape
 	 * @return string The escaped literal

@@ -17,14 +17,16 @@ class Bzip2Strategy implements CompressionStrategy
         ini_set('zlib.output_compression', 'Off');
 
         header('Content-Type: application/x-bzip2');
-        header("Content-Disposition: attachment; filename={$filename}.sql.bz2");
+        header("Content-Disposition: attachment; filename={$filename}.bz2");
 
         $stream = fopen('php://output', 'wb');
         if ($stream === false) {
             throw new \RuntimeException('Could not open php://output');
         }
 
-        $filter = stream_filter_append($stream, 'bzip2.compress', STREAM_FILTER_WRITE);
+        // Todo use maximum compression level ('blocks' => 9)?
+        $param = array('blocks' => 5, 'work' => 0);
+        $filter = stream_filter_append($stream, 'bzip2.compress', STREAM_FILTER_WRITE, $param);
         if ($filter === false) {
             fclose($stream);
             throw new \RuntimeException('Could not attach bzip2 filter');

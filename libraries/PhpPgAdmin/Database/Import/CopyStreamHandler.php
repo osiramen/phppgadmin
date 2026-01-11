@@ -2,6 +2,7 @@
 
 namespace PhpPgAdmin\Database\Import;
 
+use PhpPgAdmin\Database\Postgres;
 use PhpPgAdmin\Database\Import\Exception\CopyException;
 
 /**
@@ -11,6 +12,7 @@ class CopyStreamHandler
 {
     /** @var LogCollector */
     private $logs;
+    /** @var Postgres */
     private $pg;
     /** @var string */
     private $scope;
@@ -95,33 +97,28 @@ class CopyStreamHandler
             $this->state['truncated_tables'] = [];
         }
 
-        $rawTable = null;
-        if (preg_match('/^\s*COPY\s+([^\s(]+)/i', $copyHeader, $m)) {
-            $rawTable = $m[1];
-        }
-        if ($rawTable === null || $rawTable === '') {
+        if (!mb_ereg('^\s*COPY\s*([^\s(]+)', $copyHeader, $m)) {
             return;
         }
 
-        $rawTable = trim($rawTable);
-        $rawTable = preg_replace('/^"(.*)"$/', '$1', $rawTable);
-        $parts = preg_split('/\./', $rawTable);
-        $parts = array_map(function ($p) {
-            $p = trim($p);
-            return preg_replace('/^"(.*)"$/', '$1', $p);
-        }, $parts);
+        $rawTable = $m[1];
+
+        $parts = explode('.', $rawTable);
+
+        $parts = array_map('pg_unquote_identifier', $parts);
 
         if (count($parts) === 1) {
-            $schema = null;
             if ($this->scope === 'schema' && $this->scopeIdent !== '') {
                 $schema = $this->scopeIdent;
             } elseif ($this->schema !== '') {
                 $schema = $this->schema;
+            } else {
+                $schema = null;
             }
             $table = $parts[0];
         } else {
-            $table = array_pop($parts);
-            $schema = array_pop($parts);
+            $schema = $parts[0];
+            $table = $parts[1];
         }
 
         $fullName = $schema ? ($schema . '.' . $table) : $table;
@@ -129,11 +126,10 @@ class CopyStreamHandler
             return;
         }
 
-        $quoteIdent = function ($name) {
-            return '"' . str_replace('"', '""', $name) . '"';
-        };
-
-        $ident = $schema ? ($quoteIdent($schema) . '.' . $quoteIdent($table)) : $quoteIdent($table);
+        $ident = $this->pg->quoteIdentifier($table);
+        if ($schema !== null) {
+            $ident = $this->pg->quoteIdentifier($schema) . '.' . $ident;
+        }
         $terr = $this->pg->execute('TRUNCATE TABLE ' . $ident);
         if ($terr !== 0) {
             $errMsg = '';

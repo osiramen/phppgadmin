@@ -11,15 +11,6 @@ use PhpPgAdmin\Database\Export\Compression\CompressionFactory;
  */
 class QueryExportRenderer
 {
-    private $misc;
-    private $lang;
-
-    public function __construct()
-    {
-        $this->misc = AppContainer::getMisc();
-        $this->lang = AppContainer::getLang();
-    }
-
     /**
      * Render export form for query result data
      *
@@ -29,13 +20,15 @@ class QueryExportRenderer
      */
     public function renderExportForm($query, $params = [])
     {
+        $misc = AppContainer::getMisc();
+        $lang = AppContainer::getLang();
         $compressionCaps = CompressionFactory::capabilities();
         ?>
         <form action="dataexport.php" id="export-form" method="get">
 
             <!-- Export Format Selection (Unified with INSERT options for SQL) -->
             <fieldset id="format_options">
-                <legend><?= $this->lang['strexportformat']; ?></legend>
+                <legend><?= $lang['strexportformat']; ?></legend>
 
                 <!-- Format Selection -->
                 <div class="flex-row flex-wrap" id="format_selection">
@@ -68,56 +61,72 @@ class QueryExportRenderer
                 <!-- INSERT Format Options (only shown when SQL format is selected) -->
                 <div id="insert_format_options"
                     style="display:block; margin-top: 15px; padding-top: 15px; border-top: 1px solid #ccc;">
-                    <p class="small"><strong><?= $this->lang['strinsertformat']; ?></strong>
-                        <?= $this->lang['strinsertformat_desc']; ?></p>
+                    <p class="small"><strong><?= $lang['strinsertformat']; ?></strong>
+                        <?= $lang['strinsertformat_desc']; ?></p>
                     <div style="margin-left: 20px;">
                         <div>
                             <input type="radio" id="insert_copy" name="insert_format" value="copy" checked="checked" />
-                            <label for="insert_copy"><?= $this->lang['strcopyformat']; ?></label>
+                            <label for="insert_copy"><?= $lang['strcopyformat']; ?></label>
                         </div>
                         <div>
                             <input type="radio" id="insert_multi" name="insert_format" value="multi" />
-                            <label for="insert_multi"><?= $this->lang['strmultirowinserts']; ?></label>
+                            <label for="insert_multi"><?= $lang['strmultirowinserts']; ?></label>
                         </div>
                         <div>
                             <input type="radio" id="insert_single" name="insert_format" value="single" />
-                            <label for="insert_single"><?= $this->lang['strsingleinserts']; ?></label>
+                            <label for="insert_single"><?= $lang['strsingleinserts']; ?></label>
                         </div>
                     </div>
                 </div>
             </fieldset>
 
+            <fieldset id="export_nulls">
+                <legend><?= $lang['strexportnulls'] ?></legend>
+                <div class="flex-row">
+                    <label class="mx-1">
+                        <input type="radio" name="export_nulls" value="\N" checked="checked" />
+                        <?= $lang['strbackslashn'] ?>
+                    </label>
+                    <label class="mx-1">
+                        <input type="radio" name="export_nulls" value="NULL" />
+                        NULL
+                    </label>
+                    <label class="mx-1">
+                        <input type="radio" name="export_nulls" value="" />
+                        <?= $lang['stremptystring'] ?>
+                    </label>
+                </div>
+            </fieldset>
+
             <!-- Output Options -->
             <fieldset>
-                <legend><?= $this->lang['stroutput']; ?></legend>
+                <legend><?= $lang['stroutput']; ?></legend>
                 <div>
                     <input type="radio" id="output_show" name="output" value="show" checked="checked" />
-                    <label for="output_show"><?= $this->lang['strshowinbrowser']; ?></label>
+                    <label for="output_show"><?= $lang['strshowinbrowser']; ?></label>
                 </div>
                 <div>
                     <input type="radio" id="output_download" name="output" value="download" />
-                    <label for="output_download"><?= $this->lang['strdownloadasfile']; ?></label>
+                    <label for="output_download"><?= $lang['strdownloadasfile']; ?></label>
                 </div>
                 <?php if ($compressionCaps['gzip'] ?? false): ?>
                     <div>
                         <input type="radio" id="output_download_gzip" name="output" value="download-gzip" />
-                        <label for="output_download_gzip"><?= $this->lang['strdownloadgzipped'] ?></label>
+                        <label for="output_download_gzip"><?= $lang['strdownloadasgzip'] ?></label>
                     </div>
                 <?php endif ?>
-                <!--
                 <?php if ($compressionCaps['bzip2'] ?? false): ?>
                     <div>
                         <input type="radio" id="output_download_bzip2" name="output" value="download-bzip2" />
-                        <label for="output_download_bzip2"><?= $this->lang['strdownloadasbzip2'] ?? 'Download as Bzip2'; ?></label>
+                        <label for="output_download_bzip2"><?= $lang['strdownloadasbzip2'] ?></label>
                     </div>
                 <?php endif ?>
-                <?php if ($compressionCaps['zip'] ?? false): ?>
+                <?php if ($compressionCaps['gzip'] ?? false): ?>
                     <div>
                         <input type="radio" id="output_download_zip" name="output" value="download-zip" />
-                        <label for="output_download_zip"><?= $this->lang['strdownloadaszip'] ?? 'Download as ZIP'; ?></label>
+                        <label for="output_download_zip"><?= $lang['strdownloadaszip'] ?></label>
                     </div>
                 <?php endif ?>
-                -->
             </fieldset>
 
             <p>
@@ -128,8 +137,8 @@ class QueryExportRenderer
                         <input type="hidden" name="<?= html_esc($key); ?>" value="<?= html_esc($value); ?>" />
                     <?php endif; ?>
                 <?php endforeach; ?>
-                <?= $this->misc->form; ?>
-                <input type="submit" value="<?= $this->lang['strexport']; ?>" />
+                <?= $misc->form; ?>
+                <input type="submit" value="<?= $lang['strexport']; ?>" />
             </p>
         </form>
 
@@ -138,17 +147,20 @@ class QueryExportRenderer
                 const form = document.getElementById('export-form');
                 const outputFormatRadios = form.querySelectorAll('input[name="output_format"]');
                 const insertFormatOptions = document.getElementById('insert_format_options');
+                const exportNullsFieldset = document.getElementById('export_nulls');
 
-                if (outputFormatRadios.length > 0 && insertFormatOptions) {
+                if (outputFormatRadios.length > 0) {
                     function updateOptions() {
                         const selectedFormat = form.querySelector('input[name="output_format"]:checked').value;
                         const isSqlFormat = selectedFormat === 'sql';
 
                         // Show/hide INSERT format options only when SQL format is selected
                         if (isSqlFormat) {
-                            insertFormatOptions.style.display = 'block';
+                            if (insertFormatOptions) insertFormatOptions.style.display = 'block';
+                            if (exportNullsFieldset) exportNullsFieldset.style.display = 'none';
                         } else {
-                            insertFormatOptions.style.display = 'none';
+                            if (insertFormatOptions) insertFormatOptions.style.display = 'none';
+                            if (exportNullsFieldset) exportNullsFieldset.style.display = 'block';
                         }
                     }
 

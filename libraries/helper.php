@@ -37,6 +37,17 @@ function bytea_to_octal(string $data): string
 	return strtr($data, $map);
 }
 
+function pg_unquote_identifier(string $ident): string
+{
+	// remove surrounding quotes
+	$len = strlen($ident);
+	if ($len >= 2 && $ident[0] === '"' && $ident[$len - 1] === '"') {
+		$ident = substr($ident, 1, $len - 2);
+		// replace double quotes with single quotes
+		$ident = str_replace('""', '"', $ident);
+	}
+	return $ident;
+}
 
 /**
  * Escape a string for use as a PostgreSQL identifier (e.g., table or column name)

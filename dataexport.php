@@ -94,7 +94,7 @@ if (isset($_REQUEST['action']) && $_REQUEST['action'] === 'export') {
 			if (!$strategy) {
 				die("Error: Unsupported output method: " . htmlspecialchars($output_compression));
 			}
-			$handle = $strategy->begin($filename);
+			$handle = $strategy->begin("$filename.$file_extension");
 			$output_stream = $handle['stream'];
 		} catch (\Exception $e) {
 			die("Error: " . htmlspecialchars($e->getMessage()));
@@ -107,7 +107,8 @@ if (isset($_REQUEST['action']) && $_REQUEST['action'] === 'export') {
 	// Build metadata for formatter
 	$metadata = [
 		'table' => $_REQUEST['table'] ?? $_REQUEST['view'] ?? 'query_result',
-		'insert_format' => $insert_format
+		'insert_format' => $insert_format,
+		'export_nulls' => $_REQUEST['export_nulls'] ?? '',
 	];
 
 	// Stream output directly using the formatter

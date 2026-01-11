@@ -20,7 +20,7 @@ class GzipStrategy implements CompressionStrategy
         ini_set('zlib.output_compression', 'Off');
 
         header('Content-Type: application/gzip');
-        header("Content-Disposition: attachment; filename={$filename}.sql.gz");
+        header("Content-Disposition: attachment; filename={$filename}.gz");
 
         $stream = fopen('php://output', 'wb');
         if ($stream === false) {

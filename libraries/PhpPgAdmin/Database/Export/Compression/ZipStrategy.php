@@ -31,7 +31,7 @@ class ZipStrategy implements CompressionStrategy
         //}
 
         header('Content-Type: application/zip');
-        header('Content-Disposition: attachment; filename="' . addcslashes($filename, '"') . '.zip"');
+        header("Content-Disposition: attachment; filename=\"{$filename}.zip\"");
         header('Content-Transfer-Encoding: binary');
         header('Cache-Control: private');
 
@@ -45,7 +45,7 @@ class ZipStrategy implements CompressionStrategy
         $id = uniqid('zip', true);
         ZipWriterStream::addInstance($id, $zip);
 
-        $zip->startFile("{$filename}.sql");
+        $zip->startFile($filename);
 
         $stream = fopen('phppgadminzip://' . $id, 'w');
         if ($stream === false) {
