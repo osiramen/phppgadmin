@@ -438,7 +438,7 @@ async function startStreamUpload() {
 document.addEventListener("frameLoaded", () => {
 	// Wire up start button
 	const btn = el("importStart");
-	if (btn) return;
+	if (!btn) return;
 	btn.addEventListener("click", (ev) => {
 		ev.preventDefault();
 		startStreamUpload();

@@ -39,7 +39,11 @@ class RowToCopyConverter
                 : ($rowValues[$idx] ?? null);
 
             // 2) NULL?
-            if ($value === null || isset($this->nullPatterns[(string) $value])) {
+            if ($value === null) {
+                $lineParts[] = '\\N';
+                continue;
+            }
+            if (is_string($value) && isset($this->nullPatterns[$value])) {
                 $lineParts[] = '\\N';
                 continue;
             }

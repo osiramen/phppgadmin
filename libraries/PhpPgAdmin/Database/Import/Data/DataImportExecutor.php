@@ -85,8 +85,8 @@ class DataImportExecutor
             return ['remainder' => $remainder, 'errors' => $errors];
         }
 
-        $converter = new RowToCopyConverter($allowedNulls);
-        $isAssoc = $format === 'xml';
+        $converter = new RowToCopyConverter($allowedNulls, $byteaEncoding);
+        $isAssoc = $parser->isAssociative();
 
         $copyHeader = $this->buildCopyHeader($schema, $table, $state['mapping']);
 

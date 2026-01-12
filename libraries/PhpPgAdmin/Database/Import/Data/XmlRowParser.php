@@ -45,6 +45,7 @@ class XmlRowParser implements RowStreamingParser
             'remainder' => $chunk,
             'header' => $state['header'],
         ];
+
     }
 
     /**
@@ -308,4 +309,8 @@ class XmlRowParser implements RowStreamingParser
         }
     }
 
+    public function isAssociative(): bool
+    {
+        return true;
+    }
 }

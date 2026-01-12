@@ -27,7 +27,7 @@ class ColumnHeaderBuilder
     {
         $tableMeta = $this->fetchTableColumns($schema, $table);
         if (empty($tableMeta)) {
-            throw new RuntimeException('Table has no columns');
+            throw new RuntimeException('Table has no columns or does not exist');
         }
 
         // Header-based mapping

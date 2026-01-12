@@ -29,18 +29,20 @@ class JsonRowParser implements RowStreamingParser
      */
     public function parse(string $chunk, array &$state): array
     {
-        // Initial state (only set default values, keep existing values)
         $state += [
-            'mode' => 'root',         // root | columns | columns-array | data | data-array | row
+            // mode: root | columns | columns-array | data | data-array | row
+            // Note: top-level key may be "columns" or "header" (both map to columns parsing)
+            'mode' => 'root',
             'columns' => null,
             'rows' => [],
             'currentRow' => null,
             'currentKey' => null,
             'stack' => [],
-            // value parsing
-            'valueMode' => null,      // null | 'json'
+            'valueMode' => null,
             'valueBuffer' => '',
             'valueStack' => [],
+            // derived header (compat with other parsers that return only names)
+            'columnNames' => null,
         ];
 
         // Tokenize & consume
@@ -60,7 +62,7 @@ class JsonRowParser implements RowStreamingParser
         return [
             'rows' => $rows,
             'remainder' => $chunk,
-            'header' => $state['columns'],
+            'header' => $state['columnNames'],
         ];
     }
 
@@ -99,8 +101,8 @@ class JsonRowParser implements RowStreamingParser
 
             // String
             if ($c === '"') {
+                $tokenStart = $i; // include opening quote in remainder on incomplete token
                 $i++; // skip opening quote
-                $start = $i;
                 $str = '';
                 $escaped = false;
 
@@ -108,7 +110,6 @@ class JsonRowParser implements RowStreamingParser
                     $ch = $buffer[$i];
 
                     if ($escaped) {
-                        // collect escape sequences as raw, decode later via json_decode
                         $str .= '\\' . $ch;
                         $escaped = false;
                         $i++;
@@ -122,12 +123,13 @@ class JsonRowParser implements RowStreamingParser
                     }
 
                     if ($ch === '"') {
-                        // complete string in buffer, decode via json_decode
                         $decoded = json_decode('"' . $str . '"');
-                        // If json_decode fails, treat as incomplete token
                         if (json_last_error() !== JSON_ERROR_NONE) {
-                            break; // incomplete or invalid -> keep remainder
+                            // treat as incomplete/invalid -> keep remainder starting at opening quote
+                            $i = $tokenStart;
+                            break 2;
                         }
+
                         yield ['t' => 'string', 'v' => $decoded];
                         $i++; // skip closing quote
                         continue 2;
@@ -137,7 +139,8 @@ class JsonRowParser implements RowStreamingParser
                     $i++;
                 }
 
-                // Incomplete string -> keep remainder
+                // Incomplete string -> rewind to opening quote and keep remainder
+                $i = $tokenStart;
                 break;
             }
 
@@ -162,16 +165,17 @@ class JsonRowParser implements RowStreamingParser
                     }
                     break;
                 }
-                $token = substr($buffer, $start, $i - $start);
 
-                // Try to decode (json_decode accepts true/false/null/numbers)
+                $token = substr($buffer, $start, $i - $start);
                 $decoded = json_decode($token, true);
+
                 if (json_last_error() === JSON_ERROR_NONE) {
                     yield ['t' => 'literal', 'v' => $decoded];
                     continue;
                 }
 
-                // If json_decode fails, the literal may be incomplete -> keep remainder
+                // Possibly cut mid-literal -> rewind so it becomes remainder
+                $i = $start;
                 break;
             }
 
@@ -193,30 +197,31 @@ class JsonRowParser implements RowStreamingParser
     {
         switch ($t['t']) {
             case '{':
+                // If a nested object begins as a field value, do NOT touch the main stack.
+                if ($state['mode'] === 'row' && $state['currentKey'] !== null) {
+                    $this->startJsonValue('{', $state);
+                    break;
+                }
+
                 $state['stack'][] = '{';
+
                 if ($state['mode'] === 'data-array') {
-                    // Start of a row
                     $state['currentRow'] = [];
                     $state['mode'] = 'row';
                 } elseif ($state['mode'] === 'columns-array') {
-                    // Start of a column object: use currentRow temporarily
-                    $state['currentRow'] = ['name' => null, 'type' => null];
+                    // Start of a column/header object
+                    $state['currentRow'] = [];
                     $state['currentKey'] = null;
-                } elseif ($state['mode'] === 'row' && $state['currentKey'] !== null) {
-                    // A nested object begins as a field value -> start collecting JSON value
-                    $this->startJsonValue('{', $state);
                 }
                 break;
 
             case '}':
                 array_pop($state['stack']);
                 if ($state['mode'] === 'row') {
-                    // End of a row
                     $state['rows'][] = $state['currentRow'];
                     $state['currentRow'] = null;
                     $state['mode'] = 'data-array';
                 } elseif ($state['mode'] === 'columns-array' && $state['currentRow'] !== null) {
-                    // End of a column object
                     $state['columns'][] = $state['currentRow'];
                     $state['currentRow'] = null;
                     $state['currentKey'] = null;
@@ -224,26 +229,19 @@ class JsonRowParser implements RowStreamingParser
                 break;
 
             case '[':
+                // If a nested array begins as a field value, do NOT touch the main stack.
+                if ($state['mode'] === 'row' && $state['currentKey'] !== null) {
+                    $this->startJsonValue('[', $state);
+                    break;
+                }
+
                 $state['stack'][] = '[';
-                if ($state['mode'] === 'root') {
-                    // waiting for "columns" or "data" key before the array
-                } elseif ($state['mode'] === 'columns') {
+
+                if ($state['mode'] === 'columns') {
                     $state['columns'] = [];
                     $state['mode'] = 'columns-array';
                 } elseif ($state['mode'] === 'data') {
                     $state['mode'] = 'data-array';
-                } elseif ($state['mode'] === 'row' && $state['currentKey'] !== null) {
-                    // A nested array begins as a field value -> start collecting JSON value
-                    $this->startJsonValue('[', $state);
-                }
-                break;
-
-            case ']':
-                array_pop($state['stack']);
-                if ($state['mode'] === 'columns-array') {
-                    $state['mode'] = 'root';
-                } elseif ($state['mode'] === 'data-array') {
-                    $state['mode'] = 'root';
                 }
                 break;
 
@@ -258,6 +256,19 @@ class JsonRowParser implements RowStreamingParser
             case ':':
             case ',':
                 // no action needed on structural separators
+                break;
+
+            case ']':
+                array_pop($state['stack']);
+
+                if ($state['mode'] === 'columns-array') {
+                    // finished header/columns array, resume at root to catch "data"
+                    $state['mode'] = 'root';
+                    $this->finalizeColumns($state);
+                } elseif ($state['mode'] === 'data-array') {
+                    // finished data array
+                    $state['mode'] = 'root';
+                }
                 break;
         }
     }
@@ -320,14 +331,13 @@ class JsonRowParser implements RowStreamingParser
      */
     private function handleString(string $v, array &$state): void
     {
-        // If we are currently collecting a JSON value, ignore strings here
         if ($state['valueMode'] === 'json') {
             return;
         }
 
         if ($state['mode'] === 'root') {
-            // Top-level key: "columns" or "data"
-            if ($v === 'columns') {
+            // Top-level key: "columns" or "header" or "data"
+            if ($v === 'columns' || $v === 'header') {
                 $state['mode'] = 'columns';
             } elseif ($v === 'data') {
                 $state['mode'] = 'data';
@@ -336,33 +346,26 @@ class JsonRowParser implements RowStreamingParser
         }
 
         if ($state['mode'] === 'columns-array') {
-            // Expecting column objects: { "name": "...", "type": "..." }
-            // currentRow is initialized on '{'
+            // Parse header/columns entry object like a normal JSON object.
+            // Keys/values are strings in this schema (name/type), but we ignore unknown keys safely.
             if ($state['currentRow'] === null) {
-                // defensive: if not initialized, initialize
-                $state['currentRow'] = ['name' => null, 'type' => null];
-                $state['currentKey'] = 'name';
-                $state['currentRow']['name'] = $v;
-                $state['currentKey'] = 'type';
+                // Not inside a header object; ignore defensively.
+                return;
+            }
+
+            if ($state['currentKey'] === null) {
+                $state['currentKey'] = $v; // key
             } else {
-                if ($state['currentKey'] === 'name') {
-                    $state['currentRow']['name'] = $v;
-                    $state['currentKey'] = 'type';
-                } else {
-                    $state['currentRow']['type'] = $v;
-                    // column is completed at '}'
-                }
+                $state['currentRow'][$state['currentKey']] = $v; // value
+                $state['currentKey'] = null;
             }
             return;
         }
 
         if ($state['mode'] === 'row') {
-            // Key or string value in row
             if ($state['currentKey'] === null) {
-                // String is a key
                 $state['currentKey'] = $v;
             } else {
-                // String is a value for currentKey
                 $state['currentRow'][$state['currentKey']] = $v;
                 $state['currentKey'] = null;
             }
@@ -402,5 +405,31 @@ class JsonRowParser implements RowStreamingParser
         $state['valueMode'] = 'json';
         $state['valueBuffer'] = $opening;
         $state['valueStack'] = [$opening];
+    }
+
+    /**
+     * Build a simple ["col1","col2",...] list from parsed column metadata.
+     */
+    private function finalizeColumns(array &$state): void
+    {
+        if (!is_array($state['columns'])) {
+            $state['columnNames'] = null;
+            return;
+        }
+
+        $names = [];
+        foreach ($state['columns'] as $col) {
+            if (isset($col['name'])) {
+                $names[] = $col['name'];
+            } else {
+                $names[] = '???';
+            }
+        }
+        $state['columnNames'] = $names;
+    }
+
+    public function isAssociative(): bool
+    {
+        return true;
     }
 }

@@ -66,13 +66,13 @@ class BaseDecoder {
 
 /**
  * ZIP decoder using fflate.Unzip
- * Extracts the first file from the archive
+ * Extracts all files in the archive and emits their data sequentially
  */
 class ZipDecoder extends BaseDecoder {
 	constructor() {
 		super();
 		this.unzip = new Unzip();
-		this.fileHandled = false;
+		this.activeFiles = 0; // Track number of files being processed
 
 		// Register decoders for compressed files within the ZIP
 		// UnzipInflate handles deflate-compressed files (compression type 8)
@@ -80,9 +80,7 @@ class ZipDecoder extends BaseDecoder {
 
 		// Set up onfile callback
 		this.unzip.onfile = (file) => {
-			// Only process the first file
-			if (this.fileHandled) return;
-			this.fileHandled = true;
+			this.activeFiles++; // Increment for each file encountered
 
 			logImport(`ZIP: Extracting file: ${file.name}`);
 
@@ -91,20 +89,28 @@ class ZipDecoder extends BaseDecoder {
 				if (err) {
 					console.error(`ZIP decompression error:`, err);
 					this._error(new Error(`ZIP decompression error: ${err}`));
+					this.activeFiles--; // Decrement on error to avoid hanging
+					if (this.activeFiles === 0) {
+						this._emit(new Uint8Array(0), true); // Emit final only if no more active files
+					}
 					return;
 				}
 				if (data && data.length > 0) {
 					console.log(
 						`ZIP file chunk: ${data.length} bytes, final=${final}`
 					);
-					// Emit immediately as we get data
+					// Emit data immediately, but always with final=false for chunks
 					this._emit(data, false);
 				}
 
-				// When final is true, the file is complete
+				// When this file is final, decrement active count
 				if (final) {
-					logImport("ZIP file extraction complete");
-					this._emit(new Uint8Array(0), true);
+					this.activeFiles--;
+					// Only emit global final=true when ALL files are done
+					if (this.activeFiles === 0) {
+						logImport("ZIP archive extraction complete");
+						this._emit(new Uint8Array(0), true);
+					}
 				}
 			};
 

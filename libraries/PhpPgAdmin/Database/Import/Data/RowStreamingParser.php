@@ -12,4 +12,5 @@ interface RowStreamingParser
      */
     public function parse(string $chunk, array &$state): array;
 
+    public function isAssociative(): bool;
 }

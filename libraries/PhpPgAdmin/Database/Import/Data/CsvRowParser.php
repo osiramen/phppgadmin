@@ -69,4 +69,8 @@ class CsvRowParser implements RowStreamingParser
         ];
     }
 
+    public function isAssociative(): bool
+    {
+        return false;
+    }
 }
