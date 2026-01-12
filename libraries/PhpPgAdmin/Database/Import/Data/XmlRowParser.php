@@ -17,8 +17,6 @@ class XmlRowParser implements RowStreamingParser
             'currentCol' => null,
             'currentColName' => null,
             'currentColNull' => false,
-            'currentColType' => null,
-            'currentColEncoding' => null,
             'rows' => [],
         ];
 
@@ -265,8 +263,6 @@ class XmlRowParser implements RowStreamingParser
                 } elseif ($state['mode'] === 'row') {
                     $state['currentColName'] = $t['attrs']['name'] ?? '';
                     $state['currentColNull'] = isset($t['attrs']['isNull']);
-                    $state['currentColType'] = $t['attrs']['type'] ?? null;
-                    $state['currentColEncoding'] = $t['attrs']['encoding'] ?? null;
                     $state['currentCol'] = '';
                 }
                 break;
@@ -291,11 +287,7 @@ class XmlRowParser implements RowStreamingParser
                     $value = null;
 
                     if (!$state['currentColNull']) {
-                        $value = $this->decodeValue(
-                            $state['currentCol'],
-                            $state['currentColType'],
-                            $state['currentColEncoding']
-                        );
+                        $value = $state['currentCol'];
                     }
 
                     $state['currentRow'][$state['currentColName']] = $value;
@@ -316,27 +308,4 @@ class XmlRowParser implements RowStreamingParser
         }
     }
 
-    /**
-     * Decode bytea value if needed
-     */
-    private function decodeValue(string $value, ?string $type, ?string $encoding)
-    {
-        if ($type === 'bytea') {
-            if ($encoding === 'base64') {
-                $decoded = base64_decode($value, true);
-                return ($decoded === false) ? $value : $decoded;
-            }
-            if ($encoding === 'hex') {
-                $hasPrefix = substr_compare($value, '\x', 0, 2) === 0 ||
-                    substr_compare($value, '0x', 0, 2) === 0;
-                if ($hasPrefix) {
-                    $value = substr($value, 2);
-                }
-                $decoded = hex2bin($value);
-                return ($decoded === false) ? $value : $decoded;
-            }
-        }
-
-        return $value;
-    }
 }

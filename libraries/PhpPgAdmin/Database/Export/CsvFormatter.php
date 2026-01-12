@@ -25,6 +25,8 @@ class CsvFormatter extends OutputFormatter
     /** @var string */
     private $lineEnding;
 
+    private $byteaEncoding;
+
     public function __construct($delimiter = ',', $lineEnding = "\r\n", $fileExtension = 'csv')
     {
         $this->delimiter = $delimiter;
@@ -45,6 +47,7 @@ class CsvFormatter extends OutputFormatter
 
         $this->pg = $this->postgres();
         $this->exportNulls = $metadata['export_nulls'] ?? '';
+        $this->byteaEncoding = $metadata['bytea_encoding'] ?? 'hex';
 
         // Detect bytea columns once
         $is_bytea = [];
@@ -109,8 +112,8 @@ class CsvFormatter extends OutputFormatter
                 $value = $this->escapeJsonForCsv($value);
             } else {
                 if ($is_bytea[$i]) {
-                    // bytea → escapeBytea → then CSV-escape
-                    $value = $this->pg->escapeBytea($value);
+                    // bytea → encode → then CSV-escape
+                    $value = self::encodeBytea($value, $this->byteaEncoding);
                 }
                 $value = $this->csvField($value);
             }

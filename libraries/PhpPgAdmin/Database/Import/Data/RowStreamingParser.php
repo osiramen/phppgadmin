@@ -11,4 +11,5 @@ interface RowStreamingParser
      * @return array{rows: array<int,array>, remainder: string, header: array|null}
      */
     public function parse(string $chunk, array &$state): array;
+
 }

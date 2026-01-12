@@ -42,11 +42,17 @@ class HtmlFormatter extends OutputFormatter
             return;
         }
 
+        $byteaEncoding = $metadata['bytea_encoding'] ?? 'hex';
+        $exportNulls = $metadata['export_nulls'] ?? '';
+        $isBytea = [];
+
         // Get column names and write header
         $columns = [];
         for ($i = 0; $i < count($recordset->fields); $i++) {
             $finfo = $recordset->fetchField($i);
+            $type = $finfo->type ?? 'unknown';
             $columns[] = $finfo->name ?? "Column $i";
+            $isBytea[$i] = ($type === 'bytea');
         }
 
         $this->write("\t<thead>\n\t<tr>\n");
@@ -58,7 +64,14 @@ class HtmlFormatter extends OutputFormatter
         $this->write("\t<tbody>\n");
         while (!$recordset->EOF) {
             $this->write("\t<tr>\n");
-            foreach ($recordset->fields as $value) {
+            foreach ($recordset->fields as $i => $value) {
+                if ($value === null) {
+                    // NULL value
+                    $value = $exportNulls;
+                } elseif ($isBytea[$i]) {
+                    // bytea → encode
+                    $value = self::encodeBytea($value, $byteaEncoding);
+                }
                 $this->write("\t\t<td>" . htmlspecialchars($value ?? 'NULL', ENT_QUOTES, 'UTF-8') . "</td>\n");
             }
             $this->write("\t</tr>\n");

@@ -28,7 +28,8 @@ function bytea_to_octal(string $data): string
 					// printable except backslash
 					$map[chr($i)] = chr($i);
 				}
-			} else { // non-printable
+			} else {
+				// non-printable
 				$map[chr($i)] = sprintf("\\%03o", $i);
 			}
 		}

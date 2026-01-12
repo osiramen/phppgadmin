@@ -72,6 +72,7 @@ async function startStreamUpload() {
 		"opt_rights",
 		"opt_defer_self",
 		"opt_allow_drops",
+		"use_header",
 	];
 	const opts = {};
 	for (const n of optNames) {
@@ -80,16 +81,17 @@ async function startStreamUpload() {
 	}
 
 	// Data-import specific options
-	const formatSelect = importForm["format"];
-	const format = formatSelect?.value ?? "csv";
-	const useHeader = !!importForm["use_header"]?.checked;
-	const allowedNulls = [];
-	const nullInputs = importForm.querySelectorAll(
-		"input[name^='allowednulls']"
-	);
-	nullInputs.forEach((inp) => {
-		if (inp.checked) allowedNulls.push(inp.value);
-	});
+	if (importForm.dataset.importType === "data") {
+		opts.format = importForm.format?.value ?? "csv";
+		opts.allowed_nulls = [];
+		const nullInputs = importForm.querySelectorAll(
+			"input[name^='allowed_nulls']"
+		);
+		nullInputs.forEach((inp) => {
+			if (inp.checked) opts.allowed_nulls.push(inp.value);
+		});
+		opts.bytea_encoding = importForm.bytea_encoding?.value || "hex";
+	}
 
 	// Error handling mode
 	const errorModeInput = document.querySelector(
@@ -200,14 +202,18 @@ async function startStreamUpload() {
 			"remainder_len",
 			String(remainder ? utf8Encode(remainder).length : 0)
 		);
-		if (chunkCompressed) params.set("chunk_compressed", "1");
+		if (chunkCompressed) params.set("compressed", "1");
 		if (isFinal) params.set("eof", "1");
 		params.set("import_session_id", importSessionId);
 		params.set("chunk_hash", chunkHash);
-		params.set("format", format);
-		if (useHeader) params.set("use_header", "1");
-		allowedNulls.forEach((v) => params.append("allowednulls[]", v));
-		for (const [k, v] of Object.entries(opts)) params.set(k, String(v));
+		for (const [k, v] of Object.entries(opts)) {
+			if (Array.isArray(v)) {
+				v.forEach((val) => params.append(`${k}[]`, String(val)));
+				continue;
+			} else {
+				params.set(k, String(v));
+			}
+		}
 		if (scope) params.set("scope", scope);
 		if (scopeIdent) params.set("scope_ident", scopeIdent);
 
@@ -382,48 +388,57 @@ async function startStreamUpload() {
 		}
 	}
 
-	// Start reader + processing
-	const reader = file.stream().getReader();
-	let readerErr = null;
-	const queueProcessor = processQueue();
 	try {
-		while (true) {
-			const { value, done } = await reader.read();
-			if (stopRequested) {
-				logImport("Upload stopped by user.", "warning");
-				reader.cancel();
-				return;
+		// Start reader + processing
+		const reader = file.stream().getReader();
+		let readerErr = null;
+		const queueProcessor = processQueue();
+		try {
+			while (true) {
+				const { value, done } = await reader.read();
+				if (stopRequested) {
+					logImport("Upload stopped by user.", "warning");
+					reader.cancel();
+					return;
+				}
+				if (value) bytesRead += value.length;
+				await decompressor.push(value || new Uint8Array(), done);
+				while (queueLen > highWaterMark) {
+					await new Promise((r) => setTimeout(r, 50));
+				}
+				if (done) break;
 			}
-			if (value) bytesRead += value.length;
-			await decompressor.push(value || new Uint8Array(), done);
-			while (queueLen > highWaterMark) {
-				await new Promise((r) => setTimeout(r, 50));
-			}
-			if (done) break;
+		} catch (err) {
+			readerErr = err;
+			decompressionError = err;
+		} finally {
+			await queueProcessor;
+			if (readerErr) throw readerErr;
+			if (decompressionError)
+				throw new Error(
+					`Decompression failed: ${decompressionError.message}`
+				);
 		}
+
+		// Upload completed successfully
+		logImport(
+			`Upload completed successfully (${totalRetries} total retries).`
+		);
+		console.log("Upload completed successfully.");
 	} catch (err) {
-		readerErr = err;
-		decompressionError = err;
+		console.error("Upload failed:", err);
+		logImport(`Upload failed: ${err.message}`, "error");
+		if (importStatus)
+			importStatus.textContent = `Upload failed: ${err.message}`;
 	} finally {
-		await queueProcessor;
-		if (readerErr) throw readerErr;
-		if (decompressionError)
-			throw new Error(
-				`Decompression failed: ${decompressionError.message}`
-			);
+		if (importStopBtn) importStopBtn.style.display = "none";
 	}
-
-	// Upload completed successfully
-	logImport(`Upload completed successfully (${totalRetries} total retries).`);
-
-	// Streaming upload completed — do not run legacy chunked upload logic below.
-	return;
 }
 
 document.addEventListener("frameLoaded", () => {
 	// Wire up start button
 	const btn = el("importStart");
-	if (!btn) return;
+	if (btn) return;
 	btn.addEventListener("click", (ev) => {
 		ev.preventDefault();
 		startStreamUpload();

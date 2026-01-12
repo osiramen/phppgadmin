@@ -42,7 +42,7 @@ class QueryExportRenderer
                     </div>
                     <div class="mx-1">
                         <input type="radio" id="format_tab" name="output_format" value="tab" />
-                        <label for="format_tab">Tab-Delimited</label>
+                        <label for="format_tab">TSV</label>
                     </div>
                     <div class="mx-1">
                         <input type="radio" id="format_html" name="output_format" value="html" />
@@ -98,6 +98,24 @@ class QueryExportRenderer
                 </div>
             </fieldset>
 
+            <fieldset id="bytea_encoding">
+                <legend><?= $lang['strbyteaencoding'] ?></legend>
+                <div class="flex-row">
+                    <label class="mx-1">
+                        <input type="radio" name="bytea_encoding" value="hex" checked="checked" />
+                        Hexadecimal
+                    </label>
+                    <label class="mx-1">
+                        <input type="radio" name="bytea_encoding" value="base64" />
+                        Base64
+                    </label>
+                    <label class="mx-1">
+                        <input type="radio" name="bytea_encoding" value="octal" />
+                        Octal
+                    </label>
+                </div>
+            </fieldset>
+
             <!-- Output Options -->
             <fieldset>
                 <legend><?= $lang['stroutput']; ?></legend>
@@ -148,19 +166,23 @@ class QueryExportRenderer
                 const outputFormatRadios = form.querySelectorAll('input[name="output_format"]');
                 const insertFormatOptions = document.getElementById('insert_format_options');
                 const exportNullsFieldset = document.getElementById('export_nulls');
+                const byteaEncodingFieldset = document.getElementById('bytea_encoding');
 
                 if (outputFormatRadios.length > 0) {
                     function updateOptions() {
                         const selectedFormat = form.querySelector('input[name="output_format"]:checked').value;
                         const isSqlFormat = selectedFormat === 'sql';
+                        const showExportNulls = new Set(['csv', 'tab', 'html']).has(selectedFormat);
+
+                        if (exportNullsFieldset) exportNullsFieldset.style.display = showExportNulls ? 'block' : 'none';
 
                         // Show/hide INSERT format options only when SQL format is selected
                         if (isSqlFormat) {
                             if (insertFormatOptions) insertFormatOptions.style.display = 'block';
-                            if (exportNullsFieldset) exportNullsFieldset.style.display = 'none';
+                            if (byteaEncodingFieldset) byteaEncodingFieldset.style.display = 'none';
                         } else {
                             if (insertFormatOptions) insertFormatOptions.style.display = 'none';
-                            if (exportNullsFieldset) exportNullsFieldset.style.display = 'block';
+                            if (byteaEncodingFieldset) byteaEncodingFieldset.style.display = 'block';
                         }
                     }
 

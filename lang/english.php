@@ -183,6 +183,7 @@ $lang['strtheme'] = 'Theme';
 $lang['strcluster'] = 'Cluster';
 $lang['strimportcompresschunks'] = 'Compress chunks with gzip (saves bandwidth)';
 $lang['strimportintro'] = 'The import function reads and unpacks a file in the browser chunk by chunk and uploads the parts, where they are processed immediately. With this logic, it should be possible to run long imports with large files.';
+$lang['strusefirstrowheaders'] = 'Use first row as column names (CSV, TSV)';
 
 // Admin
 $lang['stradminondatabase'] = 'The following administrative tasks apply on the whole "%s" database.';
@@ -469,6 +470,7 @@ $lang['strdownloadasgzip'] = 'Download as gzip compressed file';
 $lang['strdownloadasbzip2'] = 'Download as bzip2 compressed file';
 $lang['strdownloadaszip'] = 'Download as ZIP archive';
 $lang['strexportnulls'] = 'Export NULL characters';
+$lang['strbyteaencoding'] = 'Bytea Encoding';
 
 // Views
 $lang['strview'] = 'View';

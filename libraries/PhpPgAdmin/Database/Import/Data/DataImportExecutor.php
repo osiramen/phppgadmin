@@ -35,6 +35,7 @@ class DataImportExecutor
         $format = $options['format'] ?? 'csv';
         $useHeader = !empty($options['use_header']);
         $allowedNulls = $options['allowed_nulls'] ?? [];
+        $byteaEncoding = $options['bytea_encoding'] ?? 'hex';
         $schema = $options['schema'] ?? '';
         $table = $options['table'] ?? '';
 

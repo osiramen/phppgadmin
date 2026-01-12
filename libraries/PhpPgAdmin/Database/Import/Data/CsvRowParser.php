@@ -68,4 +68,5 @@ class CsvRowParser implements RowStreamingParser
             'header' => $header,
         ];
     }
+
 }

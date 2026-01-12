@@ -44,7 +44,6 @@ abstract class OutputFormatter extends AbstractContext
 
         'varchar' => 'character varying',
         'bpchar' => 'character', // blank-padded char
-        'citext' => 'citext',
 
         'bool' => 'boolean',
 
@@ -62,6 +61,20 @@ abstract class OutputFormatter extends AbstractContext
 
     ];
 
+    protected static function encodeBytea(string $data, string $encoding): string
+    {
+        switch ($encoding) {
+            case 'base64':
+                return base64_encode($data);
+            case 'octal':
+            case 'escape':
+                return bytea_to_octal($data);
+            case 'hex':
+            default:
+                // Default to hex encoding
+                return '\x' . bin2hex($data);
+        }
+    }
 
     /**
      * Get the MIME type for this format

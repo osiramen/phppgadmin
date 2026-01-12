@@ -24,7 +24,8 @@ class ImportFormRenderer extends AbstractContext
         $roleActions = new RoleActions($pg);
         $isSuper = $roleActions->isSuperUser();
         ?>
-        <form id="importForm" method="post" enctype="multipart/form-data" action="#" data-action="dbimport.php">
+        <form id="importForm" method="post" enctype="multipart/form-data" action="#" data-action="dbimport.php"
+            data-import-type="db">
             <input type="hidden" name="scope" id="import_scope" value="<?= htmlspecialchars($scope) ?>" />
             <input type="hidden" name="scope_ident" id="import_scope_ident"
                 value="<?= htmlspecialchars($options['scope_ident'] ?? '') ?>" />
@@ -124,7 +125,8 @@ class ImportFormRenderer extends AbstractContext
         $maxAttr = 'data-import-max-size="' . htmlspecialchars((string) $maxSize) . '"';
         $chunkAttr = 'data-import-chunk-size="' . htmlspecialchars((string) $chunkSize) . '"';
         ?>
-        <form id="importForm" method="post" enctype="multipart/form-data" action="#" data-action="dataimport.php">
+        <form id="importForm" method="post" enctype="multipart/form-data" action="#" data-action="dataimport.php"
+            data-import-type="data">
             <input type="hidden" name="scope" id="import_scope" value="<?= html_esc($scope) ?>" />
             <input type="hidden" name="scope_ident" id="import_scope_ident" value="<?= html_esc($_REQUEST[$scope]) ?>" />
             <?= $misc->form ?>
@@ -147,19 +149,20 @@ class ImportFormRenderer extends AbstractContext
                 </legend>
                 <div class="flex-row">
                     <label>
-                        <input type="radio" name="format" value="csv" checked /> CSV
+                        <input type="radio" name="format" value="auto" checked />
+                        <?= $lang['strauto'] ?>
                     </label>
                     <label class="ml-3">
-                        <input type="radio" name="format" value="tab" />
-                        <?= $lang['strtabbed'] ?>
+                        <input type="radio" name="format" value="csv" /> CSV
                     </label>
                     <label class="ml-3">
-                        <input type="radio" name="format" value="xml" />
-                        XML
+                        <input type="radio" name="format" value="tab" /> TSV
                     </label>
                     <label class="ml-3">
-                        <input type="radio" name="format" value="json" />
-                        JSON
+                        <input type="radio" name="format" value="xml" /> XML
+                    </label>
+                    <label class="ml-3">
+                        <input type="radio" name="format" value="json" /> JSON
                     </label>
                 </div>
             </fieldset>
@@ -168,16 +171,36 @@ class ImportFormRenderer extends AbstractContext
                 <legend><?= $lang['strallowednulls'] ?></legend>
                 <div class="flex-row">
                     <label>
-                        <input type="checkbox" name="allowednulls[0]" value="\N" checked="checked" />
+                        <input type="checkbox" name="allowed_nulls[0]" value="\N" checked="checked" />
                         <?= $lang['strbackslashn'] ?>
                     </label>
                     <label class="ml-3">
-                        <input type="checkbox" name="allowednulls[1]" value="NULL" />
+                        <input type="checkbox" name="allowed_nulls[1]" value="NULL" />
                         NULL
                     </label>
                     <label class="ml-3">
-                        <input type="checkbox" name="allowednulls[2]" value="" />
+                        <input type="checkbox" name="allowed_nulls[2]" value="" />
                         <?= $lang['stremptystring'] ?>
+                    </label>
+                </div>
+            </fieldset>
+
+            <fieldset id="bytea_encoding">
+                <legend>
+                    <?= $lang['strbyteaencoding'] ?>
+                </legend>
+                <div class="flex-row">
+                    <label class="mx-1">
+                        <input type="radio" name="bytea_encoding" value="hex" checked="checked" />
+                        Hexadecimal
+                    </label>
+                    <label class="mx-1">
+                        <input type="radio" name="bytea_encoding" value="base64" />
+                        Base64
+                    </label>
+                    <label class="mx-1">
+                        <input type="radio" name="bytea_encoding" value="octal" />
+                        Octal
                     </label>
                 </div>
             </fieldset>
@@ -186,10 +209,10 @@ class ImportFormRenderer extends AbstractContext
                 <legend><?= $lang['stroptions'] ?></legend>
                 <div><label><input type="checkbox" name="use_header" value="1" checked />
                         <?= $lang['strusefirstrowheaders'] ?? 'Use first row as column names' ?></label></div>
-                <div><label><input type="checkbox" name="opt_truncate" value="1" />
+                <div class="mt-1"><label><input type="checkbox" name="opt_truncate" value="1" />
                         <?= $lang['strtruncatebefore'] ?></label></div>
                 <?php if (function_exists('gzopen')): ?>
-                    <div style="margin-top:8px"><label><input type="checkbox" name="opt_compress_chunks" />
+                    <div class="mt-1"><label><input type="checkbox" name="opt_compress_chunks" />
                             <?= $lang['strimportcompresschunks'] ?>
                         </label></div>
                 <?php endif; ?>

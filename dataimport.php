@@ -21,6 +21,52 @@ function handle_process_chunk(): void
 
 	ini_set('html_errors', '0');
 
+	/**
+	 * Detects whether input is JSON, XML, CSV or TSV.
+	 * Works on partial/chunked input.
+	 *
+	 * @param string $chunk  First chunk or any chunk with structural hints
+	 * @return string|null   "json" | "xml" | "csv" | "tsv" | null
+	 */
+	$detectFormat = function (string $chunk): ?string {
+		$trim = ltrim($chunk);
+
+		// --- JSON detection ---
+		// JSON always starts with { or [
+		if ($trim !== '' && ($trim[0] === '{' || $trim[0] === '[')) {
+			return 'json';
+		}
+
+		// --- XML detection ---
+		// XML starts with <tag or <?xml
+		if (str_starts_with($trim, '<')) {
+			return 'xml';
+		}
+
+		// --- CSV/TSV detection ---
+		// Heuristics: look at first non-empty line
+		$lines = preg_split('/\r\n|\n|\r/', $chunk);
+		foreach ($lines as $line) {
+			$line = trim($line);
+			if ($line === '')
+				continue;
+
+			// TSV: tab-separated
+			if (strpos($line, "\t") !== false) {
+				return 'tsv';
+			}
+
+			// CSV: comma-separated (but avoid JSON arrays)
+			if (strpos($line, ',') !== false) {
+				return 'csv';
+			}
+
+			break;
+		}
+
+		return null;
+	};
+
 	try {
 		$misc = AppContainer::getMisc();
 		$pg = AppContainer::getPostgres();
@@ -48,15 +94,8 @@ function handle_process_chunk(): void
 		if (!isset($_SESSION['table_import'])) {
 			$_SESSION['table_import'] = [];
 		}
-		if (!isset($_SESSION['table_import'][$importSessionId]) || $baseOffset === 0) {
-			$_SESSION['table_import'][$importSessionId] = [
-				'parser' => [],
-				'header_validated' => false,
-				'mapping' => [],
-				'meta' => [],
-				'serial_omitted' => false,
-				'truncated_tables' => [],
-			];
+		if (!isset($_SESSION['table_import'][$importSessionId])) {
+			$_SESSION['table_import'][$importSessionId] = [];
 		}
 		$state = &$_SESSION['table_import'][$importSessionId];
 
@@ -70,13 +109,11 @@ function handle_process_chunk(): void
 		$logCollector = new LogCollector(true);
 
 		// Collect options
-		$format = $_REQUEST['format'] ?? 'csv';
+		$format = $_REQUEST['format'] ?? 'auto';
 		$useHeader = !empty($_REQUEST['use_header']);
-		$allowedNulls = [];
-		if (isset($_REQUEST['allowednulls']) && is_array($_REQUEST['allowednulls'])) {
-			$allowedNulls = array_values($_REQUEST['allowednulls']);
-		}
+		$allowedNulls = array_values($_REQUEST['allowed_nulls'] ?? []);
 		$truncate = !empty($_REQUEST['opt_truncate']);
+		$byteaEncoding = $_REQUEST['bytea_encoding'] ?? 'hex';
 
 		// Read request body (binary)
 		$raw = file_get_contents('php://input');
@@ -94,6 +131,7 @@ function handle_process_chunk(): void
 				http_response_code(400);
 				echo json_encode([
 					'error' => 'Checksum mismatch: chunk corrupted during transmission',
+					'error_type' => 'checksum_mismatch',
 					'expected' => $clientHash,
 					'received' => $serverHash,
 				]);
@@ -115,23 +153,31 @@ function handle_process_chunk(): void
 		}
 
 		// Reset per-import state on first chunk
-		if ($baseOffset === 0 && $remainderLen === 0) {
+		if ($baseOffset === 0) {
 			$state['parser'] = [];
 			$state['header_validated'] = false;
 			$state['mapping'] = [];
 			$state['meta'] = [];
 			$state['serial_omitted'] = false;
 			$state['truncated_tables'] = [];
+			$state['format'] = $format;
+			if ($format === 'auto') {
+				$detected = $detectFormat($decoded);
+				if ($detected !== null) {
+					$state['format'] = $detected;
+				}
+			}
 		}
 
 		$executor = new DataImportExecutor($pg, $logCollector);
 		$result = $executor->process($decoded, [
-			'format' => $format,
+			'format' => $state['format'],
 			'use_header' => $useHeader,
 			'allowed_nulls' => $allowedNulls,
+			'bytea_encoding' => $byteaEncoding,
+			'truncate' => $truncate,
 			'schema' => $schema,
 			'table' => $table,
-			'truncate' => $truncate,
 		], $state);
 
 		$payloadLen = strlen($decoded);

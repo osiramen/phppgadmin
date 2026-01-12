@@ -35,6 +35,7 @@ class JsonFormatter extends OutputFormatter
         }
 
         $colCount = count($recordset->fields);
+        $byteaEncoding = $metadata['bytea_encoding'] ?? 'hex';
 
         // --- 1) Column metadata ---
         $columns = [];
@@ -86,7 +87,7 @@ class JsonFormatter extends OutputFormatter
                 continue;
             }
 
-            // bytea → base64 encoding
+            // bytea → encoding
             if ($type === 'bytea') {
                 $type_code[$i] = self::TYPE_BYTEA;
                 continue;
@@ -107,10 +108,14 @@ class JsonFormatter extends OutputFormatter
 
         $sep = "";
         for ($i = 0; $i < $colCount; $i++) {
-            $this->write($sep . "\t\t" . json_encode([
+            $col = [
                 'name' => $columns[$i],
                 'type' => self::DATA_TYPE_MAPPING[$types[$i]] ?? $types[$i]
-            ], JSON_UNESCAPED_UNICODE));
+            ];
+            if ($types[$i] === 'bytea') {
+                $col['encoding'] = $byteaEncoding;
+            }
+            $this->write($sep . "\t\t" . json_encode($col, JSON_UNESCAPED_UNICODE));
             $sep = ",\n";
         }
 
@@ -148,7 +153,7 @@ class JsonFormatter extends OutputFormatter
                         $this->write($value ? "true" : "false");
                         break;
                     case self::TYPE_BYTEA:
-                        $this->write('"' . base64_encode($value) . '"');
+                        $this->write('"' . self::encodeBytea($value, $byteaEncoding) . '"');
                         break;
                     case self::TYPE_JSON:
                         $this->write($value);

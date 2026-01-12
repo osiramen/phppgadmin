@@ -20,6 +20,8 @@ include_once('./libraries/bootstrap.php');
 if (!ini_get('safe_mode'))
 	set_time_limit(0);
 
+ini_set('html_errors', '0');
+
 $pg = AppContainer::getPostgres();
 $misc = AppContainer::getMisc();
 $lang = AppContainer::getLang();
@@ -109,6 +111,7 @@ if (isset($_REQUEST['action']) && $_REQUEST['action'] === 'export') {
 		'table' => $_REQUEST['table'] ?? $_REQUEST['view'] ?? 'query_result',
 		'insert_format' => $insert_format,
 		'export_nulls' => $_REQUEST['export_nulls'] ?? '',
+		'bytea_encoding' => $_REQUEST['bytea_encoding'] ?? 'hex',
 	];
 
 	// Stream output directly using the formatter

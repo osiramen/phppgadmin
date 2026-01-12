@@ -20,13 +20,18 @@ class XmlFormatter extends OutputFormatter
 
         $columns = [];
         $colCount = $recordset->FieldCount();
+        $byteaEncoding = $metadata['bytea_encoding'] ?? 'hex';
 
         for ($i = 0; $i < $colCount; $i++) {
             $finfo = $recordset->FetchField($i);
+            $type = $finfo->type ?? 'unknown';
             $columns[$i] = [
                 'name' => $finfo->name,
-                'type' => self::DATA_TYPE_MAPPING[$finfo->type] ?? $finfo->type ?? 'unknown'
+                'type' => self::DATA_TYPE_MAPPING[$type] ?? $type
             ];
+            if ($type === 'bytea') {
+                $columns[$i]['encoding'] = $byteaEncoding;
+            }
         }
 
         $this->write("<header>\n");
@@ -57,9 +62,8 @@ class XmlFormatter extends OutputFormatter
                 // BYTEA → Base64
                 if ($type === 'bytea') {
                     // If $value is escaped, unescape first (adjust based on $data behavior)
-                    $raw = pg_unescape_bytea($value);
-                    $encoded = base64_encode($raw);
-                    $this->write("\t\t<col name=\"{$name}\" type=\"bytea\" encoding=\"base64\">{$encoded}</col>\n");
+                    $encoded = self::encodeBytea($value, $byteaEncoding);
+                    $this->write("\t\t<col name=\"{$name}\">{$encoded}</col>\n");
                     continue;
                 }
 
