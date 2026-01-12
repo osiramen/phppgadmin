@@ -207,10 +207,30 @@ if ($use_pg_dumpall) {
 // Smart: if pg_dump selected AND all databases selected AND roles/tablespaces AND structure+data
 // then use pg_dumpall instead for efficiency
 if ($use_pgdump) {
-	$selected_dbs = isset($_REQUEST['databases']) ? (array) $_REQUEST['databases'] : [];
+	$subject = $_REQUEST['subject'] ?? 'database';
+	$selected_objects = isset($_REQUEST['objects']) ? array_values((array) $_REQUEST['objects']) : [];
 	$what = $_REQUEST['what'] ?? 'structureanddata';
 	$export_roles = isset($_REQUEST['export_roles']);
 	$export_tablespaces = isset($_REQUEST['export_tablespaces']);
+
+	// When exporting at server scope with pg_dump, user must pick databases
+	if ($subject === 'server' && empty($selected_objects)) {
+		if ($output_method === 'show') {
+			ExportOutputRenderer::beginHtmlOutput();
+			echo htmlspecialchars("-- No databases selected for export.\n");
+			ExportOutputRenderer::endHtmlOutput();
+		} else {
+			echo "-- No databases selected for export.\n";
+		}
+		exit;
+	}
+
+	// Only server exports support multi-database selection with pg_dump
+	if ($subject !== 'server') {
+		goto pg_dumpall_export;
+	}
+
+	$selected_dbs = $selected_objects;
 
 	// Check if all non-template databases are selected
 	$databaseActions = new DatabaseActions($pg);
@@ -246,7 +266,7 @@ if ($use_pgdump) {
 
 // If databases were selected in a server export, use pg_dump for each
 // instead of pg_dumpall (which cannot be filtered)
-if ($use_pgdump && !empty($selected_databases)) {
+if ($use_pgdump && (($_REQUEST['subject'] ?? 'database') === 'server') && !empty($selected_databases)) {
 	$exe_path_pgdump = DumpManager::getDumpExecutable(false);
 	if (!$exe_path_pgdump) {
 		echo "Error: Could not find pg_dump executable.\n";
@@ -371,9 +391,42 @@ if ($use_pgdump) {
 
 	// Check for a specified table/view
 	switch ($_REQUEST['subject']) {
+		case 'database':
+			// Database export (optionally filtered to selected schemas)
+			$selected_schemas = isset($_REQUEST['objects']) ? array_values((array) $_REQUEST['objects']) : [];
+			if (empty($selected_schemas)) {
+				if ($output_method === 'show') {
+					ExportOutputRenderer::beginHtmlOutput();
+					echo htmlspecialchars("-- No schemas selected for export.\n");
+					ExportOutputRenderer::endHtmlOutput();
+				} else {
+					echo "-- No schemas selected for export.\n";
+				}
+				exit;
+			}
+			foreach ($selected_schemas as $schemaName) {
+				$pg->fieldClean($schemaName);
+				$cmd .= " -n " . $misc->escapeShellArg("\"{$schemaName}\"");
+			}
+			break;
 		case 'schema':
-			// Schema export
-			$cmd .= " -n " . $misc->escapeShellArg("\"{$f_schema}\"");
+			// Schema export (optionally filtered to selected tables)
+			$selected_tables = isset($_REQUEST['objects']) ? array_values((array) $_REQUEST['objects']) : [];
+			if (!empty($selected_tables)) {
+				foreach ($selected_tables as $tableName) {
+					$pg->fieldClean($tableName);
+					$cmd .= " -t " . $misc->escapeShellArg("\"{$f_schema}\".\"{$tableName}\"");
+				}
+			} else {
+				if ($output_method === 'show') {
+					ExportOutputRenderer::beginHtmlOutput();
+					echo htmlspecialchars("-- No tables selected for export.\n");
+					ExportOutputRenderer::endHtmlOutput();
+				} else {
+					echo "-- No tables selected for export.\n";
+				}
+				exit;
+			}
 			break;
 		case 'table':
 		case 'view':

@@ -675,3 +675,10 @@ pre code.hljs {
 	margin-top: 8px;
 	background: #f9f9f9;
 }
+
+.export-form .object-selection-list {
+	height: 150px;
+	overflow-y: auto;
+	border: 1px solid #ccc;
+	padding: 5px;
+}

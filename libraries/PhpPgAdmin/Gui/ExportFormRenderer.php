@@ -32,11 +32,12 @@ class ExportFormRenderer
     public function renderExportForm(string $subject, array $params = []): void
     {
         $subject = strtolower(trim($subject));
+        $compressionCaps = CompressionFactory::capabilities();
 
         ?>
         <style>
         </style>
-        <form action="dbexport.php" id="export-form" method="get">
+        <form action="dbexport.php" id="export-form" class="export-form" method="get">
 
             <!-- Export Method -->
             <fieldset>
@@ -111,20 +112,31 @@ class ExportFormRenderer
                         ucfirst($params['name'] ?? 'objects')
                     ); ?>
                 </legend>
-                <?php
-                foreach ($params['objects'] ?? [] as $objName) {
-                    ?>
-                    <div>
-                        <input type="checkbox" id="<?= html_esc($subject . '_' . $objName); ?>" name="objects[]"
-                            value="<?= html_esc($objName); ?>" checked="checked" />
-                        <label for="<?= html_esc($subject . '_' . $objName); ?>">
-                            <img src="<?= $this->misc->icon($params['icon'] ?? ''); ?>" class="icon">
-                            <?= html_esc($objName); ?>
-                        </label>
-                    </div>
+                <div class="mb-1">
+                    <!--
+                    <label><input type="checkbox" id="select_all_objects" onclick="toggleObjects(this.checked);"
+                            checked="checked" /> <?= $this->lang['strselectall'] ?></label>
+                -->
+                    <a href="javascript:void(0);" onclick="toggleObjects(true)"><?= $this->lang['strselectall'] ?></a>
+                    &nbsp;|&nbsp;
+                    <a href="javascript:void(0);" onclick="toggleObjects(false)"><?= $this->lang['strunselectall'] ?></a>
+                </div>
+                <div class="flex-column flex-wrap object-selection-list">
                     <?php
-                }
-                ?>
+                    foreach ($params['objects'] ?? [] as $objName) {
+                        ?>
+                        <div>
+                            <input type="checkbox" id="<?= html_esc($subject . '_' . $objName); ?>" name="objects[]"
+                                value="<?= html_esc($objName); ?>" checked="checked" />
+                            <label for="<?= html_esc($subject . '_' . $objName); ?>">
+                                <img src="<?= $this->misc->icon($params['icon'] ?? ''); ?>" class="icon">
+                                <?= html_esc($objName); ?>
+                            </label>
+                        </div>
+                        <?php
+                    }
+                    ?>
+                </div>
             </fieldset>
 
 
@@ -236,6 +248,16 @@ class ExportFormRenderer
 
         <script>
             {
+                // Toggle all object checkboxes in the selection fieldset
+                function toggleObjects(check) {
+                    const form = document.getElementById('export-form');
+                    if (!form) return;
+                    const objectCheckboxes = form.querySelectorAll('input[name="objects[]"]');
+                    objectCheckboxes.forEach(cb => {
+                        cb.checked = !!check;
+                        cb.dispatchEvent(new Event('change', { bubbles: true }));
+                    });
+                }
                 // Show/hide options based on export type and dumper selection
                 const form = document.getElementById('export-form');
                 const whatRadios = form.querySelectorAll('input[name="what"]');
