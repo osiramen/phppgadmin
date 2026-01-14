@@ -5,6 +5,8 @@ use PhpPgAdmin\Database\Actions\ConstraintActions;
 use PhpPgAdmin\Database\Actions\RowActions;
 use PhpPgAdmin\Database\Actions\SchemaActions;
 use PhpPgAdmin\Database\Actions\TableActions;
+use PhpPgAdmin\Database\ByteaQueryModifier;
+use PhpPgAdmin\Database\QueryResultMetadataProbe;
 use PhpPgAdmin\Gui\FormRenderer;
 use PHPSQLParser\PHPSQLParser;
 
@@ -365,6 +367,105 @@ EOT;
 }
 
 /**
+ * Download bytea field data
+ */
+function doDownloadBytea()
+{
+	$pg = AppContainer::getPostgres();
+	$misc = AppContainer::getMisc();
+	$lang = AppContainer::getLang();
+	$tableActions = new TableActions($pg);
+	$schemaActions = new SchemaActions($pg);
+
+	// Validate required parameters
+	if (empty($_REQUEST['table']) || empty($_REQUEST['column']) || empty($_REQUEST['schema'])) {
+		header('HTTP/1.0 400 Bad Request');
+		echo 'Missing required parameters';
+		exit;
+	}
+
+	if (empty($_REQUEST['key']) || !is_array($_REQUEST['key'])) {
+		header('HTTP/1.0 400 Bad Request');
+		echo 'Missing key fields';
+		exit;
+	}
+
+	$table = $_REQUEST['table'];
+	$column = $_REQUEST['column'];
+	$schema = $_REQUEST['schema'];
+	$keyFields = $_REQUEST['key'];
+
+	// Ensure schema context for attribute checks
+	$schemaActions->setSchema($schema);
+
+	// Verify column exists and is bytea type
+	$attrs = $tableActions->getTableAttributes($table);
+	$columnExists = false;
+	$isBytea = false;
+
+	if ($attrs && $attrs->recordCount() > 0) {
+		while (!$attrs->EOF) {
+			if ($attrs->fields['attname'] === $column) {
+				$columnExists = true;
+				$type = $attrs->fields['type'] ?? '';
+				$isBytea = (strpos($type, 'bytea') === 0);
+				break;
+			}
+			$attrs->moveNext();
+		}
+	}
+
+	if (!$columnExists || !$isBytea) {
+		header('HTTP/1.0 400 Bad Request');
+		echo 'Invalid column or not bytea type';
+		exit;
+	}
+
+	// Build WHERE clause from key fields
+	$whereParts = [];
+	foreach ($keyFields as $field => $value) {
+		if ($value === null || (is_string($value) && strcasecmp($value, 'NULL') === 0)) {
+			$whereParts[] = $pg->escapeIdentifier($field) . ' IS NULL';
+		} else {
+			$whereParts[] = $pg->escapeIdentifier($field) . ' = ' . $pg->clean($value);
+		}
+	}
+	$whereClause = implode(' AND ', $whereParts);
+
+	// Query to fetch the bytea data
+	$sql = 'SELECT ' . $pg->escapeIdentifier($column) .
+		' FROM ' . $pg->escapeIdentifier($schema) . '.' . $pg->escapeIdentifier($table) .
+		' WHERE ' . $whereClause .
+		' LIMIT 1';
+
+	$result = $pg->selectSet($sql);
+
+	if ($result && $result->recordCount() === 1) {
+		$data = $result->fields[$column];
+
+		if ($data === null) {
+			header('HTTP/1.0 404 Not Found');
+			echo 'Data is NULL';
+			exit;
+		}
+
+		// Send binary data
+		header('Content-Type: application/octet-stream');
+		header('Content-Disposition: attachment; filename="' . $table . '_' . $column . '.bin"');
+		header('Content-Length: ' . strlen($data));
+		header('Cache-Control: must-revalidate');
+		header('Pragma: public');
+
+		echo $data;
+		exit;
+	} else {
+		header('HTTP/1.0 404 Not Found');
+		echo 'Data not found';
+		exit;
+	}
+}
+
+/**
  * Show confirmation of drop and perform actual drop
  */
 function doDelRow($confirm)
@@ -538,6 +639,7 @@ function printTableRowCells($rs, $fkey_information, $withOid, $editable = false)
 	$pg = AppContainer::getPostgres();
 	$misc = AppContainer::getMisc();
 	$conf = AppContainer::getConf();
+	$lang = AppContainer::getLang();
 	$j = 0;
 
 	if (!isset($_REQUEST['strings']))
@@ -581,7 +683,47 @@ function printTableRowCells($rs, $fkey_information, $withOid, $editable = false)
 				}
 				$valParams['class'] = 'fk_value';
 			}
-			echo $misc->printVal($v, $finfo->type, $valParams);
+			// If this is a modified bytea column, show size + download link
+			$queryHash = $_SESSION['bytea_query_hash'] ?? null;
+			$byteaCols = ($queryHash && isset($_SESSION['bytea_columns'][$queryHash])) ? $_SESSION['bytea_columns'][$queryHash] : [];
+
+			if (!empty($byteaCols) && isset($byteaCols[$finfo->name]) && is_array($byteaCols[$finfo->name])) {
+				$meta = $byteaCols[$finfo->name];
+				$schema = $meta['schema'] ?? ($_REQUEST['schema'] ?? $pg->_schema);
+				$table = $meta['table'] ?? ($_REQUEST['table'] ?? '');
+				$column = $meta['column'] ?? $finfo->name;
+				$keyFields = $meta['key_fields'] ?? [];
+
+				$canLink = !empty($schema) && !empty($table) && !empty($column) && !empty($keyFields);
+				$keyValues = [];
+				if ($canLink) {
+					foreach ($keyFields as $keyField) {
+						if (!array_key_exists($keyField, $rs->fields)) {
+							$canLink = false;
+							break;
+						}
+						$keyValues[$keyField] = $rs->fields[$keyField];
+					}
+				}
+
+				$sizeText = $misc->printVal($v, $finfo->type, $valParams);
+				echo $sizeText;
+				if ($canLink && $v !== null) {
+					$params = [
+						'action' => 'downloadbytea',
+						'server' => $_REQUEST['server'],
+						'database' => $_REQUEST['database'],
+						'schema' => $schema,
+						'table' => $table,
+						'column' => $column,
+						'key' => $keyValues,
+					];
+					$url = 'display.php?' . http_build_query($params);
+					echo ' <a href="' . $url . '">' . htmlspecialchars($lang['strdownload']) . '</a>';
+				}
+			} else {
+				echo $misc->printVal($v, $finfo->type, $valParams);
+			}
 			echo "</td>";
 		}
 	}
@@ -760,6 +902,12 @@ function doBrowse($msg = '')
 		}
 	}
 
+	// Fetch unique row identifier early (needed for bytea optimization)
+	$key_fields_early = [];
+	if (isset($table_name)) {
+		$key_fields_early = $rowActions->getRowIdentifier($table_name);
+	}
+
 	// Change type to handle primary key information
 	// Disable numeric fields and duplicate field names for now
 	if ($type == 'QUERY' && !empty($table) && !empty($schema)) {
@@ -789,11 +937,14 @@ function doBrowse($msg = '')
 	if (!isset($_REQUEST['max_rows']))
 		$_REQUEST['max_rows'] = $conf['max_rows'];
 
-	// Fetch unique row identifier, if this is a table browse request.
-	if (isset($table_name))
+	// Use key fields from early fetch (for bytea optimization) or fetch now
+	if (!empty($key_fields_early)) {
+		$key_fields = $key_fields_early;
+	} elseif (isset($table_name)) {
 		$key_fields = $rowActions->getRowIdentifier($table_name);
-	else
+	} else {
 		$key_fields = [];
+	}
 
 	$orderBySet = false;
 	if (!empty($_POST['query'])) {
@@ -866,15 +1017,117 @@ function doBrowse($msg = '')
 		}
 	}
 
-	$_REQUEST['query'] = $query;
+	// Preserve the user-visible query (ORDER BY changes apply here).
+	$displayQuery = $query;
+	$execQuery = $displayQuery;
+
+	// Bytea avoidance: try AST-based rewrite first (supports multi-table joins when keys are available).
+	$execParsed = $parser->parse($execQuery);
+	if (!empty($execParsed['SELECT']) && !empty($execParsed['FROM']) && is_array($execParsed['FROM'])) {
+		$keyFieldsByAlias = [];
+		$schemaActionsForKeys = new SchemaActions($pg);
+		foreach ($execParsed['FROM'] as $from) {
+			if (($from['expr_type'] ?? '') !== 'table') {
+				$keyFieldsByAlias = [];
+				break;
+			}
+			$parts = $from['no_quotes']['parts'] ?? [];
+			if (empty($parts)) {
+				continue;
+			}
+			if (count($parts) === 2) {
+				$schemaName = $parts[0];
+				$tableName = $parts[1];
+			} elseif (count($parts) === 1) {
+				$schemaName = $_REQUEST['schema'] ?? $pg->_schema;
+				$tableName = $parts[0];
+			} else {
+				continue;
+			}
+			$alias = $from['alias']['name'] ?? $tableName;
+			if (empty($alias) || empty($tableName)) {
+				continue;
+			}
+
+			$schemaActionsForKeys->setSchema($schemaName);
+			$keys = $rowActions->getRowIdentifier($tableName);
+			if (is_array($keys) && !empty($keys)) {
+				$keyFieldsByAlias[$alias] = $keys;
+			}
+		}
+
+		if (!empty($keyFieldsByAlias)) {
+			$byteaModifier = new ByteaQueryModifier();
+			$modifierResult = $byteaModifier->modifyQuery($execParsed, $execQuery, $keyFieldsByAlias);
+			$execQuery = $modifierResult['query'];
+
+			if (!empty($modifierResult['bytea_columns'])) {
+				$execHash = md5($execQuery);
+				if (!isset($_SESSION['bytea_columns'])) {
+					$_SESSION['bytea_columns'] = [];
+				}
+				$_SESSION['bytea_columns'][$execHash] = $modifierResult['bytea_columns'];
+				$_SESSION['bytea_query_hash'] = $execHash;
+			}
+		}
+	}
+
+	// Fallback: probe result metadata (0 rows) to detect bytea output columns.
+	// This sends a second statement to PostgreSQL, but should not execute table scans.
+	$normalizedForProbe = preg_replace('/^(\s*--.*\n|\s*\/\*.*?\*\/)*/s', '', $execQuery);
+	$normalizedForProbe = ltrim($normalizedForProbe);
+	$isSelectOrWith = preg_match('/^(SELECT|WITH)\b/i', $normalizedForProbe);
+	if ($isSelectOrWith) {
+		$currentHash = md5($execQuery);
+		$alreadyHasMeta = !empty($_SESSION['bytea_columns'][$currentHash] ?? null);
+		if (!$alreadyHasMeta) {
+			$probe = new QueryResultMetadataProbe();
+			$probeResult = $probe->probeResultFields($execQuery);
+			if (!empty($probeResult['fields']) && empty($probeResult['has_duplicate_names'])) {
+				$hasBytea = false;
+				foreach ($probeResult['fields'] as $f) {
+					if (!empty($f['is_bytea'])) {
+						$hasBytea = true;
+						break;
+					}
+				}
+				if ($hasBytea) {
+					$execQuery = $probe->rewriteQueryReplaceByteaWithLength($execQuery, $probeResult['fields']);
+					$probeMeta = [];
+					foreach ($probeResult['fields'] as $f) {
+						if (!empty($f['is_bytea'])) {
+							$probeMeta[$f['name']] = [
+								'schema' => null,
+								'table' => null,
+								'column' => $f['name'],
+								'key_fields' => [],
+							];
+						}
+					}
+					if (!empty($probeMeta)) {
+						if (!isset($_SESSION['bytea_columns'])) {
+							$_SESSION['bytea_columns'] = [];
+						}
+						$newHash = md5($execQuery);
+						$_SESSION['bytea_columns'][$newHash] = $probeMeta;
+						$_SESSION['bytea_query_hash'] = $newHash;
+					}
+				}
+			}
+		}
+	}
+
+	// Use the original (user-visible) query for display/history/navigation.
+	$query = $displayQuery;
+	$_REQUEST['query'] = $displayQuery;
 	// save the sql query in session for further use
-	$_SESSION['sqlquery'] = $query;
+	$_SESSION['sqlquery'] = $displayQuery;
 
 	// Retrieve page from query.  $max_pages is returned by reference.
 	$rs = $rowActions->browseQuery(
 		$type,
 		$table_name ?? null,
-		$query,
+		$execQuery,
 		$orderBySet ? [] : $_REQUEST['orderby'],
 		$_REQUEST['page'],
 		$_REQUEST['max_rows'],
@@ -1345,6 +1598,10 @@ $action = $_REQUEST['action'] ?? '';
 /* shortcuts: this function exit the script for ajax purpose */
 if ($action == 'dobrowsefk') {
 	doBrowseFK();
+}
+
+if ($action == 'downloadbytea') {
+	doDownloadBytea();
 }
 
 switch ($action) {
