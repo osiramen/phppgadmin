@@ -1030,7 +1030,38 @@ class RowBrowserRenderer extends AbstractContext
 
         $misc->printNavLinks($navlinks, 'display-browse', get_defined_vars());
 
+        $this->printAutoCompleteData();
         $this->printScripts();
+    }
+
+    function printAutoCompleteData()
+    {
+        $pg = AppContainer::getPostgres();
+        $rs = (new SchemaActions($pg))->getSchemaTablesAndColumns(
+            $_REQUEST['schema'] ?? $pg->_schema
+        );
+        $tables = [];
+        while (!$rs->EOF) {
+            $table = $rs->fields['table_name'];
+            $column = $rs->fields['column_name'];
+            if (!isset($tables[$table])) {
+                $tables[$table] = [];
+            }
+            $tables[$table][] = $column;
+            $rs->moveNext();
+        }
+        ?>
+        <script type="text/javascript">
+            window.autocompleteSchema = {
+                tables: <?= json_encode($tables) ?>,
+                tableList: <?= json_encode(array_keys($tables)) ?>
+            };
+            window.setTimeout(() => {
+                if (window.SQLCompleter)
+                    window.SQLCompleter.reload();
+            }, 500);
+        </script>
+        <?php
     }
 
     function printScripts()

@@ -8,8 +8,10 @@ use PhpPgAdmin\Database\Actions\DatabaseActions;
 use PhpPgAdmin\Database\Export\Compression\CompressionFactory;
 
 /**
- * Does an export of a database, schema, table, or view (via internal PHP dumper or pg_dump fallback).
- * Uses DumpFactory internally; pg_dump is used only if explicitly requested via $_REQUEST['dumper'].
+ * Does an export of a database, schema, table, or view
+ * (via internal PHP dumper or pg_dump fallback).
+ * Uses DumpFactory internally; pg_dump is used only if explicitly requested
+ * via $_REQUEST['dumper'].
  * Streams output to screen or downloads file.
  *
  * $Id: dbexport.php,v 1.22 2007/03/25 03:15:09 xzilla Exp $
@@ -91,7 +93,8 @@ if ($use_internal) {
 	// Set response headers and open output stream
 	if ($output_method === 'show') {
 		ExportOutputRenderer::beginHtmlOutput();
-		$output_stream = null; // Show mode uses echo directly
+		$output_stream = fopen('php://output', 'w');
+		stream_filter_append($output_stream, 'pg.htmlencode.filter', STREAM_FILTER_WRITE);
 	} else {
 		// Use CompressionFactory for the requested compression (default to 'download')
 		try {
@@ -171,41 +174,36 @@ if ($use_pg_dumpall) {
 	$pg_dumpall = $misc->escapeShellCmd($pg_dumpall_path);
 	$cmd = buildDumpCommandWithConnectionParams($pg_dumpall, $server_info);
 
-	// Check version and warn if needed
-	if ($output_method === 'show') {
-		ExportOutputRenderer::beginHtmlOutput();
-		checkAndWarnVersionMismatch($pg_dumpall, 'pg_dumpall', $server_info);
-	} else {
-		checkAndWarnVersionMismatch($pg_dumpall, 'pg_dumpall', $server_info);
-	}
-
 	// Execute based on output method
-	if ($output_method === 'show') {
-		ExportOutputRenderer::beginHtmlOutput();
-		checkAndWarnVersionMismatch($pg_dumpall, 'pg_dumpall', $server_info);
-		execute_dump_command($cmd, 'show');
-		ExportOutputRenderer::endHtmlOutput();
-	} else {
-		// use compression strategy
-		try {
+	try {
+		if ($output_method === 'show') {
+			ExportOutputRenderer::beginHtmlOutput();
+			$output_stream = fopen('php://output', 'w');
+			stream_filter_append($output_stream, 'pg.htmlencode.filter', STREAM_FILTER_WRITE);
+		} else {
 			$strategy = CompressionFactory::create($output_compression);
 			if (!$strategy) {
 				die("Error: Unsupported output method: " . htmlspecialchars($output_compression));
 			}
 			$handle = $strategy->begin($filename_base);
 			$output_stream = $handle['stream'];
-			execute_dump_command_streaming($cmd, $output_stream);
-			$strategy->finish($handle);
-		} catch (\Exception $e) {
-			die("Error: " . htmlspecialchars($e->getMessage()));
 		}
+		checkAndWarnVersionMismatch($pg_dumpall, 'pg_dumpall', $server_info, $output_stream);
+		execute_dump_command_streaming($cmd, $output_stream);
+		if ($output_method === 'show') {
+			ExportOutputRenderer::endHtmlOutput();
+		} else {
+			$strategy->finish($handle);
+		}
+	} catch (\Exception $e) {
+		die("Error: " . htmlspecialchars($e->getMessage()));
 	}
 	exit;
 }
 
 // If not pg_dumpall, handle pg_dump logic
-// Smart: if pg_dump selected AND all databases selected AND roles/tablespaces AND structure+data
-// then use pg_dumpall instead for efficiency
+// Smart: if pg_dump selected AND all databases selected AND roles/tablespaces
+// AND structure+data then use pg_dumpall instead for efficiency
 if ($use_pgdump) {
 	$subject = $_REQUEST['subject'] ?? 'database';
 	$selected_objects = isset($_REQUEST['objects']) ? array_values((array) $_REQUEST['objects']) : [];
@@ -280,9 +278,6 @@ if ($use_pgdump && (($_REQUEST['subject'] ?? 'database') === 'server') && !empty
 	// Build base command with connection parameters
 	$base_cmd = buildDumpCommandWithConnectionParams($exe, $server_info);
 
-	// Check version and warn if needed
-	$pg_version = checkAndWarnVersionMismatch($exe, 'pg_dump', $server_info);
-
 	// Build per-database pg_dump commands
 	$db_commands = [];
 	$db_names = [];
@@ -296,44 +291,40 @@ if ($use_pgdump && (($_REQUEST['subject'] ?? 'database') === 'server') && !empty
 	$cmd = $db_commands;
 
 	// Set headers and execute
-	if ($output_method === 'show') {
-		ExportOutputRenderer::beginHtmlOutput();
-		echo "-- Dumping with " . htmlspecialchars($exe_path_pgdump) . " version " . floatval($version[1] ?? '') . "\n\n";
-		foreach ($cmd as $idx => $db_cmd) {
-			$dbName = $db_names[$idx] ?? null;
-			if ($dbName !== null) {
-				$header = "--\n-- Dumping database: \"" . addslashes($dbName) . "\"\n--\n\\connect \"" . addslashes($dbName) . "\"\n\\encoding UTF8\nSET client_encoding = 'UTF8';\nSET session_replication_role = 'replica';\n\n";
-				echo htmlspecialchars($header);
-			}
-			execute_dump_command($db_cmd, 'show');
-			if ($dbName !== null) {
-				echo htmlspecialchars("SET session_replication_role = 'origin';\n\n");
-			}
-		}
-		ExportOutputRenderer::endHtmlOutput();
-	} else {
-		// download or gzipped - use compression strategy
-		try {
+	try {
+		if ($output_method === 'show') {
+			ExportOutputRenderer::beginHtmlOutput();
+			$output_stream = fopen('php://output', 'w');
+			stream_filter_append($output_stream, 'pg.htmlencode.filter', STREAM_FILTER_WRITE);
+		} else {
 			$strategy = CompressionFactory::create($output_compression);
 			if (!$strategy) {
 				die("Error: Unsupported output method: " . htmlspecialchars($output_compression));
 			}
 			$handle = $strategy->begin($filename_base);
 			$output_stream = $handle['stream'];
-			foreach ($cmd as $idx => $db_cmd) {
-				$dbName = $db_names[$idx] ?? null;
-				if ($dbName !== null) {
-					$header = "--\n-- Dumping database: \"" . addslashes($dbName) . "\"\n--\n\\connect \"" . addslashes($dbName) . "\"\n\\encoding UTF8\nSET client_encoding = 'UTF8';\nSET session_replication_role = 'replica';\n\n";
-					fwrite($output_stream, $header);
-				}
-				execute_dump_command_streaming($db_cmd, $output_stream);
-				fwrite($output_stream, "SET session_replication_role = 'origin';\n\n");
-				fflush($output_stream);
-			}
-			$strategy->finish($handle);
-		} catch (\Exception $e) {
-			die("Error: " . htmlspecialchars($e->getMessage()));
 		}
+
+		// Check version and warn if needed
+		checkAndWarnVersionMismatch($exe, 'pg_dump', $server_info, $output_stream);
+
+		foreach ($cmd as $idx => $db_cmd) {
+			$dbName = $db_names[$idx] ?? null;
+			if ($dbName !== null) {
+				$header = "--\n-- Dumping database: \"" . addslashes($dbName) . "\"\n--\n\\connect \"" . addslashes($dbName) . "\"\n\\encoding UTF8\nSET client_encoding = 'UTF8';\nSET session_replication_role = 'replica';\n\n";
+				fwrite($output_stream, $header);
+			}
+			execute_dump_command_streaming($db_cmd, $output_stream);
+			fwrite($output_stream, "SET session_replication_role = 'origin';\n\n");
+			fflush($output_stream);
+		}
+		if ($output_method === 'show') {
+			ExportOutputRenderer::endHtmlOutput();
+		} else {
+			$strategy->finish($handle);
+		}
+	} catch (\Exception $e) {
+		die("Error: " . htmlspecialchars($e->getMessage()));
 	}
 	exit;
 }
@@ -373,9 +364,6 @@ if ($use_pgdump) {
 	// Setup environment and build command
 	setupPgEnvironment($server_info);
 	$base_cmd = buildDumpCommandWithConnectionParams($exe, $server_info);
-
-	// Check version and warn if needed
-	checkAndWarnVersionMismatch($exe, 'pg_dump', $server_info);
 
 	// Single command mode for single database/table/schema
 	$cmd = $base_cmd;
@@ -446,40 +434,37 @@ if ($use_pgdump) {
 	}
 
 	// Set headers for gzipped/download/show and execute
-	if ($output_method === 'show') {
-		ExportOutputRenderer::beginHtmlOutput();
-		echo "-- Dumping with " . htmlspecialchars($exe_path) . " version " . $version[1] . "\n\n";
-		$targetDb = $_REQUEST['database'] ?? null;
-		if ($targetDb) {
-			$header = "--\n-- Dumping database: \"" . addslashes($targetDb) . "\"\n--\n\\connect \"" . addslashes($targetDb) . "\"\n\\encoding UTF8\nSET client_encoding = 'UTF8';\nSET session_replication_role = 'replica';\n\n";
-			echo htmlspecialchars($header);
-		}
-		execute_dump_command($cmd, 'show');
-		if ($targetDb) {
-			echo htmlspecialchars("SET session_replication_role = 'origin';\n\n");
-		}
-		ExportOutputRenderer::endHtmlOutput();
-	} else {
-		// download or gzipped - use compression strategy
-		try {
+	try {
+		if ($output_method === 'show') {
+			ExportOutputRenderer::beginHtmlOutput();
+			$output_stream = fopen('php://output', 'w');
+			stream_filter_append($output_stream, 'pg.htmlencode.filter', STREAM_FILTER_WRITE);
+		} else {
 			$strategy = CompressionFactory::create($output_compression);
 			if (!$strategy) {
 				die("Error: Unsupported output method: " . htmlspecialchars($output_compression));
 			}
 			$handle = $strategy->begin($filename_base);
 			$output_stream = $handle['stream'];
-			$targetDb = $_REQUEST['database'] ?? null;
-			if ($targetDb) {
-				$header = "--\n-- Dumping database: \"" . addslashes($targetDb) . "\"\n--\n\\connect \"" . addslashes($targetDb) . "\"\n\\encoding UTF8\nSET client_encoding = 'UTF8';\nSET session_replication_role = 'replica';\n\n";
-				fwrite($output_stream, $header);
-			}
-			execute_dump_command_streaming($cmd, $output_stream);
-			fwrite($output_stream, "SET session_replication_role = 'origin';\n\n");
-			fflush($output_stream);
-			$strategy->finish($handle);
-		} catch (\Exception $e) {
-			die("Error: " . htmlspecialchars($e->getMessage()));
 		}
+		// Check version and warn if needed
+		checkAndWarnVersionMismatch($exe, 'pg_dump', $server_info, $output_stream);
+
+		$targetDb = $_REQUEST['database'] ?? null;
+		if ($targetDb) {
+			$header = "--\n-- Dumping database: \"" . addslashes($targetDb) . "\"\n--\n\\connect \"" . addslashes($targetDb) . "\"\n\\encoding UTF8\nSET client_encoding = 'UTF8';\nSET session_replication_role = 'replica';\n\n";
+			fwrite($output_stream, $header);
+		}
+		execute_dump_command_streaming($cmd, $output_stream);
+		fwrite($output_stream, "SET session_replication_role = 'origin';\n\n");
+		fflush($output_stream);
+		if ($output_method === 'show') {
+			ExportOutputRenderer::endHtmlOutput();
+		} else {
+			$strategy->finish($handle);
+		}
+	} catch (\Exception $e) {
+		die("Error: " . htmlspecialchars($e->getMessage()));
 	}
 	exit;
 }
@@ -516,48 +501,6 @@ function execute_dump_command_streaming($command, $output_stream)
 	fclose($pipes[1]);
 	fclose($pipes[2]);
 	proc_close($process);
-}
-
-// Helper function to execute a single command for non-gzipped output
-function execute_dump_command($command, $output_method)
-{
-	if ($output_method === 'show') {
-		// Stream command output in chunks
-		$handle = popen("$command 2>&1", 'r');
-		if ($handle === false) {
-			echo "-- ERROR: Could not execute command\n";
-		} else {
-			while (!feof($handle)) {
-				$chunk = fread($handle, 32768);
-				if ($chunk !== false && $chunk !== '') {
-					echo htmlspecialchars($chunk);
-				}
-			}
-			pclose($handle);
-		}
-	} else {
-		// For downloads (non-gzipped), use proc_open for better control
-		$descriptors = [
-			0 => ['pipe', 'r'],  // stdin
-			1 => ['pipe', 'w'],  // stdout
-			2 => ['pipe', 'w'],  // stderr
-		];
-		$process = proc_open($command, $descriptors, $pipes);
-		if (is_resource($process)) {
-			fclose($pipes[0]); // Close stdin
-			while (!feof($pipes[1])) {
-				$chunk = fread($pipes[1], 32768);
-				if ($chunk !== false && $chunk !== '') {
-					echo $chunk;
-				}
-			}
-			fclose($pipes[1]);
-			fclose($pipes[2]);
-			proc_close($process);
-		} else {
-			echo "-- ERROR: Could not execute command\n";
-		}
-	}
 }
 
 /**
@@ -631,7 +574,7 @@ function addPgDumpFormatOptions($cmd, $what, $insert_format, $drop_objects = fal
  * Outputs SQL comment warning if version mismatch detected.
  * Warning appears in the actual dump (both in browser and downloaded file).
  */
-function checkAndWarnVersionMismatch($exe_path, $exe_name, $server_info)
+function checkAndWarnVersionMismatch($exe_path, $exe_name, $server_info, $output_stream)
 {
 	$version_output = shell_exec($exe_path . ' --version 2>&1');
 	if (!$version_output) {
@@ -649,8 +592,8 @@ function checkAndWarnVersionMismatch($exe_path, $exe_name, $server_info)
 	$server_version = floatval($server_info['pgVersion'] ?? 0);
 
 	if ($server_version > 0 && $dump_version < $server_version) {
-		echo "-- WARNING: $exe_name version ($dump_version) is older than PostgreSQL server version ($server_version)\n";
-		echo "-- Some advanced features may be limited or the dump may be incomplete. Consider using the internal dumper.\n\n";
+		$output_stream->write("-- WARNING: $exe_name version ($dump_version) is older than PostgreSQL server version ($server_version)\n");
+		$output_stream->write("-- Some advanced features may be limited or the dump may be incomplete. Consider using the internal dumper.\n\n");
 	}
 
 	return $version[1] ?? '';

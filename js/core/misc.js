@@ -312,6 +312,11 @@
 		editor.renderer.$cursorLayer.element.style.display = "none";
 		editor.setValue(element.value || "", -1);
 		editor.setReadOnly(element.hasAttribute("readonly"));
+		editor.setOptions({
+			enableBasicAutocompletion: true,
+			enableSnippets: true,
+			enableLiveAutocompletion: true,
+		});
 
 		editor.session.on("change", function () {
 			hidden.value = editor.getValue();
@@ -499,6 +504,31 @@
 		highlightDataFields(e.target);
 	});
 
+	// Helper to process elements in idle time
+
+	function processInIdle(chunks, fn) {
+		const scheduleIdleWork = (cb) => {
+			return setTimeout(() => {
+				const start = performance.now();
+				cb({
+					didTimeout: false,
+					timeRemaining: () =>
+						Math.max(0, 10 - (performance.now() - start)),
+				});
+			}, 0);
+		};
+
+		const run = (deadline) => {
+			while (deadline.timeRemaining() > 0 && chunks.length > 0) {
+				fn(chunks.shift());
+			}
+			if (chunks.length > 0) {
+				scheduleIdleWork(run);
+			}
+		};
+		scheduleIdleWork(run);
+	}
+
 	// Initialization
 
 	flatpickr.localize(flatpickr.l10ns.default);
@@ -532,27 +562,4 @@
 
 		return newGrammar;
 	});
-
-	function processInIdle(chunks, fn) {
-		const scheduleIdleWork = (cb) => {
-			return setTimeout(() => {
-				const start = performance.now();
-				cb({
-					didTimeout: false,
-					timeRemaining: () =>
-						Math.max(0, 10 - (performance.now() - start)),
-				});
-			}, 0);
-		};
-
-		const run = (deadline) => {
-			while (deadline.timeRemaining() > 0 && chunks.length > 0) {
-				fn(chunks.shift());
-			}
-			if (chunks.length > 0) {
-				scheduleIdleWork(run);
-			}
-		};
-		scheduleIdleWork(run);
-	}
 })();

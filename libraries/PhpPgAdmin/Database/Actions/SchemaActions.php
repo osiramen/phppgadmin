@@ -199,4 +199,52 @@ class SchemaActions extends AbstractActions
 
         return $this->connection->phpArray($this->connection->selectField($sql, 'search_path'));
     }
+
+    public function getSchemaTablesAndColumns($schema)
+    {
+        $this->connection->clean($schema);
+        $sql = <<<SQL
+            SELECT 
+                c.relname AS table_name,
+                a.attname AS column_name,
+                pg_catalog.format_type(a.atttypid, a.atttypmod) AS data_type,
+                a.attnum AS ordinal_position
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_attribute a ON a.attrelid = c.oid
+            WHERE c.relkind IN ('r', 'p', 'v', 'm')
+            AND n.nspname = '{$schema}'
+            AND a.attnum > 0
+            AND NOT a.attisdropped
+            ORDER BY c.relname, a.attnum
+        SQL;
+        return $this->connection->selectSet($sql);
+    }
+
+    public function getSchemaForeignKeyRelations($schema)
+    {
+        $this->connection->clean($schema);
+        $sql = <<<SQL
+            SELECT
+                src.relname AS source_table,
+                src_col.attname AS source_column,
+                tgt.relname AS target_table,
+                tgt_col.attname AS target_column
+            FROM pg_constraint con
+            JOIN pg_class src ON src.oid = con.conrelid
+            JOIN pg_namespace src_ns ON src_ns.oid = src.relnamespace
+            JOIN pg_class tgt ON tgt.oid = con.confrelid
+            JOIN pg_namespace tgt_ns ON tgt_ns.oid = tgt.relnamespace
+            JOIN pg_attribute src_col 
+                ON src_col.attrelid = src.oid 
+                AND src_col.attnum = ANY(con.conkey)
+            JOIN pg_attribute tgt_col 
+                ON tgt_col.attrelid = tgt.oid 
+                AND tgt_col.attnum = ANY(con.confkey)
+            WHERE con.contype = 'f'
+            AND src_ns.nspname = '{$schema}'
+            AND tgt_ns.nspname = '{$schema}'
+        SQL;
+        return $this->connection->selectSet($sql);
+    }
 }

@@ -78,7 +78,10 @@ class LayoutRenderer extends AbstractContext
 				<script src="js/lib/flatpickr/l10n/<?= $langIso2 ?>.js" defer type="text/javascript"></script>
 			<?php endif ?>
 			<script src="js/lib/ace/src-min-noconflict/ace.js" defer type="text/javascript"></script>
+			<script src="js/lib/ace/src-min-noconflict/ext-language_tools.js" defer type="text/javascript"></script>
 			<script src="js/lib/ace/src-min-noconflict/mode-pgsql.js" defer type="text/javascript"></script>
+			<script src="js/lib/ace/src-min-noconflict/mode-json.js" defer type="text/javascript"></script>
+			<script src="js/lib/ace/src-min-noconflict/mode-xml.js" defer type="text/javascript"></script>
 			<script src="js/core/ace-mode-plpgsql-lite.js" defer type="text/javascript"></script>
 			<script src="js/lib/lz-string/lz-string.js" defer type="text/javascript"></script>
 			<script src="js/lib/highlight/highlight.min.js" defer type="text/javascript"></script>
@@ -88,6 +91,7 @@ class LayoutRenderer extends AbstractContext
 			<script src="js/core/frameset.js" defer type="text/javascript"></script>
 			<script src="js/core/misc.js" defer type="text/javascript"></script>
 			<script src="js/core/autocomplete-fk.js" defer type="text/javascript"></script>
+			<script src="js/core/sql-completer.js" defer type="text/javascript"></script>
 			<style>
 				.webfx-tree-children {
 					background-image: url("<?= $this->misc->icon('I') ?> ");

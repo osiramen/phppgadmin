@@ -88,7 +88,8 @@ if (isset($_REQUEST['action']) && $_REQUEST['action'] === 'export') {
 	if ($output_method === 'show') {
 		// For browser display, use unified HTML wrapper
 		ExportOutputRenderer::beginHtmlOutput(['mode' => $output_format]);
-		$output_stream = null; // HTML mode uses echo directly
+		$output_stream = fopen('php://output', 'w');
+		stream_filter_append($output_stream, 'pg.htmlencode.filter', STREAM_FILTER_WRITE);
 	} else {
 		// For all other output methods (download with optional compression), use CompressionFactory
 		try {

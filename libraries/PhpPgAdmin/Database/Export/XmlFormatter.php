@@ -18,6 +18,8 @@ class XmlFormatter extends OutputFormatter
             return;
         }
 
+        // TODO: Export XML unescaped and make it reimportable
+
         $columns = [];
         $colCount = $recordset->FieldCount();
         $byteaEncoding = $metadata['bytea_encoding'] ?? 'hex';
@@ -64,6 +66,14 @@ class XmlFormatter extends OutputFormatter
                     // If $value is escaped, unescape first (adjust based on $data behavior)
                     $encoded = self::encodeBytea($value, $byteaEncoding);
                     $this->write("\t\t<col name=\"{$name}\">{$encoded}</col>\n");
+                    continue;
+                }
+
+                if ($type === 'xml') {
+                    // XML data → embed directly
+                    $this->write("\t\t<col name=\"{$name}\">");
+                    $this->write($value);
+                    $this->write("</col>\n");
                     continue;
                 }
 

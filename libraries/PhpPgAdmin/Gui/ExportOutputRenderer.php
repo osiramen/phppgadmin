@@ -2,6 +2,7 @@
 
 namespace PhpPgAdmin\Gui;
 
+use RuntimeException;
 use PhpPgAdmin\Core\AppContainer;
 
 /**
@@ -64,4 +65,31 @@ class ExportOutputRenderer
     }
 
 
+}
+
+
+class HtmlEncodeFilter extends \php_user_filter
+{
+    // Name of the filter: "htmlencode.filter"
+    public function filter($in, $out, &$consumed, $closing): int
+    {
+        while ($bucket = stream_bucket_make_writeable($in)) {
+            $bucket->data = htmlspecialchars(
+                $bucket->data,
+                ENT_NOQUOTES | ENT_SUBSTITUTE,
+                'UTF-8',
+                true
+            );
+
+            $consumed += $bucket->datalen;
+            stream_bucket_append($out, $bucket);
+        }
+
+        return PSFS_PASS_ON;
+    }
+}
+
+// Registration of the filter (once per request)
+if (!stream_filter_register('pg.htmlencode.filter', 'PhpPgAdmin\Gui\HtmlEncodeFilter')) {
+    throw new RuntimeException('Could not register pg.htmlencode.filter');
 }

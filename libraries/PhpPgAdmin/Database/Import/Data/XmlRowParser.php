@@ -272,6 +272,17 @@ class XmlRowParser implements RowStreamingParser
                 $state['mode'] = 'row';
                 $state['currentRow'] = [];
                 break;
+
+            default:
+                // If we're inside a column value, preserve unknown tags as literal markup
+                if ($state['mode'] === 'row' && $state['currentCol'] !== null) {
+                    $attrsStr = '';
+                    foreach ($t['attrs'] as $k => $v) {
+                        $attrsStr .= ' ' . $k . '="' . htmlspecialchars($v, ENT_QUOTES | ENT_XML1, 'UTF-8') . '"';
+                    }
+                    $state['currentCol'] .= '<' . $t['name'] . $attrsStr . '>';
+                }
+                break;
         }
     }
 
@@ -298,6 +309,13 @@ class XmlRowParser implements RowStreamingParser
             case 'row':
                 $state['rows'][] = $state['currentRow'];
                 $state['mode'] = 'records';
+                break;
+
+            default:
+                // closing tag inside a column -> append literal closing tag
+                if ($state['mode'] === 'row' && $state['currentCol'] !== null) {
+                    $state['currentCol'] .= '</' . $t['name'] . '>';
+                }
                 break;
         }
     }
