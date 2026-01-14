@@ -582,34 +582,25 @@ EOT;
 				$out = $params['function']($str, $params);
 				break;
 			case 'prettysize':
-				if ($str == -1)
+				if ($str == -1) {
 					$out = $lang['strnoaccess'];
-				else {
-					$limit = 10 * 1024;
-					$mult = 1;
-					if ($str < $limit * $mult)
-						$out = $str . ' ' . $lang['strbytes'];
-					else {
-						$mult *= 1024;
-						if ($str < $limit * $mult)
-							$out = floor(($str + $mult / 2) / $mult) . ' ' . $lang['strkb'];
-						else {
-							$mult *= 1024;
-							if ($str < $limit * $mult)
-								$out = floor(($str + $mult / 2) / $mult) . ' ' . $lang['strmb'];
-							else {
-								$mult *= 1024;
-								if ($str < $limit * $mult)
-									$out = floor(($str + $mult / 2) / $mult) . ' ' . $lang['strgb'];
-								else {
-									$mult *= 1024;
-									if ($str < $limit * $mult)
-										$out = floor(($str + $mult / 2) / $mult) . ' ' . $lang['strtb'];
-								}
-							}
-						}
-					}
+					break;
 				}
+				$units = [
+					$lang['strbytes'],
+					$lang['strkb'],
+					$lang['strmb'],
+					$lang['strgb'],
+					$lang['strtb'],
+				];
+				$limit = 10 * 1024;
+				$mult = 1;
+				$idx = 0;
+				while ($idx < count($units) - 1 && $str >= $limit * $mult) {
+					$mult *= 1024;
+					$idx++;
+				}
+				$out = floor(($str + $mult / 2) / $mult) . ' ' . $units[$idx];
 				break;
 			case 'time':
 			case 'timetz':

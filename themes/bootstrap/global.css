@@ -58,6 +58,7 @@ form {
 }
 
 button,
+.ui-btn,
 a.pagenav,
 input[type="button"],
 input[type="submit"],
@@ -79,6 +80,7 @@ input[type="reset"] {
 }
 
 button:hover,
+.ui-btn:hover,
 a.pagenav:hover,
 input[type="button"]:hover,
 input[type="submit"]:hover,
@@ -90,6 +92,7 @@ input[type="reset"]:hover {
 }
 
 button:active,
+.ui-btn:active,
 a.pagenav:active,
 input[type="button"]:active,
 input[type="submit"]:active,
@@ -284,7 +287,7 @@ tr[class^="data"] td[class^="opbutton"] {
 }
 
 tr[class^="data"] a {
-	font-weight: bold;
+	/*font-weight: bold;*/
 }
 
 tr[class^="data"] td[class^="opbutton"] a,

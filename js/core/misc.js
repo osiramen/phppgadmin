@@ -127,7 +127,8 @@
 		const sharedOptions = {
 			clickOpens: false,
 			allowInput: true,
-			defaultDate: element.value || null,
+			disableMobile: true,
+			defaultDate: originalValue || null,
 
 			onChange: (selectedDates, dateStr, instance) => {
 				const cbExpr = document.getElementById(
@@ -159,7 +160,7 @@
 
 		// Create button
 		let button = document.createElement("div");
-		button.className = "date-picker-button";
+		button.className = "date-picker-button mx-1";
 		button.innerHTML = "📅";
 
 		element.parentNode.insertBefore(container, element);
@@ -267,6 +268,57 @@
 				}
 
 				return datestr;
+			},
+		};
+
+		createDateTimePickerInternal(element, options);
+	};
+
+	/**
+	 * Format: 19:35:00[.123456][+02[:00]]
+	 * @param {HTMLElement} element
+	 */
+	window.createTimePicker = function (element) {
+		const options = {
+			enableTime: true,
+			enableSeconds: true,
+			noCalendar: true,
+			time_24hr: true,
+			dateFormat: "H:i:S",
+			minuteIncrement: 1,
+			defaultHour: 0,
+
+			parseDate: (datestr, format) => {
+				// Save original string (for offset + microseconds)
+				element.dataset.time = datestr;
+
+				// Extract time part (without offset)
+				// Examples:
+				// 19:35:00
+				// 19:35:00.123456
+				const timeOnly = datestr.match(/^\d{2}:\d{2}:\d{2}(?:\.\d+)?/);
+				const clean = timeOnly ? timeOnly[0] : "00:00:00";
+
+				return flatpickr.parseDate(clean, format) ?? new Date();
+			},
+
+			formatDate: (date, format, locale) => {
+				const prev = element.dataset.time ?? "";
+				let out = flatpickr.formatDate(date, format, locale);
+
+				// Reattach microseconds
+				const micros = prev.match(/\.\d+/);
+				if (micros) {
+					out += micros[0];
+				}
+
+				// Reattach offset
+				const offset = prev.match(/([+-]\d{2}(?::?\d{2})?)$/);
+				if (offset) {
+					out += offset[1];
+				}
+
+				return out;
 			},
 		};
 
@@ -415,6 +467,12 @@
 			.forEach((element) => {
 				//console.log(element);
 				createDatePicker(element);
+			});
+		rootElement
+			.querySelectorAll("input[data-type^=time]")
+			.forEach((element) => {
+				//console.log(element);
+				createTimePicker(element);
 			});
 	}
 

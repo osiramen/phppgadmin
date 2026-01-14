@@ -244,7 +244,7 @@ class RowBrowserRenderer extends AbstractContext
                         }
                     }
 
-                    $sizeText = $misc->printVal($v, $finfo->type, $valParams);
+                    $sizeText = $misc->printVal($v, 'prettysize', $valParams);
                     echo $sizeText;
                     if ($canLink && $v !== null) {
                         $params = [
@@ -257,7 +257,7 @@ class RowBrowserRenderer extends AbstractContext
                             'key' => $keyValues,
                         ];
                         $url = 'display.php?' . http_build_query($params);
-                        echo ' <a href="' . $url . '">' . htmlspecialchars($lang['strdownload']) . '</a>';
+                        echo ' <a class="ui-btn" href="' . $url . '">' . htmlspecialchars($lang['strdownload']) . '</a>';
                     }
                 } else {
                     echo $misc->printVal($v, $finfo->type, $valParams);
