@@ -173,7 +173,7 @@ abstract class ExportDumper extends AbstractContext
     protected function writeDrop($type, $name, $options)
     {
         if (!empty($options['drop_objects'])) {
-            $this->write("DROP {$type} IF EXISTS {$name} CASCADE;\n");
+            $this->write("DROP {$type} IF EXISTS {$name} CASCADE;\n\n");
         }
     }
 

@@ -10,12 +10,16 @@ use PhpPgAdmin\Database\Actions\AdminActions;
 use PhpPgAdmin\Database\Actions\IndexActions;
 use PhpPgAdmin\Database\Actions\TableActions;
 use PhpPgAdmin\Database\Actions\ConstraintActions;
+use PhpPgAdmin\Database\Cursor\CursorReader;
 
 /**
  * Dumper for PostgreSQL tables (structure and data).
  */
 class TableDumper extends ExportDumper
 {
+    private $tableQuoted;
+    private $schemaQuoted;
+
     public function dump($subject, array $params, array $options = [])
     {
         $table = $params['table'] ?? null;
@@ -25,10 +29,17 @@ class TableDumper extends ExportDumper
             return;
         }
 
+        $this->tableQuoted = $this->connection->quoteIdentifier($table);        
+        $this->schemaQuoted = $this->connection->quoteIdentifier($schema);
+
         $this->write("\n-- Table: \"{$schema}\".\"{$table}\"\n\n");
 
         if (empty($options['data_only'])) {
-            $this->dumpStructure($table, $schema, $options);
+            // Use existing logic from TableActions/Postgres driver but adapted
+            // Use writer-style method instead of getting SQL back
+            $this->dumpTableStructure($table, $options);
+
+            $this->dumpAutovacuumSettings($table, $schema);
         }
 
         if (empty($options['structure_only'])) {
@@ -42,124 +53,243 @@ class TableDumper extends ExportDumper
         }
     }
 
-    protected function dumpStructure($table, $schema, $options)
-    {
-        // Use existing logic from TableActions/Postgres driver but adapted
-        // Use writer-style method instead of getting SQL back
-        $this->writeTableDefPrefix($table, $options);
-
-        $this->dumpAutovacuumSettings($table, $schema);
-    }
+    private const INSERT_COPY = 1;
+    private const INSERT_MULTI = 2;
+    private const INSERT_SINGLE = 3;
 
     protected function dumpData($table, $schema, $options)
     {
         $this->write("\n-- Data for table \"{$schema}\".\"{$table}\"\n");
 
-        $insertFormat = $options['insert_format'] ?? 'copy'; // 'copy', 'single', or 'multi'
-        $oids = !empty($options['oids']);
-
-        // Optionally set session_replication_role to replica to avoid firing triggers during restore
-        $replication_role_set = false;
-        if (empty($options['suppress_replication_role'])) {
-            $this->write("SET session_replication_role = 'replica';\n\n");
-            $replication_role_set = true;
-        }
-
-        // Set fetch mode to NUM for data dumping
-        $this->connection->conn->setFetchMode(ADODB_FETCH_NUM);
-
-        // Determine average row size for CURSOR streaming
-        /*
-        SELECT pg_total_relation_size('mytable') / reltuples
-FROM pg_class
-WHERE oid = 'mytable'::regclass;
-
-SELECT max(pg_column_size(t.*))
-FROM mytable t
-LIMIT 1000;
-
-        */
-
-        $this->connection->conn->Query(ADODB_FETCH_ASSOC);
-
-        pg_query($conn, 'BEGIN');
-
-        pg_query($conn, "
-    DECLARE mycur NO SCROLL CURSOR FOR
-    SELECT * FROM mytable ORDER BY id
-");
-
-        while (true) {
-            $res = pg_query($conn, "FETCH FORWARD 1000 FROM mycur");
-            if (!$res || pg_num_rows($res) === 0) {
+        switch ($options['insert_format'] ?? 'copy') {
+            default:
+            case 'copy':
+                $insertFormat = self::INSERT_COPY;
                 break;
+            case 'single':
+                $insertFormat = self::INSERT_SINGLE;
+                break;
+            case 'multi':
+                $insertFormat = self::INSERT_MULTI;
+                break;
+        }
+        //$oids = !empty($options['oids']);
+
+        try {
+            // Build SQL query for table export
+            $sql = "SELECT * FROM {$this->schemaQuoted}.{$this->tableQuoted}";
+
+            // Create cursor reader with automatic chunk size calculation
+            $reader = new CursorReader(
+                $this->connection,
+                $sql,
+                null, // Auto-calculate chunk size
+                $table,
+                $schema
+            );
+
+            // Open cursor (begins transaction)
+            $reader->open();
+
+            // Prepare for SQL formatting
+            $tableName = "{$this->schemaQuoted}.{$this->tableQuoted}";
+            $fields = null;
+            $totalRows = 0;
+            $isFirstRow = true;
+            $columnNames = null;
+            $escapeModes = null;
+            $insertBegin = null;
+            $rowsInBatch = 0;
+            $batchSize = 1000;
+
+            // Stream rows without accumulation using eachRow()
+            $reader->eachRow(function($row, $rowNumber, $fieldMetadata) use (
+                $insertFormat,
+                $tableName,
+                &$fields,
+                &$columnNames,
+                &$escapeModes,
+                &$isFirstRow,
+                &$insertBegin,
+                &$rowsInBatch,
+                $batchSize
+            ) {
+                // Initialize on first row
+                if ($fields === null) {
+                    $fields = $fieldMetadata;
+                    $columnNames = array_map(function($field) {
+                        return $this->connection->escapeString(
+                            $field['name']
+                        );
+                    }, $fields);
+                    $escapeModes = $this->determineEscapeModes($fields);
+                }
+
+                // Write headers on first row
+                if ($isFirstRow) {
+                    if ($insertFormat === self::INSERT_COPY) {
+                        $line = "COPY {$tableName} (" . implode(', ', $columnNames) . ") FROM stdin;\n";
+                        $this->write($line);
+                    } else {
+                        $insertBegin = "INSERT INTO {$tableName} (" . implode(', ', $columnNames) . ") VALUES";
+                        if ($insertFormat === self::INSERT_MULTI) {
+                            $this->write("$insertBegin\n");
+                        }
+                    }
+                    $isFirstRow = false;
+                }
+
+                // Write row data
+                if ($insertFormat === self::INSERT_COPY) {
+                    $this->writeCopyRow($row, $escapeModes);
+                } elseif ($insertFormat === self::INSERT_MULTI) {
+                    // Break into batches
+                    if ($rowsInBatch >= $batchSize) {
+                        $this->write(";\n\n$insertBegin\n");
+                        $rowsInBatch = 0;
+                    } elseif ($rowsInBatch > 0) {
+                        $this->write(",\n");
+                    }
+                    $this->writeInsertValues($row, $escapeModes);
+                    $rowsInBatch++;
+                } else {
+                    // Single-row INSERT
+                    $this->write($insertBegin . " ");
+                    $this->writeInsertValues($row, $escapeModes);
+                    $this->write(";\n");
+                }
+            });
+
+            // Close cursor (commits transaction)
+            $reader->close();
+
+            // Write terminators
+            if ($fields !== null) {
+                if ($insertFormat === self::INSERT_COPY) {
+                    $this->write("\\.\n\n");
+                } elseif ($insertFormat === self::INSERT_MULTI) {
+                    $this->write(";\n\n");
+                }
             }
 
-            while ($row = pg_fetch_row($res)) {
-                $formatter->writeRow($row);
-                $stream->write($formatter->buffer);
+        } catch (\Exception $e) {
+            error_log('Error dumping table data: ' . $e->getMessage());
+            $this->write("-- Error exporting data: " . $e->getMessage() . "\n");
+        }
+    }
+
+    /**
+     * Determine escape modes for each field based on type
+     * 
+     * @param array $fields Field metadata
+     * @return array Escape modes (0=none, 1=string, 2=bytea)
+     */
+    protected function determineEscapeModes($fields)
+    {
+        $escapeModes = [];
+        
+        foreach ($fields as $i => $field) {
+            $type = strtolower($field['type'] ?? '');
+
+            // Numeric types - no escaping
+            if (in_array($type, [
+                'int2', 'int4', 'int8', 'integer', 'bigint', 'smallint',
+                'float4', 'float8', 'real', 'double precision',
+                'numeric', 'decimal'
+            ])) {
+                $escapeModes[$i] = 0;
             }
-
-            pg_free_result($res);
-        }
-
-        pg_query($conn, "CLOSE mycur");
-        pg_query($conn, 'COMMIT');
-
-
-        $rs = $this->connection->selectSet("SELECT * FROM \"{$schema}\".\"{$table}\"");
-
-        if (!$rs) {
-            // No recordset at all
-            if ($replication_role_set) {
-                $this->write("SET session_replication_role = 'origin';\n\n");
+            // Boolean - no escaping
+            elseif (in_array($type, ['bool', 'boolean'])) {
+                $escapeModes[$i] = 0;
             }
-            return;
-        }
-
-        // Move to first record (recordset may be positioned at EOF after initial select)
-        if (is_callable([$rs, 'moveFirst'])) {
-            $rs->moveFirst();
-        }
-
-        // Check if there's actually data after moving to first record
-        if ($rs->EOF) {
-            // No data to export
-            if ($replication_role_set) {
-                $this->write("SET session_replication_role = 'origin';\n\n");
+            // Bytea - special escaping
+            elseif ($type === 'bytea') {
+                $escapeModes[$i] = 2;
             }
-            return;
+            // Everything else - string escaping
+            else {
+                $escapeModes[$i] = 1;
+            }
         }
 
-        // Use SqlFormatter to generate SQL output
-        $formatter = new SqlFormatter();
+        return $escapeModes;
+    }
 
-        // Set formatter to use dumper's output stream
-        $formatter->setOutputStream($this->outputStream);
+    /**
+     * Write a row in COPY format
+     * 
+     * @param array $row Numeric array of values
+     * @param array $escapeModes Escape modes for each column
+     */
+    protected function writeCopyRow($row, $escapeModes)
+    {
+        $line = '';
+        $first = true;
 
-        // Format the recordset and write to output
-        $metadata = [
-            'table' => "\"{$schema}\".\"{$table}\"",
-            'insert_format' => $insertFormat
-        ];
+        foreach ($row as $i => $v) {
+            if (!$first) {
+                $line .= "\t";
+            }
+            $first = false;
 
-        $formatter->format($rs, $metadata);
-
-
-        // Restore fetch mode
-        $this->connection->conn->setFetchMode(ADODB_FETCH_ASSOC);
-
-        // Reset session replication role if we set it earlier
-        if ($replication_role_set) {
-            $this->write("SET session_replication_role = 'origin';\n\n");
+            if ($v === null) {
+                $line .= '\\N';
+            } else {
+                if ($escapeModes[$i] === 2) {
+                    // Bytea - octal escaping for COPY
+                    $line .= bytea_to_octal($v);
+                } else {
+                    // COPY escaping: backslash and special chars
+                    $v = addcslashes($v, "\0\\\n\r\t");
+                    $line .= $v;
+                }
+            }
         }
+
+        $this->write($line . "\n");
+    }
+
+    /**
+     * Write INSERT VALUES clause
+     * 
+     * @param array $row Numeric array of values
+     * @param array $escapeModes Escape modes for each column
+     */
+    protected function writeInsertValues($row, $escapeModes)
+    {
+        $values = "(";
+        $first = true;
+
+        foreach ($row as $i => $v) {
+            if (!$first) {
+                $values .= ",";
+            }
+            $first = false;
+
+            if ($v === null) {
+                $values .= "NULL";
+            } elseif ($escapeModes[$i] === 1) {
+                // String escaping
+                $values .= $this->connection->conn->qstr($v);
+            } elseif ($escapeModes[$i] === 2) {
+                // Bytea escaping
+                $values .= "'\\x" . bin2hex($v) . "'";
+            } else {
+                // No escaping (numeric/boolean)
+                $values .= $v;
+            }
+        }
+
+        $values .= ")";
+        $this->write($values);
     }
 
     /**
      * Write table definition prefix (columns, constraints, comments, privileges).
      * Returns true on success, false on failure or missing table.
      */
-    protected function writeTableDefPrefix($table, $options)
+    protected function dumpTableStructure($table, $options)
     {
         $tableActions = new TableActions($this->connection);
         $t = $tableActions->getTable($table);
@@ -167,8 +297,6 @@ LIMIT 1000;
             $this->connection->rollbackTransaction();
             return false;
         }
-        $this->connection->fieldClean($t->fields['relname']);
-        $this->connection->fieldClean($t->fields['nspname']);
 
         $atts = $tableActions->getTableAttributes($table);
         if (!is_object($atts)) {
@@ -184,8 +312,8 @@ LIMIT 1000;
 
         // header / drop / create begin
         $this->write("-- Definition\n\n");
-        $this->writeDrop('TABLE', "\"{$t->fields['nspname']}\".\"{$t->fields['relname']}\"", $options);
-        $this->write("CREATE TABLE \"{$t->fields['nspname']}\".\"{$t->fields['relname']}\" (\n");
+        $this->writeDrop('TABLE', "{$this->schemaQuoted}.{$this->tableQuoted}", $options);
+        $this->write("CREATE TABLE {$this->schemaQuoted}.{$this->tableQuoted} (\n");
 
         // columns
         $col_comments_sql = '';
@@ -196,15 +324,19 @@ LIMIT 1000;
             } else {
                 $this->write(",\n");
             }
-            $this->connection->fieldClean($atts->fields['attname']);
-            $this->write("    \"{$atts->fields['attname']}\"");
+            $name = $this->connection->quoteIdentifier($atts->fields['attname']);
+            $this->write("    {$name}");
             if (
                 $this->connection->phpBool($atts->fields['attisserial']) &&
                 ($atts->fields['type'] == 'integer' || $atts->fields['type'] == 'bigint')
             ) {
                 $this->write(($atts->fields['type'] == 'integer') ? " SERIAL" : " BIGSERIAL");
             } else {
-                $this->write(" " . $this->connection->formatType($atts->fields['type'], $atts->fields['atttypmod']));
+                $type = $this->connection->formatType(
+                    $atts->fields['type'],
+                    $atts->fields['atttypmod']
+                );
+                $this->write(" " . $type);
                 if ($this->connection->phpBool($atts->fields['attnotnull'])) {
                     $this->write(" NOT NULL");
                 }
@@ -215,7 +347,7 @@ LIMIT 1000;
 
             if ($atts->fields['comment'] !== null) {
                 $this->connection->clean($atts->fields['comment']);
-                $col_comments_sql .= "COMMENT ON COLUMN \"{$t->fields['relname']}\".\"{$atts->fields['attname']}\"  IS '{$atts->fields['comment']}';\n";
+                $col_comments_sql .= "COMMENT ON COLUMN {$this->schemaQuoted}.{$this->tableQuoted}.{$this->connection->quoteIdentifier($atts->fields['attname'])} IS '{$atts->fields['comment']}';\n";
             }
 
             $atts->moveNext();
@@ -273,7 +405,8 @@ LIMIT 1000;
                     $this->write("\n");
                     $first = false;
                 }
-                $this->write("ALTER TABLE ONLY \"{$t->fields['nspname']}\".\"{$t->fields['relname']}\" ALTER COLUMN \"{$atts->fields['attname']}\" SET STATISTICS {$atts->fields['attstattarget']};\n");
+                $fieldQuoted = $this->connection->quoteIdentifier($atts->fields['attname']);
+                $this->write("ALTER TABLE ONLY {$this->schemaQuoted}.{$this->tableQuoted} ALTER COLUMN {$fieldQuoted} SET STATISTICS {$atts->fields['attstattarget']};\n");
             }
             if ($atts->fields['attstorage'] != $atts->fields['typstorage']) {
                 $storage = null;
@@ -294,7 +427,8 @@ LIMIT 1000;
                         $this->connection->rollbackTransaction();
                         return false;
                 }
-                $this->write("ALTER TABLE ONLY \"{$t->fields['nspname']}\".\"{$t->fields['relname']}\" ALTER COLUMN \"{$atts->fields['attname']}\" SET STORAGE {$storage};\n");
+                $fieldQuoted = $this->connection->quoteIdentifier($atts->fields['attname']);
+                $this->write("ALTER TABLE ONLY {$this->schemaQuoted}.{$this->tableQuoted} ALTER COLUMN {$fieldQuoted} SET STORAGE {$storage};\n");
             }
 
             $atts->moveNext();
@@ -304,7 +438,7 @@ LIMIT 1000;
         if ($t->fields['relcomment'] !== null) {
             $this->connection->clean($t->fields['relcomment']);
             $this->write("\n-- Comment\n\n");
-            $this->write("COMMENT ON TABLE \"{$t->fields['nspname']}\".\"{$t->fields['relname']}\" IS '{$t->fields['relcomment']}';\n");
+            $this->write("COMMENT ON TABLE {$this->schemaQuoted}.{$this->tableQuoted} IS '{$t->fields['relcomment']}';\n");
         }
 
         // column comments
@@ -321,7 +455,7 @@ LIMIT 1000;
 
         if (sizeof($privs) > 0) {
             $this->write("\n-- Privileges\n\n");
-            $this->write("REVOKE ALL ON TABLE \"{$t->fields['nspname']}\".\"{$t->fields['relname']}\" FROM PUBLIC;\n");
+            $this->write("REVOKE ALL ON TABLE {$this->schemaQuoted}.{$this->tableQuoted} FROM PUBLIC;\n");
             $this->writePrivilegesFromArray($privs, $t);
         }
 
@@ -534,26 +668,4 @@ LIMIT 1000;
         }
     }
 
-
-    /**
-     * Get table data as an ADORecordSet for export formatting.
-     *
-     * @param array $params Table parameters (schema, table)
-     * @return mixed ADORecordSet or null if table cannot be read
-     */
-    public function getTableData($params)
-    {
-        $table = $params['table'] ?? null;
-        $schema = $params['schema'] ?? $this->connection->_schema;
-
-        if (!$table) {
-            return null;
-        }
-
-        // Use existing dumpRelation method from connection to get table data
-        $this->connection->conn->setFetchMode(ADODB_FETCH_NUM);
-        $recordset = $this->connection->dumpRelation($table, false);
-
-        return $recordset;
-    }
 }

@@ -513,8 +513,7 @@ class Postgres extends AbstractConnection
 		if ($rs->recordCount() != 1)
 			return null;
 		else {
-			$rs->fields['relhasoids'] = $this->phpBool($rs->fields['relhasoids']);
-			return $rs->fields['relhasoids'];
+			return $this->phpBool($rs->fields['relhasoids']);
 		}
 	}
 

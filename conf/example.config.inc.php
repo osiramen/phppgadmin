@@ -118,7 +118,7 @@ $conf['show_comments'] = true;
 // aggregates, types, operators, operator classes, conversions,
 // languages and casts in phpPgAdmin. These objects are rarely
 // administered and can clutter the interface.
-$conf['show_advanced'] = false;
+$conf['show_advanced'] = true;
 
 // Display "system" objects?
 $conf['show_system'] = false;
@@ -130,7 +130,7 @@ $conf['min_password_length'] = 1;
 $conf['left_width'] = 250;
 
 // Which look & feel theme to use
-$conf['theme'] = 'default';
+$conf['theme'] = 'bootstrap';
 
 // Show OIDs when browsing tables?
 // Only supported in versions <=11
