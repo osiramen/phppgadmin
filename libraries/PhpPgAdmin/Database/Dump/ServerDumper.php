@@ -52,5 +52,6 @@ class ServerDumper extends ExportDumper
             $databases->moveNext();
         }
 
+        $this->writeFooter();
     }
 }

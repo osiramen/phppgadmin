@@ -39,8 +39,8 @@ class OperatorActions extends AbstractActions
     {
         $this->connection->clean($operator_oid);
 
-        $sql = "
-            SELECT
+        $sql =
+            "SELECT
                 po.oid, po.oprname,
                 oprleft::pg_catalog.regtype AS oprleftname,
                 oprright::pg_catalog.regtype AS oprrightname,
@@ -50,11 +50,20 @@ class OperatorActions extends AbstractActions
                 oprcom::pg_catalog.regoperator AS oprcom,
                 oprnegate::pg_catalog.regoperator AS oprnegate,
                 po.oprcode::pg_catalog.regproc AS oprcode,
+                pn.nspname AS procnsname,
                 po.oprrest::pg_catalog.regproc AS oprrest,
+                pnrest.nspname AS restnsname,
                 po.oprjoin::pg_catalog.regproc AS oprjoin,
+                pnjoin.nspname AS joinnsname,
                 pg_catalog.obj_description(po.oid, 'pg_operator') AS oprcomment
             FROM
                 pg_catalog.pg_operator po
+                LEFT JOIN pg_catalog.pg_proc p ON p.oid = po.oprcode::oid
+                LEFT JOIN pg_catalog.pg_namespace pn ON pn.oid = p.pronamespace
+                LEFT JOIN pg_catalog.pg_proc prest ON prest.oid = po.oprrest::oid
+                LEFT JOIN pg_catalog.pg_namespace pnrest ON pnrest.oid = prest.pronamespace
+                LEFT JOIN pg_catalog.pg_proc pjoin ON pjoin.oid = po.oprjoin::oid
+                LEFT JOIN pg_catalog.pg_namespace pnjoin ON pnjoin.oid = pjoin.pronamespace
             WHERE
                 po.oid='{$operator_oid}'
         ";

@@ -4,6 +4,7 @@ namespace PhpPgAdmin\Database\Dump;
 
 use PhpPgAdmin\Database\Actions\AclActions;
 use PhpPgAdmin\Database\Actions\RuleActions;
+use PhpPgAdmin\Database\Actions\TriggerActions;
 use PhpPgAdmin\Database\Export\SqlFormatter;
 use PhpPgAdmin\Database\Actions\AdminActions;
 use PhpPgAdmin\Database\Actions\IndexActions;
@@ -35,21 +36,17 @@ class TableDumper extends ExportDumper
         }
 
         if (empty($options['data_only'])) {
-            $this->dumpIndexesTriggersRules($table, $schema, $options);
+            $this->writeIndexes($table, $options);
+            $this->writeTriggers($table, $options);
+            $this->writeRules($table, $options);
         }
     }
 
     protected function dumpStructure($table, $schema, $options)
     {
         // Use existing logic from TableActions/Postgres driver but adapted
-        $prefix = $this->getTableDefPrefix($table, !empty($options['clean']));
-        if ($prefix) {
-            // Handle IF NOT EXISTS if requested
-            if (!empty($options['if_not_exists'])) {
-                $prefix = str_replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS', $prefix);
-            }
-            $this->write($prefix);
-        }
+        // Use writer-style method instead of getting SQL back
+        $this->writeTableDefPrefix($table, $options);
 
         $this->dumpAutovacuumSettings($table, $schema);
     }
@@ -71,7 +68,46 @@ class TableDumper extends ExportDumper
         // Set fetch mode to NUM for data dumping
         $this->connection->conn->setFetchMode(ADODB_FETCH_NUM);
 
-        $rs = $this->connection->dumpRelation($table, $oids);
+        // Determine average row size for CURSOR streaming
+        /*
+        SELECT pg_total_relation_size('mytable') / reltuples
+FROM pg_class
+WHERE oid = 'mytable'::regclass;
+
+SELECT max(pg_column_size(t.*))
+FROM mytable t
+LIMIT 1000;
+
+        */
+
+        $this->connection->conn->Query(ADODB_FETCH_ASSOC);
+
+        pg_query($conn, 'BEGIN');
+
+        pg_query($conn, "
+    DECLARE mycur NO SCROLL CURSOR FOR
+    SELECT * FROM mytable ORDER BY id
+");
+
+        while (true) {
+            $res = pg_query($conn, "FETCH FORWARD 1000 FROM mycur");
+            if (!$res || pg_num_rows($res) === 0) {
+                break;
+            }
+
+            while ($row = pg_fetch_row($res)) {
+                $formatter->writeRow($row);
+                $stream->write($formatter->buffer);
+            }
+
+            pg_free_result($res);
+        }
+
+        pg_query($conn, "CLOSE mycur");
+        pg_query($conn, 'COMMIT');
+
+
+        $rs = $this->connection->selectSet("SELECT * FROM \"{$schema}\".\"{$table}\"");
 
         if (!$rs) {
             // No recordset at all
@@ -119,63 +155,17 @@ class TableDumper extends ExportDumper
         }
     }
 
-    protected function dumpIndexesTriggersRules($table, $schema, $options)
-    {
-        $suffix = $this->getTableDefSuffix($table);
-
-        if ($suffix) {
-            if (!empty($options['if_not_exists'])) {
-                // Indexes - support from Postgres 9.5 onwards
-                if ($this->connection->major_version >= 9.5) {
-                    $suffix = str_replace(
-                        'CREATE INDEX',
-                        'CREATE INDEX IF NOT EXISTS',
-                        $suffix
-                    );
-                    $suffix = str_replace(
-                        'CREATE UNIQUE INDEX',
-                        'CREATE UNIQUE INDEX IF NOT EXISTS',
-                        $suffix
-                    );
-                }
-
-                // Trigger - use OR REPLACE as emulation?
-                if ($this->connection->major_version >= 14) {
-                    $suffix = str_replace(
-                        'CREATE TRIGGER',
-                        'CREATE OR REPLACE TRIGGER',
-                        $suffix
-                    );
-                    $suffix = str_replace(
-                        'CREATE CONSTRAINT TRIGGER',
-                        'CREATE OR REPLACE CONSTRAINT TRIGGER',
-                        $suffix
-                    );
-                }
-
-                // Rules - use OR REPLACE as emulation?
-                $suffix = str_replace(
-                    'CREATE RULE',
-                    'CREATE OR REPLACE RULE',
-                    $suffix
-                );
-            }
-            $this->write($suffix);
-        }
-
-        $this->writePrivileges($table, 'table', $schema);
-    }
-
     /**
-     * Get table definition prefix. Must be run within a transaction.
+     * Write table definition prefix (columns, constraints, comments, privileges).
+     * Returns true on success, false on failure or missing table.
      */
-    public function getTableDefPrefix($table, $clean = false)
+    protected function writeTableDefPrefix($table, $options)
     {
         $tableActions = new TableActions($this->connection);
         $t = $tableActions->getTable($table);
         if (!is_object($t) || $t->recordCount() != 1) {
             $this->connection->rollbackTransaction();
-            return null;
+            return false;
         }
         $this->connection->fieldClean($t->fields['relname']);
         $this->connection->fieldClean($t->fields['nspname']);
@@ -183,50 +173,43 @@ class TableDumper extends ExportDumper
         $atts = $tableActions->getTableAttributes($table);
         if (!is_object($atts)) {
             $this->connection->rollbackTransaction();
-            return null;
+            return false;
         }
 
         $cons = (new ConstraintActions($this->connection))->getConstraints($table);
         if (!is_object($cons)) {
             $this->connection->rollbackTransaction();
-            return null;
+            return false;
         }
 
-        $sql = "";
-        if (false) {
-            // TODO : implement changing user if needed
-            $owner = $this->connection->clean($t->fields['relowner']);
-            $sql .= "SET SESSION AUTHORIZATION '{$owner}';\n\n";
-        }
-        $sql .= "SET search_path = \"{$t->fields['nspname']}\", pg_catalog;\n\n";
-        $sql .= "-- Definition\n\n";
-        if (!$clean)
-            $sql .= "-- ";
-        $sql .= "DROP TABLE \"{$t->fields['nspname']}\".\"{$t->fields['relname']}\";\n";
-        $sql .= "CREATE TABLE \"{$t->fields['nspname']}\".\"{$t->fields['relname']}\" (\n";
+        // header / drop / create begin
+        $this->write("-- Definition\n\n");
+        $this->writeDrop('TABLE', "\"{$t->fields['nspname']}\".\"{$t->fields['relname']}\"", $options);
+        $this->write("CREATE TABLE \"{$t->fields['nspname']}\".\"{$t->fields['relname']}\" (\n");
 
+        // columns
         $col_comments_sql = '';
         $first_attr = true;
         while (!$atts->EOF) {
             if ($first_attr) {
                 $first_attr = false;
             } else {
-                $sql .= ",\n";
+                $this->write(",\n");
             }
             $this->connection->fieldClean($atts->fields['attname']);
-            $sql .= "    \"{$atts->fields['attname']}\"";
+            $this->write("    \"{$atts->fields['attname']}\"");
             if (
                 $this->connection->phpBool($atts->fields['attisserial']) &&
                 ($atts->fields['type'] == 'integer' || $atts->fields['type'] == 'bigint')
             ) {
-                $sql .= ($atts->fields['type'] == 'integer') ? " SERIAL" : " BIGSERIAL";
+                $this->write(($atts->fields['type'] == 'integer') ? " SERIAL" : " BIGSERIAL");
             } else {
-                $sql .= " " . $this->connection->formatType($atts->fields['type'], $atts->fields['atttypmod']);
+                $this->write(" " . $this->connection->formatType($atts->fields['type'], $atts->fields['atttypmod']));
                 if ($this->connection->phpBool($atts->fields['attnotnull'])) {
-                    $sql .= " NOT NULL";
+                    $this->write(" NOT NULL");
                 }
                 if ($atts->fields['adsrc'] !== null) {
-                    $sql .= " DEFAULT {$atts->fields['adsrc']}";
+                    $this->write(" DEFAULT {$atts->fields['adsrc']}");
                 }
             }
 
@@ -238,46 +221,48 @@ class TableDumper extends ExportDumper
             $atts->moveNext();
         }
 
+        // constraints
         while (!$cons->EOF) {
             if ($cons->fields['contype'] == 'n') {
                 // Skip NOT NULL constraints as they are dumped with the column definition
                 $cons->moveNext();
                 continue;
             }
-            $sql .= ",\n";
+            $this->write(",\n");
             $this->connection->fieldClean($cons->fields['conname']);
-            $sql .= "    CONSTRAINT \"{$cons->fields['conname']}\" ";
+            $this->write("    CONSTRAINT \"{$cons->fields['conname']}\" ");
             if ($cons->fields['consrc'] !== null) {
-                $sql .= $cons->fields['consrc'];
+                $this->write($cons->fields['consrc']);
             } else {
                 switch ($cons->fields['contype']) {
                     case 'p':
                         $keys = $tableActions->getAttributeNames($table, explode(' ', $cons->fields['indkey']));
-                        $sql .= "PRIMARY KEY (" . join(',', $keys) . ")";
+                        $this->write("PRIMARY KEY (" . join(',', $keys) . ")");
                         break;
                     case 'u':
                         $keys = $tableActions->getAttributeNames($table, explode(' ', $cons->fields['indkey']));
-                        $sql .= "UNIQUE (" . join(',', $keys) . ")";
+                        $this->write("UNIQUE (" . join(',', $keys) . ")");
                         break;
                     default:
                         $this->connection->rollbackTransaction();
-                        return null;
+                        return false;
                 }
             }
 
             $cons->moveNext();
         }
 
-        $sql .= "\n)";
+        $this->write("\n)");
 
         if ($this->connection->hasObjectID($table)) {
-            $sql .= " WITH OIDS";
+            $this->write(" WITH OIDS");
         } else {
-            $sql .= " WITHOUT OIDS";
+            $this->write(" WITHOUT OIDS");
         }
 
-        $sql .= ";\n";
+        $this->write(";\n");
 
+        // per-column ALTERs (statistics, storage)
         $atts->moveFirst();
         $first = true;
         while (!$atts->EOF) {
@@ -285,10 +270,10 @@ class TableDumper extends ExportDumper
             // Only output SET STATISTICS if the value is non-negative and not empty
             if (isset($atts->fields['attstattarget']) && $atts->fields['attstattarget'] !== '' && $atts->fields['attstattarget'] >= 0) {
                 if ($first) {
-                    $sql .= "\n";
+                    $this->write("\n");
                     $first = false;
                 }
-                $sql .= "ALTER TABLE ONLY \"{$t->fields['nspname']}\".\"{$t->fields['relname']}\" ALTER COLUMN \"{$atts->fields['attname']}\" SET STATISTICS {$atts->fields['attstattarget']};\n";
+                $this->write("ALTER TABLE ONLY \"{$t->fields['nspname']}\".\"{$t->fields['relname']}\" ALTER COLUMN \"{$atts->fields['attname']}\" SET STATISTICS {$atts->fields['attstattarget']};\n");
             }
             if ($atts->fields['attstorage'] != $atts->fields['typstorage']) {
                 $storage = null;
@@ -307,199 +292,208 @@ class TableDumper extends ExportDumper
                         break;
                     default:
                         $this->connection->rollbackTransaction();
-                        return null;
+                        return false;
                 }
-                $sql .= "ALTER TABLE ONLY \"{$t->fields['nspname']}\".\"{$t->fields['relname']}\" ALTER COLUMN \"{$atts->fields['attname']}\" SET STORAGE {$storage};\n";
+                $this->write("ALTER TABLE ONLY \"{$t->fields['nspname']}\".\"{$t->fields['relname']}\" ALTER COLUMN \"{$atts->fields['attname']}\" SET STORAGE {$storage};\n");
             }
 
             $atts->moveNext();
         }
 
+        // table comment
         if ($t->fields['relcomment'] !== null) {
             $this->connection->clean($t->fields['relcomment']);
-            $sql .= "\n-- Comment\n\n";
-            $sql .= "COMMENT ON TABLE \"{$t->fields['nspname']}\".\"{$t->fields['relname']}\" IS '{$t->fields['relcomment']}';\n";
+            $this->write("\n-- Comment\n\n");
+            $this->write("COMMENT ON TABLE \"{$t->fields['nspname']}\".\"{$t->fields['relname']}\" IS '{$t->fields['relcomment']}';\n");
         }
 
+        // column comments
         if ($col_comments_sql != '') {
-            $sql .= $col_comments_sql;
+            $this->write($col_comments_sql);
         }
 
+        // privileges
         $privs = (new AclActions($this->connection))->getPrivileges($table, 'table');
         if (!is_array($privs)) {
             $this->connection->rollbackTransaction();
-            return null;
+            return false;
         }
 
         if (sizeof($privs) > 0) {
-            $sql .= "\n-- Privileges\n\n";
-            $sql .= "REVOKE ALL ON TABLE \"{$t->fields['nspname']}\".\"{$t->fields['relname']}\" FROM PUBLIC;\n";
-            foreach ($privs as $v) {
-                $nongrant = array_diff($v[2], $v[4]);
-                if (sizeof($v[2]) == 0 || ($v[0] == 'user' && $v[1] == $t->fields['relowner']))
-                    continue;
-                if ($v[3] != $t->fields['relowner']) {
-                    $grantor = $v[3];
-                    $this->connection->clean($grantor);
-                    $sql .= "SET SESSION AUTHORIZATION '{$grantor}';\n";
-                }
-                $sql .= "GRANT " . join(', ', $nongrant) . " ON TABLE \"{$t->fields['relname']}\" TO ";
-                switch ($v[0]) {
-                    case 'public':
-                        $sql .= "PUBLIC;\n";
-                        break;
-                    case 'user':
-                        $this->connection->fieldClean($v[1]);
-                        $sql .= "\"{$v[1]}\";\n";
-                        break;
-                    case 'group':
-                        $this->connection->fieldClean($v[1]);
-                        $sql .= "GROUP \"{$v[1]}\";\n";
-                        break;
-                    default:
-                        $this->connection->rollbackTransaction();
-                        return null;
-                }
-
-                if ($v[3] != $t->fields['relowner']) {
-                    $sql .= "RESET SESSION AUTHORIZATION;\n";
-                }
-
-                if (sizeof($v[4]) == 0)
-                    continue;
-
-                if ($v[3] != $t->fields['relowner']) {
-                    $grantor = $v[3];
-                    $this->connection->clean($grantor);
-                    $sql .= "SET SESSION AUTHORIZATION '{$grantor}';\n";
-                }
-
-                $sql .= "GRANT " . join(', ', $v[4]) . " ON \"{$t->fields['relname']}\" TO ";
-                switch ($v[0]) {
-                    case 'public':
-                        $sql .= "PUBLIC";
-                        break;
-                    case 'user':
-                        $this->connection->fieldClean($v[1]);
-                        $sql .= "\"{$v[1]}\"";
-                        break;
-                    case 'group':
-                        $this->connection->fieldClean($v[1]);
-                        $sql .= "GROUP \"{$v[1]}\"";
-                        break;
-                    default:
-                        return null;
-                }
-                $sql .= " WITH GRANT OPTION;\n";
-
-                if ($v[3] != $t->fields['relowner']) {
-                    $sql .= "RESET SESSION AUTHORIZATION;\n";
-                }
-            }
+            $this->write("\n-- Privileges\n\n");
+            $this->write("REVOKE ALL ON TABLE \"{$t->fields['nspname']}\".\"{$t->fields['relname']}\" FROM PUBLIC;\n");
+            $this->writePrivilegesFromArray($privs, $t);
         }
 
-        $sql .= "\n";
+        $this->write("\n");
 
-        return $sql;
+        return true;
     }
 
     /**
-     * Returns extra table definition (indexes, triggers, rules).
+     * Write indexes for the table.
      */
-    public function getTableDefSuffix($table)
+    private function writeIndexes($table, $options)
     {
-        $sql = '';
+        $indexActions = new IndexActions($this->connection);
 
-        $indexes = $this->getIndexes($table);
-        if (!is_object($indexes)) {
-            $this->connection->rollbackTransaction();
-            return null;
+        $indexes = $indexActions->getIndexes($table);
+
+        if (!is_object($indexes) || $indexes->EOF) {
+            return;
         }
 
-        if ($indexes->recordCount() > 0) {
-            $sql .= "\n-- Indexes\n\n";
-            while (!$indexes->EOF) {
-                $sql .= $indexes->fields['inddef'] . ";\n";
-                $indexes->moveNext();
+        $this->write("\n-- Indexes\n\n");
+
+        while (!$indexes->EOF) {
+            $def = $indexes->fields['inddef'];
+            if (!empty($options['if_not_exists'])) {
+                if ($this->connection->major_version >= 9.5) {
+                    $def = str_replace(
+                        'CREATE UNIQUE INDEX',
+                        'CREATE UNIQUE INDEX IF NOT EXISTS',
+
+                        $def
+                    );
+                    $def = str_replace(
+                        'CREATE INDEX',
+                        'CREATE INDEX IF NOT EXISTS',
+                        $def
+                    );
+                }
             }
+            $this->write("$def;\n");
+            $indexes->moveNext();
         }
-
-        $triggers = $this->getTriggers($table);
-        if (!is_object($triggers)) {
-            $this->connection->rollbackTransaction();
-            return null;
-        }
-
-        if ($triggers->recordCount() > 0) {
-            $sql .= "\n-- Triggers\n\n";
-            while (!$triggers->EOF) {
-                $sql .= $triggers->fields['tgdef'];
-                $sql .= ";\n";
-                $triggers->moveNext();
-            }
-        }
-
-        $rules = (new RuleActions($this->connection))->getRules($table);
-        if (!is_object($rules)) {
-            $this->connection->rollbackTransaction();
-            return null;
-        }
-
-        if ($rules->recordCount() > 0) {
-            $sql .= "\n-- Rules\n\n";
-            while (!$rules->EOF) {
-                $sql .= $rules->fields['definition'] . "\n";
-                $rules->moveNext();
-            }
-        }
-
-        return $sql;
     }
 
     /**
-     * Grabs a list of indexes for a table.
+     * Write triggers for the table.
      */
-    public function getIndexes($table = '')
+    private function writeTriggers($table, $options)
     {
-        $this->connection->clean($table);
+        $triggerActions = new TriggerActions($this->connection);
+        $triggers = $triggerActions->getTriggers($table);
 
-        $sql = "SELECT
-                c2.relname AS indname, i.indisprimary, i.indisunique, i.indisclustered,
-                pg_catalog.pg_get_indexdef(i.indexrelid, 0, true) AS inddef
-            FROM pg_catalog.pg_class c, pg_catalog.pg_class c2, pg_catalog.pg_index i
-            WHERE c.relname = '{$table}'
-                AND pg_catalog.pg_table_is_visible(c.oid)
-                AND c.oid = i.indrelid
-                AND i.indexrelid = c2.oid
-                AND i.indisprimary = false
-            ORDER BY c2.relname";
+        if (!is_object($triggers) || $triggers->EOF) {
+            return;
+        }
 
-        return $this->connection->selectSet($sql);
+        $this->write("\n-- Triggers\n\n");
+
+        while (!$triggers->EOF) {
+            $def = $triggers->fields['tgdef'];
+            if (!empty($options['if_not_exists'])) {
+                if ($this->connection->major_version >= 14) {
+                    $def = str_replace(
+                        'CREATE CONSTRAINT TRIGGER',
+                        'CREATE OR REPLACE CONSTRAINT TRIGGER',
+                        $def
+                    );
+                    $def = str_replace(
+                        'CREATE TRIGGER',
+                        'CREATE OR REPLACE TRIGGER',
+                        $def
+                    );
+                }
+            }
+            $this->write("$def;\n");
+            $triggers->moveNext();
+        }
     }
 
-    private function getTriggers($table)
+    /**
+     * Write rules for the table.
+     */
+    private function writeRules($table, $options)
     {
-        $c_schema = $this->connection->_schema;
-        $this->connection->clean($c_schema);
-        $this->connection->clean($table);
+        $ruleActions = new RuleActions($this->connection);
+        $rules = $ruleActions->getRules($table);
 
-        $sql = "SELECT
-                t.tgname, pg_catalog.pg_get_triggerdef(t.oid) AS tgdef,
-                CASE WHEN t.tgenabled = 'D' THEN FALSE ELSE TRUE END AS tgenabled, p.oid AS prooid,
-                p.proname || ' (' || pg_catalog.oidvectortypes(p.proargtypes) || ')' AS proproto,
-                ns.nspname AS pronamespace
-            FROM pg_catalog.pg_trigger t, pg_catalog.pg_proc p, pg_catalog.pg_namespace ns
-            WHERE t.tgrelid = (SELECT oid FROM pg_catalog.pg_class WHERE relname='{$table}'
-                AND relnamespace=(SELECT oid FROM pg_catalog.pg_namespace WHERE nspname='{$c_schema}'))
-                AND ( tgconstraint = 0 OR NOT EXISTS
-                        (SELECT 1 FROM pg_catalog.pg_depend d    JOIN pg_catalog.pg_constraint c
-                            ON (d.refclassid = c.tableoid AND d.refobjid = c.oid)
-                        WHERE d.classid = t.tableoid AND d.objid = t.oid AND d.deptype = 'i' AND c.contype = 'f'))
-                AND p.oid=t.tgfoid
-                AND p.pronamespace = ns.oid";
+        if (!is_object($rules) || $rules->EOF) {
+            return;
+        }
 
-        return $this->connection->selectSet($sql);
+        $this->write("\n-- Rules\n\n");
+
+        while (!$rules->EOF) {
+            $def = $rules->fields['definition'];
+            $def = str_replace('CREATE RULE', 'CREATE OR REPLACE RULE', $def);
+            $this->write("$def;\n");
+            $rules->moveNext();
+        }
     }
+
+    /**
+     * Take the privileges array format used previously and write corresponding GRANT/SET/RESET statements.
+     */
+    private function writePrivilegesFromArray($privs, $t)
+    {
+        foreach ($privs as $v) {
+            $nongrant = array_diff($v[2], $v[4]);
+            if (sizeof($v[2]) == 0 || ($v[0] == 'user' && $v[1] == $t->fields['relowner']))
+                continue;
+            if ($v[3] != $t->fields['relowner']) {
+                $grantor = $v[3];
+                $this->connection->clean($grantor);
+                $this->write("SET SESSION AUTHORIZATION '{$grantor}';\n");
+            }
+            $this->write("GRANT " . join(', ', $nongrant) . " ON TABLE \"{$t->fields['relname']}\" TO ");
+            switch ($v[0]) {
+                case 'public':
+                    $this->write("PUBLIC;\n");
+                    break;
+                case 'user':
+                    $this->connection->fieldClean($v[1]);
+                    $this->write("\"{$v[1]}\";\n");
+                    break;
+                case 'group':
+                    $this->connection->fieldClean($v[1]);
+                    $this->write("GROUP \"{$v[1]}\";\n");
+                    break;
+                default:
+                    $this->connection->rollbackTransaction();
+                    return;
+            }
+
+            if ($v[3] != $t->fields['relowner']) {
+                $this->write("RESET SESSION AUTHORIZATION;\n");
+            }
+
+            if (sizeof($v[4]) == 0)
+                continue;
+
+            if ($v[3] != $t->fields['relowner']) {
+                $grantor = $v[3];
+                $this->connection->clean($grantor);
+                $this->write("SET SESSION AUTHORIZATION '{$grantor}';\n");
+            }
+
+            $this->write("GRANT " . join(', ', $v[4]) . " ON \"{$t->fields['relname']}\" TO ");
+            switch ($v[0]) {
+                case 'public':
+                    $this->write("PUBLIC");
+                    break;
+                case 'user':
+                    $this->connection->fieldClean($v[1]);
+                    $this->write("\"{$v[1]}\"");
+                    break;
+                case 'group':
+                    $this->connection->fieldClean($v[1]);
+                    $this->write("GROUP \"{$v[1]}\"");
+                    break;
+                default:
+                    $this->connection->rollbackTransaction();
+                    return;
+            }
+            $this->write(" WITH GRANT OPTION;\n");
+
+            if ($v[3] != $t->fields['relowner']) {
+                $this->write("RESET SESSION AUTHORIZATION;\n");
+            }
+        }
+    }
+
 
     protected function dumpAutovacuumSettings($table, $schema)
     {

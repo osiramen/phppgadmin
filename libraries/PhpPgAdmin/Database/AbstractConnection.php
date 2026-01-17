@@ -113,7 +113,11 @@ abstract class AbstractConnection extends AbstractContext
 	}
 
 	/**
-	 * Escapes an identifier (table, field, etc.)
+	 * Escape a identifier for insertion into a text field
+	 * It escapes a identifier (e.g. table, field names) for querying the
+	 * database.
+	 * It returns an escaped identifier string for PostgreSQL server.
+	 * It adds double quotes before and after data.
 	 * @param string $id The identifier to escape
 	 * @return string The escaped identifier
 	 */
@@ -140,6 +144,16 @@ abstract class AbstractConnection extends AbstractContext
 	public function escapeLiteral($literal = ''): string
 	{
 		return pg_escape_literal($this->conn->_connectionID, $literal);
+	}
+
+	/**
+	 * Escapes a string value
+	 * @param string $string The string to escape
+	 * @return string The escaped string
+	 */
+	public function escapeString($string = ''): string
+	{
+		return pg_escape_string($this->conn->_connectionID, $string);
 	}
 
 	/**

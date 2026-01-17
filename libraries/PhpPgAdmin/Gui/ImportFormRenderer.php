@@ -13,11 +13,8 @@ class ImportFormRenderer extends AbstractContext
         $lang = $this->lang();
         $conf = $this->conf();
         $misc = $this->misc();
-        $importCfg = $conf['import'] ?? [];
-        $maxSize = (int) ($importCfg['upload_max_size'] ?? 0);
-        $chunkSize = (int) ($importCfg['upload_chunk_size'] ?? 2 * 1024 * 1024);
-        $maxAttr = 'data-import-max-size="' . htmlspecialchars((string) $maxSize) . '"';
-        $chunkAttr = 'data-import-chunk-size="' . htmlspecialchars((string) $chunkSize) . '"';
+        $chunkSize = $conf['import_upload_chunk_size'] ?? 5 * 1024 * 1024;
+        $chunkAttr = 'data-import-chunk-size="' . htmlspecialchars($chunkSize) . '"';
 
         // determine if current user is superuser to show admin controls
         $pg = $this->postgres();
@@ -33,7 +30,7 @@ class ImportFormRenderer extends AbstractContext
 
             <fieldset>
                 <legend><?= $lang['struploadfile'] ?></legend>
-                <input type="file" name="file" id="file" <?= $maxAttr ?>         <?= $chunkAttr ?> />
+                <input type="file" name="file" id="file" <?= $chunkAttr ?> />
                 <div id="importCompressionCaps" style="margin-top:6px">
                     <strong><?= $lang['strimportcompressioncaps'] ?>:</strong> gzip, bzip2, zip
                 </div>

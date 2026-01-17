@@ -2,8 +2,6 @@
 
 namespace PhpPgAdmin\Database\Dump;
 
-use PhpPgAdmin\Database\Actions\TypeActions;
-
 /**
  * Orchestrator dumper for a PostgreSQL schema.
  */
@@ -12,12 +10,18 @@ class SchemaDumper extends ExportDumper
     private $selectedObjects = [];
     private $hasObjectSelection = false;
 
+    private $schemaEscaped = '';
+    private $schemaQuoted = '';
+
     public function dump($subject, array $params, array $options = [])
     {
         $schema = $params['schema'] ?? $this->connection->_schema;
         if (!$schema) {
             return;
         }
+
+        $this->schemaEscaped = $this->connection->escapeString($schema);
+        $this->schemaQuoted = $this->connection->quoteIdentifier($schema);
 
         // Get list of selected objects (tables/views/sequences)
         $this->selectedObjects = $options['objects'] ?? [];
@@ -29,64 +33,70 @@ class SchemaDumper extends ExportDumper
         $oldSchema = $this->connection->_schema;
         $this->connection->_schema = $schema;
 
-        $c_schema = $schema;
-        $this->connection->clean($c_schema);
-
         // Write standard dump header for schema exports
-        $this->writeHeader("Schema: " . addslashes($c_schema));
+        $this->writeHeader("Schema: $this->schemaQuoted");
+        $this->writeConnectHeader();
 
         // Optional schema creation for super users
         if (!empty($options['add_create_schema'])) {
-            $this->writeDrop('SCHEMA', $c_schema, $options);
-            $this->write("CREATE SCHEMA " . $this->getIfNotExists($options) . "\"" . addslashes($c_schema) . "\";\n");
+            $this->writeDrop('SCHEMA', $this->schemaQuoted, $options);
+            $this->write("CREATE SCHEMA " . $this->getIfNotExists($options) . $this->schemaQuoted . ";\n");
         }
 
-        // Always set the search_path so subsequent object DDL applies to the intended schema
-        $this->write("SET search_path = \"" . addslashes($c_schema) . "\", pg_catalog;\n\n");
-
-        // 1. Types & Domains
+        // 1. Domains and Types
         if ($includeSchemaObjects) {
-            $this->dumpTypes($schema, $options);
+            $this->dumpDomainsAndTypes($schema, $options);
         }
 
-        // 2. Sequences
-        $this->dumpSequences($schema, $options);
-
-        // 3. Tables
-        $this->dumpTables($schema, $options);
-
-        // 4. Views
-        $this->dumpViews($schema, $options);
-
-        // 5. Functions
+        // 2. Functions
         if ($includeSchemaObjects) {
             $this->dumpFunctions($schema, $options);
         }
 
-        // 6. Aggregates, Operators, etc.
+        // 3. Aggregates
         if ($includeSchemaObjects) {
-            $this->dumpOtherObjects($schema, $options);
+            $this->dumpAggregates($schema, $options);
         }
 
+        // 4. Operators
+        if ($includeSchemaObjects) {
+            $this->dumpOperators($schema, $options);
+        }
+
+        // 5. Sequences
+        $this->dumpSequences($schema, $options);
+
+        // 6. Tables
+        $this->dumpTables($schema, $options);
+
+        // 7. Views
+        $this->dumpViews($schema, $options);
+
+        // 8. Privileges
         $this->writePrivileges($schema, 'schema');
 
         // Restore original schema context
         $this->connection->_schema = $oldSchema;
+
+        $this->writeConnectFooter();
+        $this->writeFooter();
     }
 
-    protected function dumpTypes($schema, $options)
+    protected function dumpDomainsAndTypes($schema, $options)
     {
-        $this->connection->clean($schema);
-
         // 1. Get types
         $types = $this->connection->selectSet(
             "SELECT t.oid, t.typname, t.typtype, t.typnamespace, t.typbasetype
                 FROM pg_type t
                 JOIN pg_namespace n ON n.oid = t.typnamespace
-                WHERE n.nspname = '{$schema}'
+                WHERE n.nspname = '{$this->schemaEscaped}'
                 AND t.typtype IN ('b','c','d','e')
-                AND t.typelem = 0 -- Exclude array types
-                AND t.typrelid = 0 -- Exclude types that are tied to a table
+                AND t.typelem = 0  -- Exclude array types
+                AND (t.typrelid = 0 OR EXISTS (
+                    SELECT 1 FROM pg_class c 
+                    WHERE c.oid = t.typrelid 
+                    AND c.relkind = 'c'
+                ))  -- Include types tied to composite tables
                 ORDER BY t.oid"
         );
 
@@ -117,10 +127,10 @@ class SchemaDumper extends ExportDumper
         $sortedOids = $this->sortTypesTopologically($typeList, $depList);
 
         // 5. Dumper
-        $typeDumper = $this->createSubDumper('type');
         $domainDumper = $this->createSubDumper('domain');
+        $typeDumper = $this->createSubDumper('type');
 
-        $this->write("\n-- Types and Domains in schema \"" . addslashes($schema) . "\"\n");
+        $this->write("\n-- Domains in schema $this->schemaQuoted\n");
 
         foreach ($sortedOids as $oid) {
             $t = $typeList[$oid];
@@ -130,7 +140,15 @@ class SchemaDumper extends ExportDumper
                     'schema' => $schema,
                     'domain' => $t['typname'],
                 ], $options);
-            } else {
+            }
+        }
+
+        $this->write("\n-- Types in schema $this->schemaQuoted\n");
+
+        foreach ($sortedOids as $oid) {
+            $t = $typeList[$oid];
+
+            if ($t['typtype'] !== 'd') {
                 $typeDumper->dump('type', [
                     'schema' => $schema,
                     'type' => $t['typname'],
@@ -188,14 +206,11 @@ class SchemaDumper extends ExportDumper
 
     protected function dumpRelkindObjects($schema, $options, $relkind, $typeName)
     {
-        $c_schema = $schema;
-        $this->connection->clean($c_schema);
-
         $sql = "SELECT c.relname
                 FROM pg_catalog.pg_class c
                 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
                 WHERE c.relkind = '{$relkind}'
-                AND n.nspname = '{$c_schema}'
+                AND n.nspname = '{$this->schemaEscaped}'
                 ORDER BY c.relname";
 
         $result = $this->connection->selectSet($sql);
@@ -207,7 +222,7 @@ class SchemaDumper extends ExportDumper
             if (!$this->hasObjectSelection || isset($this->selectedObjects[$name])) {
                 $dumper->dump($typeName, [
                     $typeName => $name,
-                    'schema' => $schema
+                    'schema' => $schema,
                 ], $options);
             }
 
@@ -217,33 +232,30 @@ class SchemaDumper extends ExportDumper
 
     protected function dumpSequences($schema, $options)
     {
-        $this->write("\n-- Sequences in schema \"" . addslashes($schema) . "\"\n");
+        $this->write("\n-- Sequences in schema $this->schemaQuoted\n");
         $this->dumpRelkindObjects($schema, $options, 'S', 'sequence');
     }
 
     protected function dumpTables($schema, $options)
     {
-        $this->write("\n-- Tables in schema \"" . addslashes($schema) . "\"\n");
+        $this->write("\n-- Tables in schema $this->schemaQuoted\n");
         $this->dumpRelkindObjects($schema, $options, 'r', 'table');
     }
 
     protected function dumpViews($schema, $options)
     {
-        $this->write("\n-- Views in schema \"" . addslashes($schema) . "\"\n");
+        $this->write("\n-- Views in schema $this->schemaQuoted\n");
         $this->dumpRelkindObjects($schema, $options, 'v', 'view');
     }
 
     protected function dumpFunctions($schema, $options)
     {
-        $c_schema = $schema;
-        $this->connection->clean($c_schema);
-
-        $this->write("\n-- Functions in schema \"" . addslashes($c_schema) . "\"\n");
+        $this->write("\n-- Functions in schema $this->schemaQuoted\n");
 
         $sql = "SELECT p.oid AS prooid
                 FROM pg_catalog.pg_proc p
                 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-                WHERE n.nspname = '{$c_schema}'
+                WHERE n.nspname = '{$this->schemaEscaped}'
                 AND p.prokind = 'f'
                 ORDER BY p.proname";
 
@@ -251,21 +263,23 @@ class SchemaDumper extends ExportDumper
         $dumper = $this->createSubDumper('function');
 
         while ($functions && !$functions->EOF) {
-            $dumper->dump('function', ['function_oid' => $functions->fields['prooid'], 'schema' => $schema], $options);
+            $dumper->dump('function', [
+                'function_oid' => $functions->fields['prooid'],
+                'schema' => $schema,
+            ], $options);
             $functions->moveNext();
         }
     }
 
-    protected function dumpOtherObjects($schema, $options)
+    protected function dumpAggregates($schema, $options)
     {
-        $c_schema = $schema;
-        $this->connection->clean($c_schema);
+        $this->write("\n-- Aggregates in schema $this->schemaQuoted\n");
 
-        // Aggregates
-        $sql = "SELECT p.proname, pg_catalog.pg_get_function_arguments(p.oid) AS proargtypes
+        $sql = "SELECT p.proname,
+                    pg_catalog.pg_get_function_arguments(p.oid) AS proargtypes
                 FROM pg_catalog.pg_proc p
                 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-                WHERE n.nspname = '{$c_schema}'
+                WHERE n.nspname = '{$this->schemaEscaped}'
                 AND p.prokind = 'a'
                 ORDER BY p.proname";
 
@@ -281,11 +295,16 @@ class SchemaDumper extends ExportDumper
             $aggregates->moveNext();
         }
 
-        // Operators
+    }
+
+    protected function dumpOperators($schema, $options)
+    {
+        $this->write("\n-- Operators in schema $this->schemaQuoted\n");
+
         $sql = "SELECT o.oid
                 FROM pg_catalog.pg_operator o
                 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = o.oprnamespace
-                WHERE n.nspname = '{$c_schema}'
+                WHERE n.nspname = '{$this->schemaEscaped}'
                 ORDER BY o.oid";
 
         $operators = $this->connection->selectSet($sql);

@@ -48,7 +48,6 @@ function Error_Handler($dbms, $fn, $errno, $errmsg, $p1 = false, $p2 = false)
 		      <p><b>{$lang['strinstatement']}</b><br />" . $misc->printVal($sql) . "</p>
 		";
 			echo "<table class=\"error\" cellpadding=\"5\"><tr><td>{$s}</td></tr></table><br />\n";
-
 			break;
 
 		case 'PCONNECT':
@@ -58,14 +57,16 @@ function Error_Handler($dbms, $fn, $errno, $errmsg, $p1 = false, $p2 = false)
 			unset($_SESSION['sharedUsername']);
 			unset($_SESSION['sharedPassword']);
 			unset($_SESSION['webdbLogin'][$_REQUEST['server']]);
-			$msg = $lang['strloginfailed'];
+			$msg = "{$lang['strloginfailed']}:<br>$errmsg for $fn(host=$p1, db=$p2)";
 			include('./login.php');
 			exit;
+
 		default:
 			$s = "$dbms error: [$errno: $errmsg] in $fn($p1, $p2)\n";
 			echo "<table class=\"error\" cellpadding=\"5\"><tr><td>{$s}</td></tr></table><br />\n";
 			break;
 	}
+
 	/*
 	 * Log connection error somewhere
 	 *	0 message is sent to PHP's system logger, using the Operating System's system

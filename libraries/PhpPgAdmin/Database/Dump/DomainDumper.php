@@ -16,10 +16,8 @@ class DomainDumper extends ExportDumper
             return;
         }
 
-        $c_domain = $domainName;
-        $c_schema = $schema;
-        $this->connection->clean($c_domain);
-        $this->connection->clean($c_schema);
+        $c_schema = $this->connection->escapeString($schema);
+        $c_domain = $this->connection->escapeString($domainName);
 
         $sql = "SELECT t.oid, t.typname,
                 pg_catalog.format_type(t.typbasetype, t.typtypmod) AS basetype,
@@ -32,18 +30,17 @@ class DomainDumper extends ExportDumper
 
         $rs = $this->connection->selectSet($sql);
 
-        if (!$rs) {
+        if (!$rs || $rs->EOF) {
             return;
         }
 
-        if ($rs->EOF) {
-            return;
-        }
+        $schemaQuoted = $this->connection->quoteIdentifier($schema);
+        $domainQuoted = $this->connection->quoteIdentifier($domainName);
 
-        $this->write("\n-- Domain: \"" . addslashes($c_schema) . "\".\"" . addslashes($c_domain) . "\"\n");
-        $this->writeDrop('DOMAIN', "\"" . addslashes($c_schema) . "\".\"" . addslashes($c_domain), $options);
+        $this->write("\n-- Domain: $schemaQuoted.$domainQuoted\n");
+        $this->writeDrop('DOMAIN', "$schemaQuoted.$domainQuoted", $options);
 
-        $this->write("CREATE DOMAIN \"" . addslashes($c_schema) . "\".\"" . addslashes($c_domain) . "\" AS {$rs->fields['basetype']}");
+        $this->write("CREATE DOMAIN $schemaQuoted.$domainQuoted AS {$rs->fields['basetype']}");
 
         if (isset($rs->fields['typdefault']) && $rs->fields['typdefault'] !== null) {
             $this->write("\n    DEFAULT {$rs->fields['typdefault']}");
@@ -61,9 +58,7 @@ class DomainDumper extends ExportDumper
         if ($this->shouldIncludeComments($options) && isset($rs->fields['comment']) && $rs->fields['comment'] !== null) {
             $this->connection->clean($rs->fields['comment']);
             $this->write(
-                "COMMENT ON DOMAIN \"" . addslashes($c_schema) .
-                "\".\"" . addslashes($c_domain) .
-                "\" IS '{$rs->fields['comment']}';\n"
+                "\nCOMMENT ON DOMAIN $schemaQuoted.$domainQuoted IS '{$rs->fields['comment']}';\n"
             );
         }
 
@@ -81,9 +76,8 @@ class DomainDumper extends ExportDumper
             return;
         }
         while (!$rs->EOF) {
-            $conname = $rs->fields['conname'];
-            $this->connection->clean($conname);
-            $this->write("\n    CONSTRAINT \"" . addslashes($conname) . "\" {$rs->fields['consrc']}");
+            $conname = $this->connection->escapeIdentifier($rs->fields['conname']);
+            $this->write("\n    CONSTRAINT $conname {$rs->fields['consrc']}");
             $rs->moveNext();
         }
     }

@@ -69,10 +69,12 @@ class TypeActions extends AbstractActions
                 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace)
                 LEFT JOIN pg_catalog.pg_user pu ON t.typowner = pu.usesysid
             WHERE (t.typrelid = 0 OR (SELECT c.relkind IN ({$tqry}) FROM pg_catalog.pg_class c WHERE c.oid = t.typrelid {$where2}))
-            AND t.typname !~ '^_'
+            AND t.typelem = 0  -- Exclude array types
+            -- AND t.typname !~ '^_'
             AND {$where}
             ORDER BY typname
         ";
+        //var_dump($sql);
 
         return $this->connection->selectSet($sql);
     }

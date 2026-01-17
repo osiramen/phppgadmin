@@ -103,20 +103,36 @@ class AggregateActions extends AbstractActions
         $this->connection->fieldClean($name);
         $this->connection->fieldClean($basetype);
 
-        $sql = "
-            SELECT p.proname, CASE p.proargtypes[0]
+        $sql =
+            "SELECT p.proname, CASE p.proargtypes[0]
                 WHEN 'pg_catalog.\"any\"'::pg_catalog.regtype THEN NULL
-                ELSE pg_catalog.format_type(p.proargtypes[0], NULL) END AS proargtypes,
-                a.aggtransfn, format_type(a.aggtranstype, NULL) AS aggstype, a.aggfinalfn,
-                a.agginitval, a.aggsortop, u.usename, pg_catalog.obj_description(p.oid, 'pg_proc') AS aggrcomment
-            FROM pg_catalog.pg_proc p, pg_catalog.pg_namespace n, pg_catalog.pg_user u, pg_catalog.pg_aggregate a
-            WHERE n.oid = p.pronamespace AND p.proowner=u.usesysid AND p.oid=a.aggfnoid
-                AND p.prokind = 'a' AND n.nspname='{$c_schema}'
-                AND p.proname='" . $name . "'
+                ELSE pg_catalog.format_type(p.proargtypes[0], NULL)
+                END AS proargtypes,
+                a.aggtransfn::pg_catalog.regproc AS aggtransfn,
+                sfn.nspname AS sfuncnspname,
+                format_type(a.aggtranstype, NULL) AS aggstype,
+                a.aggfinalfn::pg_catalog.regproc AS aggfinalfn,
+                ffn.nspname AS finalfnnspname,
+                a.agginitval, a.aggsortop, nop.nspname AS oprnspname,
+                o.oprname, u.usename,
+                pg_catalog.obj_description(p.oid, 'pg_proc') AS aggrcomment
+            FROM pg_catalog.pg_proc p
+            JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+            JOIN pg_catalog.pg_user u ON p.proowner = u.usesysid
+            JOIN pg_catalog.pg_aggregate a ON p.oid = a.aggfnoid
+            LEFT JOIN pg_catalog.pg_operator o ON o.oid = a.aggsortop::oid
+            LEFT JOIN pg_catalog.pg_namespace nop ON nop.oid = o.oprnamespace
+            LEFT JOIN pg_catalog.pg_proc sproc ON sproc.oid = a.aggtransfn::oid
+            LEFT JOIN pg_catalog.pg_namespace sfn ON sfn.oid = sproc.pronamespace
+            LEFT JOIN pg_catalog.pg_proc fproc ON fproc.oid = a.aggfinalfn::oid
+            LEFT JOIN pg_catalog.pg_namespace ffn ON ffn.oid = fproc.pronamespace
+            WHERE p.prokind = 'a'
+                AND n.nspname = '{$c_schema}'
+                AND p.proname = '{$name}'
                 AND CASE p.proargtypes[0]
                     WHEN 'pg_catalog.\"any\"'::pg_catalog.regtype THEN ''
                     ELSE pg_catalog.format_type(p.proargtypes[0], NULL)
-                END ='" . $basetype . "'";
+                END = '{$basetype}'";
 
         return $this->connection->selectSet($sql);
     }

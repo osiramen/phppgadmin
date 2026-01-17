@@ -22,41 +22,57 @@ class AggregateDumper extends ExportDumper
         $aggregateActions = new AggregateActions($this->connection);
         $rs = $aggregateActions->getAggregate($name, $basetype);
 
-        if ($rs && !$rs->EOF) {
-            $this->write("\n-- Aggregate: \"{$schema}\".\"{$name}\"\n");
+        if (!$rs || $rs->EOF) {
+            return;
+        }
 
-            // DROP AGGREGATE needs the type
-            if (!empty($options['clean'])) {
-                $typeStr = ($rs->fields['proargtypes'] === null) ? '*' : $rs->fields['proargtypes'];
-                $this->write("DROP AGGREGATE IF EXISTS \"{$schema}\".\"{$name}\" ({$typeStr}) CASCADE;\n");
-            }
+        $schemaQuoted = $this->connection->quoteIdentifier($schema);
+        $nameQuoted = $this->connection->quoteIdentifier($name);
 
-            $this->write("CREATE AGGREGATE \"{$schema}\".\"{$name}\" (\n");
-            $this->write("    BASETYPE = " . (($rs->fields['proargtypes'] === null) ? 'ANY' : $rs->fields['proargtypes']) . ",\n");
-            $this->write("    SFUNC = {$rs->fields['aggtransfn']},\n");
-            $this->write("    STYPE = {$rs->fields['aggstype']}");
+        $this->write("\n-- Aggregate: {$schemaQuoted}.{$nameQuoted}\n");
 
-            if ($rs->fields['aggfinalfn'] !== null && $rs->fields['aggfinalfn'] !== '-') {
-                $this->write(",\n    FINALFUNC = {$rs->fields['aggfinalfn']}");
-            }
-            if ($rs->fields['agginitval'] !== null) {
-                $this->write(",\n    INITCOND = '{$rs->fields['agginitval']}'");
-            }
-            if ($rs->fields['aggsortop'] !== null && $rs->fields['aggsortop'] !== '0') {
-                // Need to resolve operator name
-                $opSql = "SELECT oprname FROM pg_operator WHERE oid = '{$rs->fields['aggsortop']}'::oid";
-                $opRs = $this->connection->selectSet($opSql);
-                if ($opRs && !$opRs->EOF) {
-                    $this->write(",\n    SORTOP = {$opRs->fields['oprname']}");
-                }
-            }
+        // DROP AGGREGATE needs the type
+        $typeStr = ($rs->fields['proargtypes'] === null) ? '*' : $rs->fields['proargtypes'];
+        $this->writeDrop('AGGREGATE', "{$schemaQuoted}.{$nameQuoted} ({$typeStr})", $options);
 
-            $this->write("\n);\n");
+        $this->write("CREATE AGGREGATE {$schemaQuoted}.{$nameQuoted} (\n");
+        $this->write("    BASETYPE = " . (($rs->fields['proargtypes'] === null) ? 'ANY' : $rs->fields['proargtypes']) . ",\n");
 
-            if ($this->shouldIncludeComments($options) && $rs->fields['aggrcomment'] !== null) {
-                $this->connection->clean($rs->fields['aggrcomment']);
-                $this->write("COMMENT ON AGGREGATE \"{$schema}\".\"{$name}\" (" . (($rs->fields['proargtypes'] === null) ? '*' : $rs->fields['proargtypes']) . ") IS '{$rs->fields['aggrcomment']}';\n");
+        // SFUNC (quote + qualify when needed)
+        $sfuncQuoted = $this->connection->quoteIdentifier($rs->fields['aggtransfn']);
+        if (!empty($rs->fields['sfuncnspname'])) {
+            $sfuncQuoted = $this->connection->quoteIdentifier($rs->fields['sfuncnspname']) . '.' . $sfuncQuoted;
+        }
+        $this->write("    SFUNC = {$sfuncQuoted},\n");
+
+        // STYPE comes from format_type(), do not quote
+        $this->write("    STYPE = " . $rs->fields['aggstype']);
+
+        if ($rs->fields['aggfinalfn'] !== null && $rs->fields['aggfinalfn'] !== '-') {
+            $finalQuoted = $this->connection->quoteIdentifier($rs->fields['aggfinalfn']);
+            if (!empty($rs->fields['finalfnnspname'])) {
+                $finalQuoted = $this->connection->quoteIdentifier($rs->fields['finalfnnspname']) . '.' . $finalQuoted;
             }
+            $this->write(",\n    FINALFUNC = " . $finalQuoted);
+        }
+        if ($rs->fields['agginitval'] !== null) {
+            $this->write(",\n    INITCOND = '{$rs->fields['agginitval']}'");
+        }
+
+        // SORTOP: only write if operator name is present; qualify only when needed
+        if (!empty($rs->fields['oprname'])) {
+            $oprQuoted = $this->connection->quoteIdentifier($rs->fields['oprname']);
+            if (!empty($rs->fields['oprnspname'])) {
+                $oprQuoted = $this->connection->quoteIdentifier($rs->fields['oprnspname']) . '.' . $oprQuoted;
+            }
+            $this->write(",\n    SORTOP = {$oprQuoted}");
+        }
+
+        $this->write("\n);\n");
+
+        if ($rs->fields['aggrcomment'] !== null && $this->shouldIncludeComments($options)) {
+            $comment = $this->connection->escapeString($rs->fields['aggrcomment']);
+            $this->write("\nCOMMENT ON AGGREGATE {$schemaQuoted}.{$nameQuoted} ($typeStr) IS '{$comment}';\n");
         }
     }
 }

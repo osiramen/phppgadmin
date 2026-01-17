@@ -1,5 +1,7 @@
 <?php
 
+use PhpPgAdmin\Core\AppContainer;
+
 /**
  * Login screen
  *
@@ -9,6 +11,10 @@
 // This needs to be an include once to prevent bootstrap.php infinite recursive includes.
 // Check to see if the configuration file exists, if not, explain
 require_once('./libraries/bootstrap.php');
+
+$misc = AppContainer::getMisc();
+$conf = AppContainer::getConf();
+$lang = AppContainer::getLang();
 
 $misc->printHeader($lang['strlogin']);
 $misc->printBody();
@@ -43,7 +49,7 @@ $md5_server = md5($_REQUEST['server']);
 	}
 	?>
 	<input type="hidden" name="loginServer" value="<?php echo html_esc($_REQUEST['server']); ?>" />
-	<table class="login" border="0" cellpadding="5" cellspacing="3">
+	<table class="login" cellpadding="5" cellspacing="3">
 		<tr>
 			<td><?php echo $lang['strusername']; ?></td>
 			<td>
@@ -77,5 +83,6 @@ $md5_server = md5($_REQUEST['server']);
 </script>
 
 <?php
+
 // Output footer
 $misc->printFooter();

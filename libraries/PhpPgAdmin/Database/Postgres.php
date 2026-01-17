@@ -627,26 +627,6 @@ class Postgres extends AbstractConnection
 		return $this->endTransaction();
 	}
 
-	/**
-	 * Returns a recordset of all columns in a relation.  Used for data export.
-	 * @@ Note: Really needs to use a cursor
-	 * @param $relation The name of a relation
-	 * @return ADORecordSet|int A recordset on success, -1 Failed to set datestyle
-	 */
-	function dumpRelation($relation, $oids)
-	{
-		$this->fieldClean($relation);
-
-		// Actually retrieve the rows
-		if ($oids)
-			$oid_str = $this->id . ', ';
-		else
-			$oid_str = '';
-
-		return $this->selectSet("SELECT {$oid_str}* FROM \"{$relation}\"");
-	}
-
-
 	// Capabilities
 
 	function hasAlterSequenceSchema()

@@ -67,16 +67,16 @@ abstract class ExportDumper extends AbstractContext
         }
     }
 
+    private $headerLevel = 0;
+
     /**
      * Generates a header for the dump.
      */
     protected function writeHeader($title)
     {
-        static $headerWritten = false;
-        if ($headerWritten) {
+        if ($this->headerLevel++ > 0) {
             return;
         }
-        $headerWritten = true;
         $name = AppContainer::getAppName();
         $version = AppContainer::getAppVersion();
         $this->write("--\n");
@@ -84,6 +84,50 @@ abstract class ExportDumper extends AbstractContext
         $this->write("-- Subject: {$title}\n");
         $this->write("-- Date: " . date('Y-m-d H:i:s') . "\n");
         $this->write("--\n\n");
+    }
+
+    protected function writeFooter()
+    {
+        if ($this->headerLevel-- > 1) {
+            return;
+        }
+        $this->write("-- Dump completed on " . date('Y-m-d H:i:s') . "\n");
+    }
+
+    protected function writeConnectHeader(string $database = null)
+    {
+        if (!isset($database)) {
+            $database = $this->connection->conn->database;
+        }
+        if ($this->headerLevel++ > 1) {
+            return;
+        }
+        $this->write("\\connect " . $this->connection->quoteIdentifier($database) . "\n");
+        $this->write("\\encoding UTF8\n");
+        $this->write("SET client_encoding = 'UTF8';\n");
+        // pg_dump session settings for reliable restores
+        $this->write("SET statement_timeout = 0;\n");
+        $this->write("SET lock_timeout = 0;\n");
+        $this->write("SET idle_in_transaction_session_timeout = 0;\n");
+        $this->write("SET transaction_timeout = 0;\n");
+        $this->write("SET standard_conforming_strings = on;\n");
+        // Remove search_path to avoid issues with functions that set it internally
+        $this->write("SELECT pg_catalog.set_config('search_path', '', false);\n");
+        $this->write("SET check_function_bodies = false;\n");
+        $this->write("SET xmloption = content;\n");
+        $this->write("SET client_min_messages = warning;\n");
+        $this->write("SET row_security = off;\n");
+        // Set session_replication_role to replica for the whole DB restore
+        $this->write("SET session_replication_role = 'replica';\n\n");
+    }
+
+    protected function writeConnectFooter()
+    {
+        if ($this->headerLevel-- > 2) {
+            return;
+        }
+        // After dumping this database, reset session_replication_role to origin
+        $this->write("\nSET session_replication_role = 'origin';\n\n");
     }
 
     /**
@@ -129,7 +173,7 @@ abstract class ExportDumper extends AbstractContext
     protected function writeDrop($type, $name, $options)
     {
         if (!empty($options['drop_objects'])) {
-            $this->write("DROP {$type} IF EXISTS \"{$name}\" CASCADE;\n");
+            $this->write("DROP {$type} IF EXISTS {$name} CASCADE;\n");
         }
     }
 

@@ -34,12 +34,13 @@ class Connector
 		$database,
 		$fetchMode = ADODB_FETCH_ASSOC
 	) {
-		$this->conn = ADONewConnection('postgres9_enhanced');
+		//$this->conn = ADONewConnection('postgres9_enhanced');
+		$this->conn = ADONewConnection('postgres9');
 		$this->conn->setFetchMode($fetchMode);
 
 		$pghost = self::getHostPortString($host, $port, $sslmode);
 
-		$this->conn->connect($pghost, $user, $password, $database);
+		@$this->conn->connect($pghost, $user, $password, $database);
 	}
 
 	public static function getHostPortString($host, $port, $sslmode)

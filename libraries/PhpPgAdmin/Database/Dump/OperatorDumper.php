@@ -22,59 +22,75 @@ class OperatorDumper extends ExportDumper
         $operatorActions = new OperatorActions($this->connection);
         $rs = $operatorActions->getOperator($oid);
 
-        if ($rs && !$rs->EOF) {
-            $name = $rs->fields['oprname'];
-            $leftType = $rs->fields['oprleftname'] ?? null;
-            $rightType = $rs->fields['oprrightname'] ?? null;
+        if (!$rs || $rs->EOF) {
+            return;
+        }
 
-            $oprcom = $rs->fields['oprcom'] ?? null;
-            $oprnegate = $rs->fields['oprnegate'] ?? null;
-            $oprrest = $rs->fields['oprrest'] ?? null;
-            $oprjoin = $rs->fields['oprjoin'] ?? null;
-            $oprcanhash = $rs->fields['oprcanhash'] ?? null;
-            $oprcanmerge = $rs->fields['oprcanmerge'] ?? null;
-            $oprcomment = $rs->fields['oprcomment'] ?? null;
+        $schemaQuoted = $this->connection->quoteIdentifier($schema);
 
-            $this->write("\n-- Operator: \"{$schema}\".{$name}\n");
+        $name = $rs->fields['oprname'];
+        $leftType = $rs->fields['oprleftname'] ?? null;
+        $rightType = $rs->fields['oprrightname'] ?? null;
 
-            if (!empty($options['clean'])) {
-                $this->write("DROP OPERATOR IF EXISTS \"{$schema}\".{$name} (" . ($leftType ?: 'NONE') . ", " . ($rightType ?: 'NONE') . ") CASCADE;\n");
-            }
+        $oprcom = $rs->fields['oprcom'] ?? null;
+        $oprnegate = $rs->fields['oprnegate'] ?? null;
+        $oprrest = $rs->fields['oprrest'] ?? null;
+        $oprjoin = $rs->fields['oprjoin'] ?? null;
+        $oprcanhash = $rs->fields['oprcanhash'] ?? null;
+        $oprcanmerge = $rs->fields['oprcanmerge'] ?? null;
+        $oprcomment = $rs->fields['oprcomment'] ?? null;
+        $functionQuoted = $this->connection->quoteIdentifier($rs->fields['oprcode']);
+        $needSchema = !empty($rs->fields['procnsname']) &&
+            $rs->fields['procnsname'] !== 'pg_catalog';
+        if ($needSchema) {
+            $functionQuoted = $this->connection->quoteIdentifier($rs->fields['procnsname']) . '.' . $functionQuoted;
+        }
 
-            $this->write("CREATE OPERATOR \"{$schema}\".{$name} (\n");
-            $this->write("    PROCEDURE = {$rs->fields['oprcode']}");
+        $this->write("\n-- Operator: $schemaQuoted.{$name}\n");
 
-            if ($leftType !== null) {
-                $this->write(",\n    LEFTARG = {$leftType}");
-            }
-            if ($rightType !== null) {
-                $this->write(",\n    RIGHTARG = {$rightType}");
-            }
-            if (!empty($oprcom)) {
-                $this->write(",\n    COMMUTATOR = {$oprcom}");
-            }
-            if (!empty($oprnegate)) {
-                $this->write(",\n    NEGATOR = {$oprnegate}");
-            }
-            if (!empty($oprrest) && $oprrest !== '-' && $oprrest !== '0') {
-                $this->write(",\n    RESTRICT = {$oprrest}");
-            }
-            if (!empty($oprjoin) && $oprjoin !== '-' && $oprjoin !== '0') {
-                $this->write(",\n    JOIN = {$oprjoin}");
-            }
-            if ($oprcanhash === 't') {
-                $this->write(",\n    HASHES");
-            }
-            if ($oprcanmerge === 't') {
-                $this->write(",\n    MERGES");
-            }
+        $this->writeDrop('OPERATOR', "$schemaQuoted.{$name} (" . ($leftType ?: 'NONE') . ", " . ($rightType ?: 'NONE') . ")", $options);
 
-            $this->write("\n);\n");
+        $this->write("CREATE OPERATOR $schemaQuoted.{$name} (\n");
+        $this->write("    FUNCTION = {$functionQuoted}");
 
-            if ($this->shouldIncludeComments($options) && $oprcomment !== null) {
-                $this->connection->clean($oprcomment);
-                $this->write("COMMENT ON OPERATOR \"{$schema}\".{$name} (" . ($leftType ?: 'NONE') . ", " . ($rightType ?: 'NONE') . ") IS '{$oprcomment}';\n");
+        if ($leftType !== null) {
+            $this->write(",\n    LEFTARG = {$leftType}");
+        }
+        if ($rightType !== null) {
+            $this->write(",\n    RIGHTARG = {$rightType}");
+        }
+        if (!empty($oprcom)) {
+            $this->write(",\n    COMMUTATOR = {$oprcom}");
+        }
+        if (!empty($oprnegate)) {
+            $this->write(",\n    NEGATOR = {$oprnegate}");
+        }
+        if (!empty($oprrest) && $oprrest !== '-' && $oprrest !== '0') {
+            $restQuoted = $this->connection->quoteIdentifier($oprrest);
+            if (!empty($rs->fields['restnsname']) && $rs->fields['restnsname'] !== 'pg_catalog') {
+                $restQuoted = $this->connection->quoteIdentifier($rs->fields['restnsname']) . '.' . $restQuoted;
             }
+            $this->write(",\n    RESTRICT = {$restQuoted}");
+        }
+        if (!empty($oprjoin) && $oprjoin !== '-' && $oprjoin !== '0') {
+            $joinQuoted = $this->connection->quoteIdentifier($oprjoin);
+            if (!empty($rs->fields['joinnsname']) && $rs->fields['joinnsname'] !== 'pg_catalog') {
+                $joinQuoted = $this->connection->quoteIdentifier($rs->fields['joinnsname']) . '.' . $joinQuoted;
+            }
+            $this->write(",\n    JOIN = {$joinQuoted}");
+        }
+        if ($oprcanhash === 't') {
+            $this->write(",\n    HASHES");
+        }
+        if ($oprcanmerge === 't') {
+            $this->write(",\n    MERGES");
+        }
+
+        $this->write("\n);\n");
+
+        if ($oprcomment !== null && $this->shouldIncludeComments($options)) {
+            $oprcomment = $this->connection->escapeString($oprcomment);
+            $this->write("\nCOMMENT ON OPERATOR $schemaQuoted.{$name} (" . ($leftType ?: 'NONE') . ", " . ($rightType ?: 'NONE') . ") IS '{$oprcomment}';\n");
         }
     }
 }

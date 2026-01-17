@@ -34,7 +34,6 @@ $conf['servers'][0]['defaultdb'] = 'template1';
 // Leave these blank to have phpPgAdmin attempt to auto-detect them.
 // $conf['servers'][0]['pg_dump_path'] = '/usr/bin/pg_dump';
 // $conf['servers'][0]['pg_dumpall_path'] = '/usr/bin/pg_dumpall';
-// $conf['servers'][0]['psql_path'] = '/usr/bin/psql';
 
 // Example for a second server (PostgreSQL for Windows)
 //$conf['servers'][1]['desc'] = 'Test Server';
@@ -44,7 +43,6 @@ $conf['servers'][0]['defaultdb'] = 'template1';
 //$conf['servers'][1]['defaultdb'] = 'template1';
 //$conf['servers'][1]['pg_dump_path'] = 'C:\\Program Files\\PostgreSQL\\18.0\\bin\\pg_dump.exe';
 //$conf['servers'][1]['pg_dumpall_path'] = 'C:\\Program Files\\PostgreSQL\\18.0\\bin\\pg_dumpall.exe';
-//$conf['servers'][1]['psql_path'] = 'C:\\Program Files\\PostgreSQL\\18.0\\bin\\psql.exe';
 
 
 /* Groups definition */
@@ -168,6 +166,9 @@ $conf['ajax_refresh'] = 3;
 // Set it to zero to send all queries via POST method
 $conf['max_get_query_length'] = 5000;
 
+// Uncompressed chunk size in bytes (5MB default for good progress granularity)
+$conf['import_upload_chunk_size'] = 5 * 1024 * 1024;
+
 /** Plugins management
  * Add plugin names to the following array to activate them
  * Example:
@@ -177,49 +178,5 @@ $conf['max_get_query_length'] = 5000;
  *   ];
  */
 $conf['plugins'] = [];
-
-// Example import configuration. Adjust as needed for your environment.
-$conf['import'] = [];
-// Enable or disable the import subsystem
-$conf['import']['enabled'] = true;
-// Directory to store per-import job temporary files. Must be writable by webserver.
-$conf['import']['temp_dir'] = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'phppgadmin_imports';
-// Locking mode for import processing: 'pg_advisory' (cluster-safe Postgres advisory locks, default) or 'file' as fallback or 'disabled' to disable locking.
-$conf['import']['lock_mode'] = 'pg_advisory';
-// Age in seconds after which a lock file is considered stale and may be reclaimed (only for file locks).
-$conf['import']['stale_lock_age'] = 3600;
-// Maximum allowed upload size in bytes (0 = unlimited).
-$conf['import']['upload_max_size'] = 0;
-// Maximum chunk size in bytes for chunked uploads .
-$conf['import']['upload_chunk_size'] = 5 * 1024 * 1024; // 5 MB per upload chunk (default)
-// Size of parser chunks in bytes.
-$conf['import']['chunk_size'] = 2 * 1024 * 1024; // 2 MB per parser chunk (default)
-// Maximum number of parser chunks processed per request for compressed inputs.
-// This setting caps how many parser "chunks" (reader->read + parse cycles)
-// are performed in a single HTTP `process` request. Each chunk typically
-// reads up to `chunk_size` bytes from the input reader, so a rough upper
-// bound on bytes processed per request is `chunk_size * max_chunks_per_request`.
-// For plain (uncompressed) uploads the code defaults to 1 chunk; for
-// compressed inputs a small number of chunks (default 3) allows steady
-// progress while keeping per-request work predictable.
-$conf['import']['max_chunks_per_request'] = 3;
-
-// Maximum execution time (seconds) per process request.
-// This is a wall-clock deadline checked between chunk iterations. It stops
-// starting new chunk reads/parses once the deadline is reached, but it does
-// NOT interrupt a single in-progress read/parse call. Therefore this value
-// provides a time-based safety net while `max_chunks_per_request` provides a
-// deterministic iteration/byte bound. Both settings ensure predictable
-// per-request resource usage.
-$conf['import']['process_time_limit'] = 2.0; // 2 seconds per request
-// How long (seconds) before an inactive job is considered eligible for GC.
-$conf['import']['job_lifetime'] = 24 * 3600; // 24 hours
-// Whether compressed uploads (gzip/bzip2/zip) are accepted.
-$conf['import']['allow_compressed'] = true;
-// ZIP handling limits
-$conf['import']['max_zip_entries'] = 1000; // maximum number of entries enumerated
-$conf['import']['max_zip_entry_uncompressed_size'] = 10 * 1024 * 1024 * 1024; // 10 GB per entry
-// How many random job dirs to probe during lazy GC.
-$conf['import']['lazy_gc_probe'] = 2;
 
 return $conf;

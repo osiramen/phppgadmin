@@ -9,6 +9,10 @@ use PhpPgAdmin\Database\Actions\TypeActions;
  */
 class TypeDumper extends ExportDumper
 {
+    private $schemaQuoted = '';
+
+    private $typeQuoted = '';
+
     public function dump($subject, array $params, array $options = [])
     {
         $typeName = $params['type'] ?? null;
@@ -18,12 +22,15 @@ class TypeDumper extends ExportDumper
             return;
         }
 
+        $this->schemaQuoted = $this->connection->quoteIdentifier($schema);
+        $this->typeQuoted = $this->connection->quoteIdentifier($typeName);
+
         $typeActions = new TypeActions($this->connection);
         $rs = $typeActions->getType($typeName);
 
         if ($rs && !$rs->EOF) {
-            $this->write("\n-- Type: \"{$schema}\".\"{$typeName}\"\n");
-            $this->writeDrop('TYPE', "{$schema}\".\"{$typeName}", $options);
+            $this->write("\n-- Type: {$this->schemaQuoted}.{$this->typeQuoted}\n");
+            $this->writeDrop('TYPE', "{$this->schemaQuoted}.{$this->typeQuoted}", $options);
 
             $typtype = $rs->fields['typtype'];
 
@@ -41,7 +48,19 @@ class TypeDumper extends ExportDumper
                     // Other types (pseudo, etc.) might not be dumpable or needed
                     break;
             }
-            //$this->write("\n");
+
+            // Add comment if present and requested
+            if ($this->shouldIncludeComments($options)) {
+                $typeActions = new TypeActions($this->connection);
+                $typeInfo = $typeActions->getType($typeName);
+                $comment = $typeInfo && !$typeInfo->EOF ? $typeInfo->fields['typcomment'] : null;
+                if (!empty($comment)) {
+                    $this->connection->clean($comment);
+                    $this->write(
+                        "\nCOMMENT ON TYPE {$this->schemaQuoted}.{$this->typeQuoted} IS '{$comment}';\n"
+                    );
+                }
+            }
 
             $this->writePrivileges($typeName, 'type', $schema);
         }
@@ -59,60 +78,41 @@ class TypeDumper extends ExportDumper
             $valuesRs->moveNext();
         }
 
-        $this->write("CREATE TYPE \"{$schema}\".\"{$typeName}\" AS ENUM (" . implode(', ', $values) . ");\n");
+        $this->write(
+            "CREATE TYPE {$this->schemaQuoted}.{$this->typeQuoted}\n    AS ENUM (" . implode(', ', $values) . ");\n"
+        );
 
-        // Add comment if present and requested
-        if ($this->shouldIncludeComments($options)) {
-            $typeActions = new TypeActions($this->connection);
-            $typeInfo = $typeActions->getType($typeName);
-            if ($typeInfo && !$typeInfo->EOF && isset($typeInfo->fields['comment']) && $typeInfo->fields['comment'] !== null) {
-                $this->connection->clean($typeInfo->fields['comment']);
-                $this->write(
-                    "COMMENT ON TYPE \"" . addslashes($schema) .
-                    "\".\"" . addslashes($typeName) .
-                    "\" IS '{$typeInfo->fields['comment']}';\n"
-                );
-            }
-        }
     }
 
     protected function dumpComposite($typeName, $schema, $options)
     {
         // We need to fetch the attributes of the composite type
         // This is similar to fetching table attributes
-        $sql = "SELECT a.attname, pg_catalog.format_type(a.atttypid, a.atttypmod) as type
+        $sql = "SELECT a.attname,
+                    pg_catalog.format_type(a.atttypid, a.atttypmod) as type
                 FROM pg_catalog.pg_attribute a
                 JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
                 JOIN pg_catalog.pg_type t ON c.reltype = t.oid
-                WHERE t.typname = '{$typeName}' AND a.attnum > 0 AND NOT a.attisdropped
+                WHERE t.typname = '{$typeName}'
+                    AND a.attnum > 0
+                    AND NOT a.attisdropped
                 ORDER BY a.attnum";
 
         $rs = $this->connection->selectSet($sql);
         $fields = [];
         while ($rs && !$rs->EOF) {
-            $fields[] = "\"{$rs->fields['attname']}\" {$rs->fields['type']}";
+            $name = $this->connection->quoteIdentifier($rs->fields['attname']);
+            $fields[] = "$name {$rs->fields['type']}";
             $rs->moveNext();
         }
 
-        $this->write("CREATE TYPE \"{$schema}\".\"{$typeName}\" AS (" . implode(', ', $fields) . ");\n");
+        $this->write("CREATE TYPE {$this->schemaQuoted}.{$this->typeQuoted} AS (" . implode(', ', $fields) . ");\n");
 
-        // Add comment if present
-        $typeActions = new TypeActions($this->connection);
-        $typeInfo = $typeActions->getType($typeName);
-        if ($typeInfo && !$typeInfo->EOF && isset($typeInfo->fields['comment']) && $typeInfo->fields['comment'] !== null) {
-            $this->connection->clean($typeInfo->fields['comment']);
-            $this->write(
-                "COMMENT ON TYPE \"" . addslashes($schema) .
-                "\".\"" . addslashes($typeName) .
-                "\" IS '{$typeInfo->fields['comment']}';\n"
-            );
-        }
     }
 
     protected function dumpBase($fields, $schema, $options)
     {
-        $typeName = $fields['typname'];
-        $this->write("CREATE TYPE \"" . addslashes($schema) . "\".\"" . addslashes($typeName) . "\" (\n");
+        $this->write("CREATE TYPE {$this->schemaQuoted}.{$this->typeQuoted} (\n");
         $this->write("    INPUT = {$fields['typin']},\n");
         $this->write("    OUTPUT = {$fields['typout']}");
 

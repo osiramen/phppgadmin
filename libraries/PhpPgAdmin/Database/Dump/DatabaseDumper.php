@@ -38,26 +38,7 @@ class DatabaseDumper extends ExportDumper
             $this->write("CREATE DATABASE \"" . addslashes($c_database) . "\";\n");
         }
 
-        // Use full \connect command for clarity and append encoding + pg_dump-like preliminaries
-        $this->write("--\n");
-        $this->write("-- Database Dump \"{$c_database}\"\n");
-        $this->write("--\n");
-        $this->write("\\connect \"" . addslashes($c_database) . "\"\n");
-        $this->write("\\encoding UTF8\n");
-        $this->write("SET client_encoding = 'UTF8';\n");
-        // pg_dump session settings for reliable restores
-        $this->write("SET statement_timeout = 0;\n");
-        $this->write("SET lock_timeout = 0;\n");
-        $this->write("SET idle_in_transaction_session_timeout = 0;\n");
-        $this->write("SET transaction_timeout = 0;\n");
-        $this->write("SET standard_conforming_strings = on;\n");
-        $this->write("SELECT pg_catalog.set_config('search_path', '', false);\n");
-        $this->write("SET check_function_bodies = false;\n");
-        $this->write("SET xmloption = content;\n");
-        $this->write("SET client_min_messages = warning;\n");
-        $this->write("SET row_security = off;\n");
-        // Set session_replication_role to replica for the whole DB restore
-        $this->write("SET session_replication_role = 'replica';\n\n");
+        $this->writeConnectHeader($database);
 
         // Save current database and reconnect to target database
         $originalDatabase = $this->connection->conn->database;
@@ -124,8 +105,7 @@ class DatabaseDumper extends ExportDumper
             );
         }
 
-        // After dumping this database, reset session_replication_role to origin
-        $this->write("\nSET session_replication_role = 'origin';\n\n");
-
+        $this->writeConnectFooter();
+        $this->writeFooter();
     }
 }
