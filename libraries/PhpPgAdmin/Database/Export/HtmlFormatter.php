@@ -28,52 +28,6 @@ class HtmlFormatter extends OutputFormatter
     private $exportNulls = '';
 
     /**
-     * Format ADORecordSet as XHTML
-     * @param \ADORecordSet $recordset ADORecordSet
-     * @param array $metadata Optional (unused, columns come from recordset)
-     */
-    public function format($recordset, $metadata = [])
-    {
-        if (!$recordset || $recordset->EOF) {
-            $this->write('<?xml version="1.0" encoding="UTF-8"?>' . "\n");
-            $this->write('<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">' . "\n");
-            $this->write('<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">' . "\n");
-            $this->write("<head>\n");
-            $this->write("\t<meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\" />\n");
-            $this->write("\t<title>Database Export</title>\n");
-            $this->write("\t<style type=\"text/css\">\n");
-            $this->write("\t\ttable { border-collapse: collapse; border: 1px solid #999; }\n");
-            $this->write("\t\tth { background-color: #f0f0f0; border: 1px solid #999; padding: 5px; text-align: left; font-weight: bold; }\n");
-            $this->write("\t\ttd { border: 1px solid #999; padding: 5px; }\n");
-            $this->write("\t\ttr:nth-child(even) { background-color: #f9f9f9; }\n");
-            $this->write("\t</style>\n");
-            $this->write("</head>\n");
-            $this->write("<body>\n");
-            $this->write("<table>\n");
-            $this->write("</table>\n</body>\n</html>\n");
-            return;
-        }
-
-        $fields = [];
-        for ($i = 0; $i < count($recordset->fields); $i++) {
-            $finfo = $recordset->fetchField($i);
-            $fields[] = [
-                'name' => $finfo->name ?? "Column $i",
-                'type' => $finfo->type ?? 'unknown'
-            ];
-        }
-
-        $this->writeHeader($fields, $metadata);
-
-        while (!$recordset->EOF) {
-            $this->writeRow($recordset->fields);
-            $recordset->moveNext();
-        }
-
-        $this->writeFooter();
-    }
-
-    /**
      * Write header information before data rows.
      *
      * @param array $fields Metadata about fields (types, names, etc.)

@@ -41,36 +41,6 @@ class CsvFormatter extends OutputFormatter
     }
 
     /**
-     * Format ADORecordSet as CSV
-     * @param \ADORecordSet $recordset ADORecordSet
-     * @param array $metadata Optional (unused, columns come from recordset)
-     */
-    public function format($recordset, $metadata = [])
-    {
-        if (!$recordset || $recordset->EOF) {
-            return;
-        }
-
-        $fields = [];
-        $col_count = count($recordset->fields);
-
-        for ($i = 0; $i < $col_count; $i++) {
-            $finfo = $recordset->fetchField($i);
-            $fields[] = [
-                'name' => $finfo->name ?? "Column $i",
-                'type' => $finfo->type ?? ''
-            ];
-        }
-
-        $this->writeHeader($fields, $metadata);
-
-        while (!$recordset->EOF) {
-            $this->writeRow($recordset->fields);
-            $recordset->moveNext();
-        }
-    }
-
-    /**
      * Write header information before data rows.
      *
      * @param array $fields Metadata about fields (types, names, etc.)
@@ -97,7 +67,10 @@ class CsvFormatter extends OutputFormatter
             $sep = $this->delimiter;
         }
 
-        $this->write($out . $this->lineEnding);
+        if (!empty($metadata['column_names'])) {
+            $this->write($out . $this->lineEnding);
+        }
+
     }
 
     /**

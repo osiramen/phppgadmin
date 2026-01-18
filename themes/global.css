@@ -5,7 +5,8 @@
 
 @font-face {
 	font-family: "pga-symbols";
-	src: url("default/symbols/pga-symbols.woff2") format("woff2"),
+	src:
+		url("default/symbols/pga-symbols.woff2") format("woff2"),
 		url("default/symbols/pga-symbols.woff") format("woff");
 	font-weight: normal;
 	font-style: normal;
@@ -80,6 +81,11 @@ html[dir="rtl"] #frameset {
 
 .no-select {
 	user-select: none;
+}
+
+hr {
+	margin: 7px 0;
+	border-top: 1px solid #ccc;
 }
 
 img {

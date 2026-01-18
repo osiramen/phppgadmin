@@ -61,18 +61,37 @@ abstract class OutputFormatter extends AbstractContext
 
     ];
 
-    protected static function encodeBytea(string $data, string $encoding): string
+    /**
+     * Encode bytea data according to specified encoding.
+     * Note: PostgreSQL delivers bytea data in hex format by default.
+     *
+     * @param string $data The binary data to encode
+     * @param string $encoding The encoding type ('hex', 'base64', 'octal', 'escape')
+     * @param bool $escape Whether to apply additional escaping (for JSON, XML)
+     * @return string The encoded bytea string
+     */
+    protected static function encodeBytea(string $data, string $encoding, $escape = false): string
     {
         switch ($encoding) {
             case 'base64':
-                return base64_encode($data);
+                return base64_encode(pg_unescape_bytea($data));
             case 'octal':
+                if ($escape) {
+                    return bytea_to_octal_escaped(pg_unescape_bytea($data));
+                } else {
+                    return bytea_to_octal(pg_unescape_bytea($data));
+                }
             case 'escape':
-                return bytea_to_octal($data);
+                return bytea_to_octal_escaped(pg_unescape_bytea($data));
             case 'hex':
             default:
-                // Default to hex encoding
-                return '\x' . bin2hex($data);
+                // Defaults to hex encoding
+                // Data is already in hex format
+                if ($escape) {
+                    return '\\' . $data;
+                } else {
+                    return $data;
+                }
         }
     }
 
@@ -127,17 +146,6 @@ abstract class OutputFormatter extends AbstractContext
             echo $data;
         }
     }
-
-    /**
-     * Format an ADORecordSet to target output format.
-     * Input: ADODB RecordSet with data rows from query or table dump
-     * Output: Written to stream (if set) or accumulated as string
-     *
-     * @param \ADORecordSet $recordset ADORecordSet with data rows
-     * @param array $metadata Optional metadata (table name, columns, types, etc.)
-     * @deprecated Use CursorReader instead
-     */
-    abstract public function format($recordset, $metadata = []);
 
     /**
      * Write header information before data rows.

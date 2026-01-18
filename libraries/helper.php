@@ -38,6 +38,50 @@ function bytea_to_octal(string $data): string
 	return strtr($data, $map);
 }
 
+/**
+ * Transforms raw binary data into octal escaped string.
+ *
+ * Example:
+ *   "\xDE\xAD\xBE\xEF" → "\\\\336\\\\255\\\\276\\\\357"
+ *
+ * COPY expects exactly this format.
+ */
+function bytea_to_octal_escaped(string $data): string
+{
+	if ($data === '') {
+		return '';
+	}
+
+	static $map = null;
+	if ($map === null) {
+		$map = [];
+		for ($i = 0; $i < 256; $i++) {
+			$ch = chr($i);
+
+			if ($i >= 32 && $i <= 126) {
+				if ($i === 34 || $i === 39 || $i === 92) {
+					// Always octal-escape problematic characters
+					$map[$ch] = sprintf("\\\\%03o", $i);
+				} else {
+					// printable ASCII
+					$map[$ch] = $ch;
+				}
+			} else {
+				// non-printable → octal
+				$map[$ch] = sprintf("\\\\%03o", $i);
+			}
+		}
+	}
+
+	return strtr($data, $map);
+}
+
+
+/**
+ * Remove PostgreSQL identifier quoting
+ * @param string $ident
+ * @return string
+ */
 function pg_unquote_identifier(string $ident): string
 {
 	// remove surrounding quotes

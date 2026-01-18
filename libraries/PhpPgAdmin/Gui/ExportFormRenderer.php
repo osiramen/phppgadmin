@@ -232,9 +232,10 @@ class ExportFormRenderer
                 </div>
 
                 <!-- INSERT Format Options (only shown when SQL format is selected and data is included) -->
-                <div id="insert_format_options" class="mt-2" style="display:none; border-top: 1px solid #ccc;">
+                <div id="insert_format_options" class="mt-2" style="display:none">
+                    <hr>
                     <p><strong><?= $this->lang['strinsertformat_desc']; ?></strong></p>
-                    <div style="margin-left: 20px;">
+                    <div class="ml-3">
                         <div>
                             <input type="radio" id="insert_copy" name="insert_format" value="copy" checked="checked" />
                             <label for="insert_copy"><?= $this->lang['strcopyformat']; ?></label>
@@ -289,7 +290,6 @@ class ExportFormRenderer
             </fieldset>
 
             <p>
-                <input type="hidden" name="action" value="export" />
                 <input type="hidden" name="subject" value="<?= html_esc($subject); ?>" />
                 <?= $this->misc->form; ?>
                 <input type="submit" value="<?= $this->lang['strexport']; ?>" />

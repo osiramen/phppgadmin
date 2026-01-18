@@ -1,10 +1,11 @@
 <?php
 
 use PhpPgAdmin\Core\AppContainer;
-use PhpPgAdmin\Database\Export\Compression\CompressionFactory;
-use PhpPgAdmin\Database\Export\FormatterFactory;
-use PhpPgAdmin\Gui\ExportOutputRenderer;
 use PhpPgAdmin\Gui\QueryExportRenderer;
+use PhpPgAdmin\Gui\ExportOutputRenderer;
+use PhpPgAdmin\Database\Cursor\CursorReader;
+use PhpPgAdmin\Database\Export\FormatterFactory;
+use PhpPgAdmin\Database\Export\Compression\CompressionFactory;
 
 /**
  * Export query results to various formats (SQL, CSV, XML, HTML, JSON, etc.)
@@ -35,122 +36,109 @@ function generateQueryExportFilename()
 	return 'query_export_' . $timestamp;
 }
 
-// Handle export action with new unified parameter system
-if (isset($_REQUEST['action']) && $_REQUEST['action'] === 'export') {
-	AppContainer::setSkipHtmlFrame(true);
+//AppContainer::setSkipHtmlFrame(true);
 
-	// Get unified parameters
-	$output_format = $_REQUEST['output_format'] ?? 'csv';
-	$insert_format = $_REQUEST['insert_format'] ?? 'copy';
+// Get unified parameters
+$output_format = $_REQUEST['output_format'] ?? 'csv';
+$insert_format = $_REQUEST['insert_format'] ?? 'copy';
 
-	// Parse composite `output` parameter: 'show' | 'download' | 'download-gzip' | 'download-bzip2' | 'download-zip'
-	$rawOutput = $_REQUEST['output'] ?? 'download';
-	if ($rawOutput === 'show') {
-		$output_method = 'show';
-		$output_compression = '';
-	} else {
-		$output_method = 'download';
-		$compression_suffix = str_replace('download-', '', $rawOutput);
-		$output_compression = $compression_suffix ?: 'plain';
-	}
-
-	// Get the query to export
-	$query = $_REQUEST['query'] ?? ($_SESSION['sqlquery'] ?? '');
-	if (empty($query)) {
-		header('HTTP/1.0 400 Bad Request');
-		echo "Error: No query provided for export.";
-		exit;
-	}
-
-	// Validate format is supported for query exports
-	try {
-		$formatter = FormatterFactory::create($output_format);
-	} catch (\Exception $e) {
-		header('HTTP/1.0 400 Bad Request');
-		echo "Error: Invalid export format: " . htmlspecialchars($output_format);
-		exit;
-	}
-
-	// Execute the query
-	$pg->conn->setFetchMode(ADODB_FETCH_NUM);
-	$rs = $pg->conn->Execute($query);
-	if (!$rs) {
-		header('HTTP/1.0 500 Internal Server Error');
-		echo "Error executing query: " . htmlspecialchars($pg->conn->ErrorMsg());
-		exit;
-	}
-
-	// Set up download headers and output handling
-	$filename = generateQueryExportFilename();
-	$mime_type = $formatter->getMimeType();
-	$file_extension = $formatter->getFileExtension();
-
-	if ($output_method === 'show') {
-		// For browser display, use unified HTML wrapper
-		ExportOutputRenderer::beginHtmlOutput(['mode' => $output_format]);
-		$output_stream = fopen('php://output', 'w');
-		stream_filter_append($output_stream, 'pg.htmlencode.filter', STREAM_FILTER_WRITE);
-	} else {
-		// For all other output methods (download with optional compression), use CompressionFactory
-		try {
-			$strategy = CompressionFactory::create($output_compression);
-			if (!$strategy) {
-				die("Error: Unsupported output method: " . htmlspecialchars($output_compression));
-			}
-			$handle = $strategy->begin("$filename.$file_extension");
-			$output_stream = $handle['stream'];
-		} catch (\Exception $e) {
-			die("Error: " . htmlspecialchars($e->getMessage()));
-		}
-	}
-
-	// Reset recordset to beginning for formatter
-	$rs->moveFirst();
-
-	// Build metadata for formatter
-	$metadata = [
-		'table' => $_REQUEST['table'] ?? $_REQUEST['view'] ?? 'query_result',
-		'insert_format' => $insert_format,
-		'export_nulls' => $_REQUEST['export_nulls'] ?? '',
-		'bytea_encoding' => $_REQUEST['bytea_encoding'] ?? 'hex',
-	];
-
-	// Stream output directly using the formatter
-	// Pass stream to formatter for memory-efficient processing
-	if ($output_stream !== null) {
-		$formatter->setOutputStream($output_stream);
-	}
-	$formatter->format($rs, $metadata);
-
-	// Close streams for download and gzipped output
-	if ($output_method !== 'show' && isset($strategy) && isset($handle)) {
-		$strategy->finish($handle);
-	} elseif ($output_method === 'show') {
-		ExportOutputRenderer::endHtmlOutput();
-	}
-	exit;
+// Parse composite `output` parameter: 'show' | 'download' | 'download-gzip' | 'download-bzip2' | 'download-zip'
+$rawOutput = $_REQUEST['output'] ?? 'download';
+if ($rawOutput === 'show') {
+	$output_method = 'show';
+	$output_compression = '';
+} else {
+	$output_method = 'download';
+	$compression_suffix = str_replace('download-', '', $rawOutput);
+	$output_compression = $compression_suffix ?: 'plain';
 }
 
-// If not an export action, display the export form
-// Get query from request or session
+// Get the query to export
 $query = $_REQUEST['query'] ?? ($_SESSION['sqlquery'] ?? '');
-
 if (empty($query)) {
 	header('HTTP/1.0 400 Bad Request');
 	echo "Error: No query provided for export.";
 	exit;
 }
-// Display the query export form
-$misc->printHeader($lang['strexport']);
-$misc->printBody();
-$misc->printTrail($_REQUEST['subject'] ?? 'database');
-$misc->printTitle($lang['strexport']);
 
-if (isset($msg))
-	$misc->printMsg($msg);
+// Validate format is supported for query exports
+try {
+	$formatter = FormatterFactory::create($output_format);
+} catch (\Exception $e) {
+	header('HTTP/1.0 400 Bad Request');
+	echo "Error: Invalid export format: " . htmlspecialchars($output_format);
+	exit;
+}
 
-// Render the export form using QueryDataRenderer
-$renderer = new QueryExportRenderer();
-$renderer->renderExportForm($query, $_REQUEST);
+// Set up download headers and output handling
+$filename = generateQueryExportFilename();
+$mime_type = $formatter->getMimeType();
+$file_extension = $formatter->getFileExtension();
 
-$misc->printFooter();
+if ($output_method === 'show') {
+	// For browser display, use unified HTML wrapper
+	ExportOutputRenderer::beginHtmlOutput(['mode' => $output_format]);
+	$output_stream = fopen('php://output', 'w');
+	stream_filter_append($output_stream, 'pg.htmlencode.filter', STREAM_FILTER_WRITE);
+} else {
+	// For all other output methods (download with optional compression), use CompressionFactory
+	try {
+		$strategy = CompressionFactory::create($output_compression);
+		if (!$strategy) {
+			die("Error: Unsupported output method: " . htmlspecialchars($output_compression));
+		}
+		$handle = $strategy->begin("$filename.$file_extension");
+		$output_stream = $handle['stream'];
+	} catch (\Exception $e) {
+		die("Error: " . htmlspecialchars($e->getMessage()));
+	}
+}
+
+// Build metadata for formatter
+$metadata = [
+	'insert_format' => $insert_format, // For SQL formatter
+	'export_nulls' => $_REQUEST['export_nulls'] ?? '',
+	'bytea_encoding' => $_REQUEST['bytea_encoding'] ?? 'hex',
+	'column_names' => isset($_REQUEST['column_names']), // For CSV/TSV formatter
+];
+$table = $_REQUEST['table'] ?? $_REQUEST['view'] ?? null;
+$schema = $pg->_schema;
+if ($table !== null) {
+	$metadata['table'] = $pg->quoteIdentifier($schema) . '.' . $pg->quoteIdentifier($table);
+}
+
+// Stream output directly using the formatter
+// Pass stream to formatter for memory-efficient processing
+$formatter->setOutputStream($output_stream);
+
+try {
+	// Create cursor reader with automatic chunk size calculation
+	$reader = new CursorReader(
+		$pg,
+		$query,
+		null, // Auto-calculate chunk size
+		$table,
+		$schema
+	);
+
+	// Open cursor (begins transaction)
+	$reader->open();
+
+	// Process rows and output using formatter
+	$reader->processRows($formatter, $metadata);
+
+	// Close cursor (commits transaction)
+	$reader->close();
+
+} catch (\Exception $e) {
+	error_log('Error dumping table data: ' . $e->getMessage());
+	die("Error exporting data: " . htmlspecialchars($e->getMessage()));
+}
+
+
+// Close streams for download and compressed output
+if ($output_method !== 'show' && isset($strategy) && isset($handle)) {
+	$strategy->finish($handle);
+} elseif ($output_method === 'show') {
+	ExportOutputRenderer::endHtmlOutput();
+}

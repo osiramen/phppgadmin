@@ -59,11 +59,10 @@ class QueryExportRenderer
                 </div>
 
                 <!-- INSERT Format Options (only shown when SQL format is selected) -->
-                <div id="insert_format_options"
-                    style="display:block; margin-top: 15px; padding-top: 15px; border-top: 1px solid #ccc;">
-                    <p class="small"><strong><?= $lang['strinsertformat']; ?></strong>
-                        <?= $lang['strinsertformat_desc']; ?></p>
-                    <div style="margin-left: 20px;">
+                <div id="insert_format_options" class="mt-2" style="display:none">
+                    <hr>
+                    <p><strong><?= $lang['strinsertformat_desc']; ?></strong></p>
+                    <div class="ml-3">
                         <div>
                             <input type="radio" id="insert_copy" name="insert_format" value="copy" checked="checked" />
                             <label for="insert_copy"><?= $lang['strcopyformat']; ?></label>
@@ -75,6 +74,17 @@ class QueryExportRenderer
                         <div>
                             <input type="radio" id="insert_single" name="insert_format" value="single" />
                             <label for="insert_single"><?= $lang['strsingleinserts']; ?></label>
+                        </div>
+                    </div>
+                </div>
+                <div id="csv_options" class="mt-2" style="display:block">
+                    <hr>
+                    <p><strong><?= $lang['strcsvoptions']; ?></strong></p>
+                    <div class="ml-3">
+                        <div>
+                            <input type="checkbox" id="column_names" name="column_names" value="true" checked="checked" />
+                            <label for="column_names"><?= $lang['strcolumnnames']; ?>
+                            </label>
                         </div>
                     </div>
                 </div>
@@ -148,7 +158,6 @@ class QueryExportRenderer
             </fieldset>
 
             <p>
-                <input type="hidden" name="action" value="export" />
                 <input type="hidden" name="query" value="<?= html_esc($query); ?>" />
                 <?php foreach ($params as $key => $value): ?>
                     <?php if (!in_array($key, ['action', 'query'])): ?>
@@ -165,6 +174,7 @@ class QueryExportRenderer
                 const form = document.getElementById('export-form');
                 const outputFormatRadios = form.querySelectorAll('input[name="output_format"]');
                 const insertFormatOptions = document.getElementById('insert_format_options');
+                const csvOptions = document.getElementById('csv_options');
                 const exportNullsFieldset = document.getElementById('export_nulls');
                 const byteaEncodingFieldset = document.getElementById('bytea_encoding');
 
@@ -173,8 +183,11 @@ class QueryExportRenderer
                         const selectedFormat = form.querySelector('input[name="output_format"]:checked').value;
                         const isSqlFormat = selectedFormat === 'sql';
                         const showExportNulls = new Set(['csv', 'tab', 'html']).has(selectedFormat);
+                        const isCsvTsvFormat = new Set(['csv', 'tab']).has(selectedFormat);
 
                         if (exportNullsFieldset) exportNullsFieldset.style.display = showExportNulls ? 'block' : 'none';
+
+                        if (csvOptions) csvOptions.style.display = isCsvTsvFormat ? 'block' : 'none';
 
                         // Show/hide INSERT format options only when SQL format is selected
                         if (isSqlFormat) {

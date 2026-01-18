@@ -472,6 +472,8 @@ $lang['strdownloadasbzip2'] = 'Download as bzip2 compressed file';
 $lang['strdownloadaszip'] = 'Download as ZIP archive';
 $lang['strexportnulls'] = 'Export NULL characters';
 $lang['strbyteaencoding'] = 'Bytea Encoding';
+$lang['strcsvoptions'] = 'CSV/TSV Options';
+$lang['strcolumnnames'] = 'Print column names as first row';
 
 // Views
 $lang['strview'] = 'View';

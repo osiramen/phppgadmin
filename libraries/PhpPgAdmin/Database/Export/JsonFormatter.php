@@ -35,39 +35,6 @@ class JsonFormatter extends OutputFormatter
     private $rowSeparator = '';
 
     /**
-     * Format ADORecordSet as JSON
-     * @param \ADORecordSet $recordset ADORecordSet
-     * @param array $metadata Optional (unused, columns come from recordset)
-     */
-    public function format($recordset, $metadata = [])
-    {
-        if (!$recordset || $recordset->EOF) {
-            $this->write("{\"header\":[],\"data\":[]}\n");
-            return;
-        }
-
-        $colCount = count($recordset->fields);
-        $fields = [];
-
-        for ($i = 0; $i < $colCount; $i++) {
-            $finfo = $recordset->fetchField($i);
-            $fields[] = [
-                'name' => $finfo->name ?? "col_$i",
-                'type' => $finfo->type ?? 'unknown'
-            ];
-        }
-
-        $this->writeHeader($fields, $metadata);
-
-        while (!$recordset->EOF) {
-            $this->writeRow($recordset->fields);
-            $recordset->moveNext();
-        }
-
-        $this->writeFooter();
-    }
-
-    /**
      * Write header information before data rows.
      *
      * @param array $fields Metadata about fields (types, names, etc.)
@@ -173,7 +140,7 @@ class JsonFormatter extends OutputFormatter
                     $this->write($value ? "true" : "false");
                     break;
                 case self::TYPE_BYTEA:
-                    $this->write('"' . self::encodeBytea($value, $this->byteaEncoding) . '"');
+                    $this->write('"' . self::encodeBytea($value, $this->byteaEncoding, true) . '"');
                     break;
                 case self::TYPE_JSON:
                     $this->write($value);

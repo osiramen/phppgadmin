@@ -132,15 +132,15 @@
 
 			onChange: (selectedDates, dateStr, instance) => {
 				const cbExpr = document.getElementById(
-					"cb_expr_" + element.dataset.field
+					"cb_expr_" + element.dataset.field,
 				);
 				if (cbExpr) cbExpr.checked = false;
 				const cbNull = document.getElementById(
-					"cb_null_" + element.dataset.field
+					"cb_null_" + element.dataset.field,
 				);
 				if (cbNull) cbNull.checked = false;
 				const selFnc = document.getElementById(
-					"sel_fnc_" + element.dataset.field
+					"sel_fnc_" + element.dataset.field,
 				);
 				if (selFnc) selFnc.value = "";
 			},
@@ -258,7 +258,7 @@
 
 				// Reattach timezone and/or BC/AD suffix if present
 				const match = prevDateStr.match(
-					/([+-]\d{2}(:?\d{2})?|Z)?(\s?(BC|AD))?$/
+					/([+-]\d{2}(:?\d{2})?|Z)?(\s?(BC|AD))?$/,
 				);
 				if (match && match[1]) {
 					datestr += match[1];
@@ -356,9 +356,18 @@
 		const editor = ace.edit(editorDiv);
 		editor.setShowPrintMargin(false);
 		editor.session.setUseWrapMode(true);
-		//editor.session.setMode("ace/mode/pgsql");
+
+		// Set mode
 		const mode = element.dataset.mode || "pgsql";
-		editor.session.setMode("ace/mode/" + mode);
+		if (mode === "tsv" || mode === "tab") {
+			editor.session.setMode({
+				path: "ace/mode/csv",
+				splitter: "\t",
+			});
+		} else {
+			editor.session.setMode("ace/mode/" + mode);
+		}
+
 		//editor.setTheme("ace/theme/tomorrow");
 		editor.setHighlightActiveLine(false);
 		editor.renderer.$cursorLayer.element.style.display = "none";
@@ -396,12 +405,12 @@
 			const lineCount = editor.session.getLength();
 			const cssHeight = parseInt(
 				getComputedStyle(editor.container).height,
-				10
+				10,
 			);
 			const padding = 4;
 			const newHeight = Math.max(
 				cssHeight,
-				lineCount * lineHeight + padding
+				lineCount * lineHeight + padding,
 			);
 			editor.container.style.height = newHeight + "px";
 			editor.resize();
@@ -430,7 +439,7 @@
 			// Quoted identifiers
 			element.innerHTML = element.innerHTML.replace(
 				/"([\w.]+)"/g,
-				'<span class="hljs-quoted-identifier">"$1"</span>'
+				'<span class="hljs-quoted-identifier">"$1"</span>',
 			);
 		}
 	}
@@ -446,7 +455,7 @@
 		});
 
 		const elements = Array.from(
-			rootElement.querySelectorAll(".sql-viewer")
+			rootElement.querySelectorAll(".sql-viewer"),
 		);
 		processInIdle(elements, createSqlViewer);
 	}
@@ -481,7 +490,7 @@
 			/^(?=(?:\d{4}-\d{2}-\d{2})|(?:\d{2}:\d{2}:\d{2}))(?:(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2}))?(?:\s*(?<hour>\d{2}):(?<minute>\d{2}):(?<second>\d{2})(?:\.(?<ms>\d+))?(?<tz>[+-]\d{2})?)?$/;
 
 		const elements = Array.from(
-			rootElement.querySelectorAll(".field.highlight-datetime")
+			rootElement.querySelectorAll(".field.highlight-datetime"),
 		);
 		processInIdle(elements, (element) => {
 			const text = element.textContent.trim();

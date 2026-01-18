@@ -17,36 +17,6 @@ class XmlFormatter extends OutputFormatter
     /** @var string */
     private $byteaEncoding = 'hex';
 
-    public function format($recordset, $metadata = [])
-    {
-        if (!$recordset || $recordset->EOF) {
-            $this->write('<?xml version="1.0" encoding="UTF-8"?>' . "\n");
-            $this->write("<data>\n");
-            $this->write("</data>\n");
-            return;
-        }
-
-        $fields = [];
-        $colCount = $recordset->FieldCount();
-
-        for ($i = 0; $i < $colCount; $i++) {
-            $finfo = $recordset->FetchField($i);
-            $fields[] = [
-                'name' => $finfo->name,
-                'type' => $finfo->type ?? 'unknown'
-            ];
-        }
-
-        $this->writeHeader($fields, $metadata);
-
-        while (!$recordset->EOF) {
-            $this->writeRow($recordset->fields);
-            $recordset->moveNext();
-        }
-
-        $this->writeFooter();
-    }
-
     /**
      * Write header information before data rows.
      *
