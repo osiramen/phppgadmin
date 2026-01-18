@@ -8,93 +8,129 @@ class XmlFormatter extends OutputFormatter
     protected $fileExtension = 'xml';
     protected $supportsGzip = true;
 
+    /** @var array */
+    private $columns = [];
+
+    /** @var int */
+    private $colCount = 0;
+
+    /** @var string */
+    private $byteaEncoding = 'hex';
+
     public function format($recordset, $metadata = [])
     {
-        $this->write('<?xml version="1.0" encoding="UTF-8"?>' . "\n");
-        $this->write("<data>\n");
-
         if (!$recordset || $recordset->EOF) {
+            $this->write('<?xml version="1.0" encoding="UTF-8"?>' . "\n");
+            $this->write("<data>\n");
             $this->write("</data>\n");
             return;
         }
 
-        // TODO: Export XML unescaped and make it reimportable
-
-        $columns = [];
+        $fields = [];
         $colCount = $recordset->FieldCount();
-        $byteaEncoding = $metadata['bytea_encoding'] ?? 'hex';
 
         for ($i = 0; $i < $colCount; $i++) {
             $finfo = $recordset->FetchField($i);
-            $type = $finfo->type ?? 'unknown';
-            $columns[$i] = [
+            $fields[] = [
                 'name' => $finfo->name,
-                'type' => self::DATA_TYPE_MAPPING[$type] ?? $type
+                'type' => $finfo->type ?? 'unknown'
             ];
-            if ($type === 'bytea') {
-                $columns[$i]['encoding'] = $byteaEncoding;
-            }
         }
 
-        $this->write("<header>\n");
-        foreach ($columns as $col) {
-            $name = htmlspecialchars($col['name'], ENT_XML1, 'UTF-8');
-            $type = htmlspecialchars($col['type'], ENT_XML1, 'UTF-8');
-            $this->write("\t<col name=\"{$name}\" type=\"{$type}\" />\n");
-        }
-        $this->write("</header>\n");
-
-        $this->write("<records>\n");
+        $this->writeHeader($fields, $metadata);
 
         while (!$recordset->EOF) {
-            $this->write("\t<row>\n");
-
-            for ($i = 0; $i < $colCount; $i++) {
-                $col = $columns[$i];
-                $name = htmlspecialchars($col['name'], ENT_XML1, 'UTF-8');
-                $type = $col['type'];
-                $value = $recordset->fields[$i];
-
-                // NULL
-                if ($value === null) {
-                    $this->write("\t\t<col name=\"{$name}\" isNull=\"true\" />\n");
-                    continue;
-                }
-
-                // BYTEA → Base64
-                if ($type === 'bytea') {
-                    // If $value is escaped, unescape first (adjust based on $data behavior)
-                    $encoded = self::encodeBytea($value, $byteaEncoding);
-                    $this->write("\t\t<col name=\"{$name}\">{$encoded}</col>\n");
-                    continue;
-                }
-
-                if ($type === 'xml') {
-                    // XML data → embed directly
-                    $this->write("\t\t<col name=\"{$name}\">");
-                    $this->write($value);
-                    $this->write("</col>\n");
-                    continue;
-                }
-
-                // Large TEXT/JSON fields → optional CDATA
-                // Disabled for now because it would need a check for ]]> inside data
-                /*
-                if (is_string($value) && strlen($value) >= 1024) {
-                    $this->write("\t\t<col name=\"{$name}\"><![CDATA[{$value}]]></col>\n");
-                    continue;
-                }
-                */
-
-                // Normal text
-                $encoded = htmlspecialchars($value, ENT_XML1, 'UTF-8');
-                $this->write("\t\t<col name=\"{$name}\">{$encoded}</col>\n");
-            }
-
-            $this->write("\t</row>\n");
+            $this->writeRow($recordset->fields);
             $recordset->moveNext();
         }
 
+        $this->writeFooter();
+    }
+
+    /**
+     * Write header information before data rows.
+     *
+     * @param array $fields Metadata about fields (types, names, etc.)
+     * @param array $metadata Optional additional metadata provided by caller
+     */
+    public function writeHeader($fields, $metadata = [])
+    {
+        $this->byteaEncoding = $metadata['bytea_encoding'] ?? 'hex';
+        $this->columns = [];
+        $this->colCount = count($fields);
+
+        $this->write('<?xml version="1.0" encoding="UTF-8"?>' . "\n");
+        $this->write("<data>\n");
+
+        $this->write("<header>\n");
+        foreach ($fields as $i => $field) {
+            $name = $field['name'] ?? "column_$i";
+            $type = strtolower($field['type'] ?? 'unknown');
+            $mappedType = self::DATA_TYPE_MAPPING[$type] ?? $type;
+            $escapedName = htmlspecialchars($name, ENT_XML1, 'UTF-8');
+            $escapedType = htmlspecialchars($mappedType, ENT_XML1, 'UTF-8');
+
+            $this->write("\t<col name=\"{$escapedName}\" type=\"{$escapedType}\" />\n");
+
+            $this->columns[$i] = [
+                'name' => $name,
+                'escaped_name' => $escapedName,
+                'type' => $type
+            ];
+        }
+        $this->write("</header>\n");
+        $this->write("<records>\n");
+    }
+
+    /**
+     * Write a single row of data.
+     *
+     * @param array $row Numeric array of values
+     */
+    public function writeRow($row)
+    {
+        $this->write("\t<row>\n");
+
+        for ($i = 0; $i < $this->colCount; $i++) {
+            $col = $this->columns[$i] ?? ['name' => "column_$i", 'type' => 'unknown'];
+            $name = $col['escaped_name'] ?? htmlspecialchars($col['name'], ENT_XML1, 'UTF-8');
+            $type = $col['type'] ?? 'unknown';
+            $value = $row[$i] ?? null;
+
+            // NULL
+            if ($value === null) {
+                $this->write("\t\t<col name=\"{$name}\" isNull=\"true\" />\n");
+                continue;
+            }
+
+            // BYTEA → Base64
+            if ($type === 'bytea') {
+                $encoded = self::encodeBytea($value, $this->byteaEncoding);
+                $this->write("\t\t<col name=\"{$name}\">{$encoded}</col>\n");
+                continue;
+            }
+
+            if ($type === 'xml') {
+                // XML data → embed directly
+                $this->write("\t\t<col name=\"{$name}\">");
+                $this->write($value);
+                $this->write("</col>\n");
+                continue;
+            }
+
+            // Normal text
+            $encoded = htmlspecialchars($value, ENT_XML1, 'UTF-8');
+            $this->write("\t\t<col name=\"{$name}\">{$encoded}</col>\n");
+        }
+
+        $this->write("\t</row>\n");
+    }
+
+    /**
+     * Write footer information after data rows.
+     */
+    public function writeFooter()
+    {
         $this->write("</records>\n");
         $this->write("</data>\n");
     }

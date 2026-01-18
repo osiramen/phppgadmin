@@ -27,6 +27,12 @@ class CsvFormatter extends OutputFormatter
 
     private $byteaEncoding;
 
+    /** @var array */
+    private $isBytea = [];
+
+    /** @var array */
+    private $isJson = [];
+
     public function __construct($delimiter = ',', $lineEnding = "\r\n", $fileExtension = 'csv')
     {
         $this->delimiter = $delimiter;
@@ -45,73 +51,83 @@ class CsvFormatter extends OutputFormatter
             return;
         }
 
-        $this->pg = $this->postgres();
-        $this->exportNulls = $metadata['export_nulls'] ?? '';
-        $this->byteaEncoding = $metadata['bytea_encoding'] ?? 'hex';
-
-        // Detect bytea columns once
-        $is_bytea = [];
-        $is_json = [];
+        $fields = [];
         $col_count = count($recordset->fields);
 
         for ($i = 0; $i < $col_count; $i++) {
             $finfo = $recordset->fetchField($i);
-            $type = strtolower($finfo->type ?? '');
-            $is_bytea[$i] = ($type === 'bytea');
-            $is_json[$i] = ($type === 'json' || $type === 'jsonb');
+            $fields[] = [
+                'name' => $finfo->name ?? "Column $i",
+                'type' => $finfo->type ?? ''
+            ];
         }
 
-        // Header
-        $columns = [];
-        for ($i = 0; $i < $col_count; $i++) {
-            $finfo = $recordset->fetchField($i);
-            $columns[$i] = $finfo->name ?? "Column $i";
-        }
-        $this->write($this->csvLineRaw($columns));
+        $this->writeHeader($fields, $metadata);
 
-        // Rows
         while (!$recordset->EOF) {
-            $this->write($this->csvLineRecord($recordset->fields, $is_bytea, $is_json));
+            $this->writeRow($recordset->fields);
             $recordset->moveNext();
         }
     }
 
     /**
-     * CSV line for header (no bytea)
+     * Write header information before data rows.
+     *
+     * @param array $fields Metadata about fields (types, names, etc.)
+     * @param array $metadata Optional additional metadata provided by caller
      */
-    private function csvLineRaw(array $fields): string
+    public function writeHeader($fields, $metadata = [])
     {
+        $this->pg = $this->postgres();
+        $this->exportNulls = $metadata['export_nulls'] ?? '';
+        $this->byteaEncoding = $metadata['bytea_encoding'] ?? 'hex';
+        $this->isBytea = [];
+        $this->isJson = [];
+
         $out = '';
         $sep = '';
 
-        foreach ($fields as $field) {
+        foreach ($fields as $i => $field) {
+            $type = strtolower($field['type'] ?? '');
+            $this->isBytea[$i] = ($type === 'bytea');
+            $this->isJson[$i] = ($type === 'json' || $type === 'jsonb');
+
             $out .= $sep;
-            $out .= $this->csvField($field);
+            $out .= $this->csvField($field['name'] ?? "Column $i");
             $sep = $this->delimiter;
         }
 
-        return $out . $this->lineEnding;
+        $this->write($out . $this->lineEnding);
     }
 
     /**
-     * CSV line for data rows (with bytea support)
+     * Write a single row of data.
+     *
+     * @param array $row Numeric array of values
      */
-    private function csvLineRecord(array $fields, array $is_bytea, array $is_json): string
+    public function writeRow($row)
     {
         $out = '';
         $sep = '';
 
-        foreach ($fields as $i => $value) {
+        foreach ($row as $i => $value) {
             $out .= $sep;
 
             if ($value === null) {
                 // append NULL representation
                 $value = $this->exportNulls;
-            } elseif ($is_json[$i]) {
+            } elseif ($this->isJson[$i]) {
                 // JSON → special escaping for CSV
-                $value = $this->escapeJsonForCsv($value);
+                // Escape literal newlines in JSON to prevent reimport corruption
+                $json = str_replace("\n", "\\n", $value);
+                // Preserve escaped quotes in JSON while CSV-escaping outer quotes
+                $temp = str_replace('\\"', "\x1A", $json);
+                $temp = str_replace('"', '""', $temp);
+                $escaped = str_replace("\x1A", '\\"', $temp);
+
+                $value = '"' . $escaped . '"';
             } else {
-                if ($is_bytea[$i]) {
+                if ($this->isBytea[$i]) {
                     // bytea → encode → then CSV-escape
                     $value = self::encodeBytea($value, $this->byteaEncoding);
                 }
@@ -122,7 +138,7 @@ class CsvFormatter extends OutputFormatter
             $sep = $this->delimiter;
         }
 
-        return $out . $this->lineEnding;
+        $this->write($out . $this->lineEnding);
     }
 
     /**
@@ -138,19 +154,5 @@ class CsvFormatter extends OutputFormatter
 
         return $value;
     }
-
-    private function escapeJsonForCsv(string $json): string
-    {
-        // Escape literal newlines in JSON to prevent reimport corruption
-        $json = str_replace("\n", "\\n", $json);
-
-        // Preserve escaped quotes in JSON while CSV-escaping outer quotes
-        $temp = str_replace('\\"', "\x1A", $json);
-        $temp = str_replace('"', '""', $temp);
-        $escaped = str_replace("\x1A", '\\"', $temp);
-
-        return '"' . $escaped . '"';
-    }
-
 
 }

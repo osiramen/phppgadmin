@@ -22,6 +22,18 @@ class JsonFormatter extends OutputFormatter
     private const TYPE_BYTEA = 4;
     private const TYPE_JSON = 5;
 
+    /** @var array */
+    private $fieldNamesEncoded = [];
+
+    /** @var array */
+    private $typeCodes = [];
+
+    /** @var string */
+    private $byteaEncoding = 'hex';
+
+    /** @var string */
+    private $rowSeparator = '';
+
     /**
      * Format ADORecordSet as JSON
      * @param \ADORecordSet $recordset ADORecordSet
@@ -35,21 +47,47 @@ class JsonFormatter extends OutputFormatter
         }
 
         $colCount = count($recordset->fields);
-        $byteaEncoding = $metadata['bytea_encoding'] ?? 'hex';
-
-        // --- 1) Column metadata ---
-        $columns = [];
-        $types = [];
         $fields = [];
-        $type_code = [];
+
         for ($i = 0; $i < $colCount; $i++) {
             $finfo = $recordset->fetchField($i);
-            $name = $finfo->name ?? "col_$i";
-            $type = strtolower($finfo->type ?? 'unknown');
+            $fields[] = [
+                'name' => $finfo->name ?? "col_$i",
+                'type' => $finfo->type ?? 'unknown'
+            ];
+        }
 
-            $columns[$i] = $name;
-            $types[$i] = $type;
-            $fields[$i] = json_encode($name, JSON_UNESCAPED_UNICODE);
+        $this->writeHeader($fields, $metadata);
+
+        while (!$recordset->EOF) {
+            $this->writeRow($recordset->fields);
+            $recordset->moveNext();
+        }
+
+        $this->writeFooter();
+    }
+
+    /**
+     * Write header information before data rows.
+     *
+     * @param array $fields Metadata about fields (types, names, etc.)
+     * @param array $metadata Optional additional metadata provided by caller
+     */
+    public function writeHeader($fields, $metadata = [])
+    {
+        $this->byteaEncoding = $metadata['bytea_encoding'] ?? 'hex';
+        $this->fieldNamesEncoded = [];
+        $this->typeCodes = [];
+
+        $this->write("{\n");
+        $this->write("\t\"header\": [\n");
+
+        $sep = "";
+        foreach ($fields as $i => $field) {
+            $name = $field['name'] ?? "col_$i";
+            $type = strtolower($field['type'] ?? 'unknown');
+
+            $this->fieldNamesEncoded[$i] = json_encode($name, JSON_UNESCAPED_UNICODE);
 
             // integer types → no escaping
             if (
@@ -62,12 +100,8 @@ class JsonFormatter extends OutputFormatter
                     'smallint' => true,
                 ][$type])
             ) {
-                $type_code[$i] = self::TYPE_INTEGER;
-                continue;
-            }
-
-            // decimal types → probably no escaping
-            if (
+                $this->typeCodes[$i] = self::TYPE_INTEGER;
+            } elseif (
                 isset([
                     'float4' => true,
                     'float8' => true,
@@ -77,99 +111,87 @@ class JsonFormatter extends OutputFormatter
                     'decimal' => true
                 ][$type])
             ) {
-                $type_code[$i] = self::TYPE_DECIMAL;
-                continue;
+                $this->typeCodes[$i] = self::TYPE_DECIMAL;
+            } elseif ($type === 'bool' || $type === 'boolean') {
+                $this->typeCodes[$i] = self::TYPE_BOOLEAN;
+            } elseif ($type === 'bytea') {
+                $this->typeCodes[$i] = self::TYPE_BYTEA;
+            } elseif ($type === 'json' || $type === 'jsonb') {
+                $this->typeCodes[$i] = self::TYPE_JSON;
+            } else {
+                $this->typeCodes[$i] = self::TYPE_DEFAULT;
             }
 
-            // boolean → no escaping
-            if ($type === 'bool' || $type === 'boolean') {
-                $type_code[$i] = self::TYPE_BOOLEAN;
-                continue;
-            }
-
-            // bytea → encoding
-            if ($type === 'bytea') {
-                $type_code[$i] = self::TYPE_BYTEA;
-                continue;
-            }
-
-            // json/jsonb → no escaping
-            if ($type === 'json' || $type === 'jsonb') {
-                $type_code[$i] = self::TYPE_JSON;
-                continue;
-            }
-
-            $type_code[$i] = self::TYPE_DEFAULT;
-        }
-
-        // --- 2) Write JSON header ---
-        $this->write("{\n");
-        $this->write("\t\"header\": [\n");
-
-        $sep = "";
-        for ($i = 0; $i < $colCount; $i++) {
             $col = [
-                'name' => $columns[$i],
-                'type' => self::DATA_TYPE_MAPPING[$types[$i]] ?? $types[$i]
+                'name' => $name,
+                'type' => self::DATA_TYPE_MAPPING[$type] ?? $type
             ];
-            if ($types[$i] === 'bytea') {
-                $col['encoding'] = $byteaEncoding;
+            if ($type === 'bytea') {
+                $col['encoding'] = $this->byteaEncoding;
             }
+
             $this->write($sep . "\t\t" . json_encode($col, JSON_UNESCAPED_UNICODE));
             $sep = ",\n";
         }
 
         $this->write("\n\t],\n");
         $this->write("\t\"data\": [\n");
+        $this->rowSeparator = "";
+    }
 
-        // --- 3) Stream rows ---
-        $sep = "";
+    /**
+     * Write a single row of data.
+     *
+     * @param array $row Numeric array of values
+     */
+    public function writeRow($row)
+    {
+        $this->write($this->rowSeparator);
+        $this->write("\t\t{");
 
-        while (!$recordset->EOF) {
-            $this->write($sep);
-            $this->write("\t\t{");
-
-            $innerSep = "";
-            foreach ($recordset->fields as $i => $value) {
-                $this->write($innerSep . $fields[$i] . ":");
-                $innerSep = ",";
-                if ($value === null) {
-                    $this->write("null");
-                    continue;
-                }
-                switch ($type_code[$i]) {
-                    case self::TYPE_INTEGER:
-                        $this->write($value);
-                        break;
-                    case self::TYPE_DECIMAL:
-                        // Handle special float values
-                        if ($value === "NaN" || $value === "Infinity" || $value === "-Infinity") {
-                            $this->write('"' . addcslashes($value, "\\\"\n\r\t\f\b") . '"');
-                        } else {
-                            $this->write($value);
-                        }
-                        break;
-                    case self::TYPE_BOOLEAN:
-                        $this->write($value ? "true" : "false");
-                        break;
-                    case self::TYPE_BYTEA:
-                        $this->write('"' . self::encodeBytea($value, $byteaEncoding) . '"');
-                        break;
-                    case self::TYPE_JSON:
-                        $this->write($value);
-                        break;
-                    default:
-                        $this->write('"' . addcslashes($value, "\\\"\n\r\t\f\b") . '"');
-                }
+        $innerSep = "";
+        foreach ($row as $i => $value) {
+            $this->write($innerSep . $this->fieldNamesEncoded[$i] . ":");
+            $innerSep = ",";
+            if ($value === null) {
+                $this->write("null");
+                continue;
             }
-
-            $this->write("}");
-            $sep = ",\n";
-
-            $recordset->moveNext();
+            switch ($this->typeCodes[$i] ?? self::TYPE_DEFAULT) {
+                case self::TYPE_INTEGER:
+                    $this->write($value);
+                    break;
+                case self::TYPE_DECIMAL:
+                    // Handle special float values
+                    if ($value === "NaN" || $value === "Infinity" || $value === "-Infinity") {
+                        $this->write('"' . addcslashes($value, "\\\\\"\n\r\t\f\b") . '"');
+                    } else {
+                        $this->write($value);
+                    }
+                    break;
+                case self::TYPE_BOOLEAN:
+                    $this->write($value ? "true" : "false");
+                    break;
+                case self::TYPE_BYTEA:
+                    $this->write('"' . self::encodeBytea($value, $this->byteaEncoding) . '"');
+                    break;
+                case self::TYPE_JSON:
+                    $this->write($value);
+                    break;
+                default:
+                    $this->write('"' . addcslashes($value, "\\\\\"\n\r\t\f\b") . '"');
+            }
         }
 
-        // --- 4) Close JSON ---
+        $this->write("}");
+        $this->rowSeparator = ",\n";
+    }
+
+    /**
+     * Write footer information after data rows.
+     */
+    public function writeFooter()
+    {
         $this->write("\n\t]\n");
         $this->write("}\n");
     }
