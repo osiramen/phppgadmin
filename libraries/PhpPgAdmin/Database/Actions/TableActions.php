@@ -79,9 +79,12 @@ class TableActions extends AbstractActions
 
         $sql = "
             SELECT
-              c.relname, n.nspname, u.usename AS relowner,
+              c.relname, n.nspname, u.usename AS relowner, c.oid, c.relkind,
+              c.relacl,
               pg_catalog.obj_description(c.oid, 'pg_class') AS relcomment,
-              (SELECT spcname FROM pg_catalog.pg_tablespace pt WHERE pt.oid=c.reltablespace) AS tablespace
+              (SELECT spcname
+                FROM pg_catalog.pg_tablespace pt
+                WHERE pt.oid=c.reltablespace) AS tablespace
             FROM pg_catalog.pg_class c
                  LEFT JOIN pg_catalog.pg_user u ON u.usesysid = c.relowner
                  LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
@@ -182,8 +185,8 @@ class TableActions extends AbstractActions
         $this->connection->clean($field);
 
         if ($field == '') {
-            $sql = "
-                SELECT
+            $sql =
+                "SELECT
                     a.attname, a.attnum,
                     pg_catalog.format_type(a.atttypid, a.atttypmod) as type,
                     a.atttypmod,
@@ -212,8 +215,8 @@ class TableActions extends AbstractActions
                     AND a.attnum > 0 AND NOT a.attisdropped
                 ORDER BY a.attnum";
         } else {
-            $sql = "
-                SELECT
+            $sql =
+                "SELECT
                     a.attname, a.attnum,
                     pg_catalog.format_type(a.atttypid, a.atttypmod) as type,
                     pg_catalog.format_type(a.atttypid, NULL) as base_type,

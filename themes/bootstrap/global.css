@@ -684,6 +684,7 @@ tr[class^="data"] td img.icon {
 }
 
 .empty-result,
+.no-data,
 .nodata {
 	margin-top: 2em;
 	margin-bottom: 2em;

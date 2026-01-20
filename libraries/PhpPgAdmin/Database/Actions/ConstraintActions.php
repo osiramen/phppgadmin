@@ -17,6 +17,7 @@ class ConstraintActions extends AbstractActions
     /**
      * Returns a list of all constraints on a table.
      */
+    /*
     public function getConstraints($table)
     {
         $c_schema = $this->connection->_schema;
@@ -54,10 +55,129 @@ class ConstraintActions extends AbstractActions
 
         return $this->connection->selectSet($sql);
     }
+    */
+
+    /**
+     * Returns a list of all constraints on a table.
+     * Modernized version with resolved column names (as array).
+     */
+    public function getConstraints($table)
+    {
+        $c_schema = $this->connection->_schema;
+        $this->connection->clean($c_schema);
+        $this->connection->clean($table);
+
+        $sql =
+            "SELECT
+                c.conname,
+                pg_catalog.pg_get_constraintdef(c.oid, true) AS consrc,
+                c.contype,
+
+                -- Array of column names (primary/unique/check)
+                array_agg(a.attname ORDER BY a.attnum) AS columns,
+
+                -- Clustered index info (only for PK/UNIQUE)
+                CASE WHEN c.contype IN ('p','u') THEN (
+                    SELECT i.indisclustered
+                    FROM pg_catalog.pg_depend d
+                    JOIN pg_catalog.pg_class cl ON cl.oid = d.objid
+                    JOIN pg_catalog.pg_index i ON i.indexrelid = cl.oid
+                    WHERE d.refclassid = c.tableoid
+                    AND d.refobjid = c.oid
+                ) ELSE NULL END AS indisclustered
+
+            FROM pg_catalog.pg_constraint c
+            JOIN pg_catalog.pg_class r
+                ON r.oid = c.conrelid
+            JOIN pg_catalog.pg_namespace n
+                ON n.oid = r.relnamespace
+
+            -- Resolve column names
+            LEFT JOIN pg_catalog.pg_attribute a
+                ON a.attrelid = r.oid
+                AND a.attnum = ANY(c.conkey)
+
+            WHERE r.relname = '{$table}'
+            AND n.nspname = '{$c_schema}'
+
+            GROUP BY c.oid, c.conname, c.contype
+            ORDER BY c.conname
+        ";
+
+        return $this->connection->selectSet($sql);
+    }
+
+    /**
+     * Returns a list of all constraints on a table with field details.
+     * Optimized version (PG ≥ 9.0), drop‑in compatible.
+     */
+    public function getConstraintsWithFields($table)
+    {
+        $c_schema = $this->connection->_schema;
+        $this->connection->clean($c_schema);
+        $this->connection->clean($table);
+
+        $sql =
+            "SELECT
+                c.oid AS conid,
+                c.contype,
+                c.conname,
+                pg_catalog.pg_get_constraintdef(c.oid, true) AS consrc,
+
+                ns1.nspname AS p_schema,
+                r1.relname AS p_table,
+
+                ns2.nspname AS f_schema,
+                r2.relname AS f_table,
+
+                a1.attname AS p_field,
+                a1.attnum AS p_attnum,
+
+                a2.attname AS f_field,
+                a2.attnum AS f_attnum,
+
+                pg_catalog.obj_description(c.oid, 'pg_constraint') AS constcomment,
+
+                c.conrelid,
+                c.confrelid
+
+            FROM pg_catalog.pg_constraint c
+
+            -- primary/unique/check table
+            JOIN pg_catalog.pg_class r1
+                ON r1.oid = c.conrelid
+            JOIN pg_catalog.pg_namespace ns1
+                ON ns1.oid = r1.relnamespace
+
+            -- referenced table (FK only)
+            LEFT JOIN pg_catalog.pg_class r2
+                ON r2.oid = c.confrelid
+            LEFT JOIN pg_catalog.pg_namespace ns2
+                ON ns2.oid = r2.relnamespace
+
+            -- columns of the constrained table
+            LEFT JOIN pg_catalog.pg_attribute a1
+                ON a1.attrelid = r1.oid
+                AND a1.attnum = ANY(c.conkey)
+
+            -- columns of the referenced table (FK only)
+            LEFT JOIN pg_catalog.pg_attribute a2
+                ON a2.attrelid = r2.oid
+                AND a2.attnum = ANY(c.confkey)
+
+            WHERE r1.relname = '{$table}'
+            AND ns1.nspname = '{$c_schema}'
+
+            ORDER BY c.oid, a1.attnum
+        ";
+
+        return $this->connection->selectSet($sql);
+    }
 
     /**
      * Returns a list of all constraints on a table with field details.
      */
+    /*
     public function getConstraintsWithFields($table)
     {
         $c_schema = $this->connection->_schema;
@@ -112,6 +232,7 @@ class ConstraintActions extends AbstractActions
 
         return $this->connection->selectSet($sql);
     }
+    */
 
     /**
      * Adds a primary key constraint to a table.

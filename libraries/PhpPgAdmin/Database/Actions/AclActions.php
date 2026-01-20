@@ -23,7 +23,6 @@ class AclActions extends AbstractActions
         'C' => 'CREATE',
         'T' => 'TEMPORARY',
         'c' => 'CONNECT',
-        'm' => 'GRANT OPTION',
     ];
 
     // List of all legal privileges that can be applied to different types
@@ -40,6 +39,14 @@ class AclActions extends AbstractActions
         'column' => ['SELECT', 'INSERT', 'UPDATE', 'REFERENCES', 'ALL PRIVILEGES']
     ];
 
+    /*
+    public const ACL_TYPE = 0;
+    public const ACL_ENTITY = 1;
+    public const ACL_PRIVS = 2;
+    public const ACL_GRANTOR = 3;
+    public const ACL_GRANTOPT = 4;
+    */
+
     /**
      * Internal function used for parsing ACLs (aclitem[] -> structured array).
      * Mirrors legacy Postgres::_parseACL.
@@ -47,6 +54,7 @@ class AclActions extends AbstractActions
      * @param string $acl
      * @return array|int privileges array or -3 on unknown privilege
      */
+    /*
     public function parseAcl($acl)
     {
         $acl = substr($acl, 1, strlen($acl) - 2);
@@ -66,7 +74,7 @@ class AclActions extends AbstractActions
         }
         $aces[] = substr($acl, $j);
 
-        $temp = [];
+        $result = [];
 
         foreach ($aces as $v) {
             if (strpos($v, '"') === 0) {
@@ -105,38 +113,192 @@ class AclActions extends AbstractActions
                 $i++;
             }
 
-            if (strpos($entity, '"') === 0) {
+            if (substr_compare($entity, '"', 0, 1) === 0) {
                 $entity = substr($entity, 1, strlen($entity) - 2);
                 $entity = str_replace('""', '"', $entity);
             }
 
-            $row = [$atype, $entity, [], '', []];
+            $row = [
+                self::ACL_TYPE => $atype,
+                self::ACL_ENTITY => $entity,
+                self::ACL_PRIVS => [],
+                self::ACL_GRANTOR => '',
+                self::ACL_GRANTOPT => [],
+            ];
 
             for ($i = 0; $i < strlen($chars); $i++) {
                 $char = substr($chars, $i, 1);
                 if ($char === '*') {
-                    $row[4][] = self::PRIV_MAP[substr($chars, $i - 1, 1)] ?? null;
+                    $row[self::ACL_GRANTOPT][] = self::PRIV_MAP[substr($chars, $i - 1, 1)] ?? null;
                 } elseif ($char === '/') {
                     $grantor = substr($chars, $i + 1);
                     if (strpos($grantor, '"') === 0) {
                         $grantor = substr($grantor, 1, strlen($grantor) - 2);
                         $grantor = str_replace('""', '"', $grantor);
                     }
-                    $row[3] = $grantor;
+                    $row[self::ACL_GRANTOR] = $grantor;
                     break;
                 } else {
                     if (!isset(self::PRIV_MAP[$char])) {
                         return -3;
                     }
-                    $row[2][] = self::PRIV_MAP[$char];
+                    $row[self::ACL_PRIVS][] = self::PRIV_MAP[$char];
                 }
             }
 
-            $temp[] = $row;
+            $result[] = $row;
         }
 
-        return $temp;
+        return $result;
     }
+    */
+
+    /**
+     * Internal function used for parsing ACLs (aclitem[] -> structured array).
+     * Mirrors legacy Postgres::_parseACL.
+     *
+     * @param string $acl
+     * @return array|int privileges array or -3 on unknown privilege
+     */
+    public function parseAcl($acl)
+    {
+        // Strip surrounding braces: { ... }
+        $acl = trim($acl, '{}');
+
+        $entries = [];
+        $current = '';
+        $inQuotes = false;
+        $len = strlen($acl);
+
+        // --- Split ACL list manually ---
+        for ($i = 0; $i < $len; $i++) {
+            $ch = $acl[$i];
+
+            if ($ch === '"' && ($i === 0 || $acl[$i - 1] !== '\\')) {
+                $inQuotes = !$inQuotes;
+                $current .= $ch;
+                continue;
+            }
+
+            if ($ch === ',' && !$inQuotes) {
+                $entries[] = $current;
+                $current = '';
+                continue;
+            }
+
+            $current .= $ch;
+        }
+        if ($current !== '') {
+            $entries[] = $current;
+        }
+
+        $result = [];
+
+        foreach ($entries as $entry) {
+
+            // --- Unescape quoted ACE ---
+            if (isset($entry[0]) && $entry[0] === '"') {
+                $entry = substr($entry, 1, -1);
+                $entry = str_replace(['\\"', '\\\\'], ['"', '\\'], $entry);
+            }
+
+            // --- Determine ACL type ---
+            if (strpos($entry, '=') === 0) {
+                $type = 'public';
+            } else {
+                $type = 'role';
+            }
+
+            // --- Split entity and privilege chars manually ---
+            $entity = '';
+            $chars = '';
+            $inQuotes = false;
+
+            for ($i = 0, $len2 = strlen($entry); $i < $len2; $i++) {
+                $ch = $entry[$i];
+                $next = $entry[$i + 1] ?? null;
+
+                if ($ch === '"' && $next !== '"') {
+                    $inQuotes = !$inQuotes;
+                    continue;
+                }
+
+                if ($ch === '"' && $next === '"') {
+                    $i++;
+                    $entity .= '"';
+                    continue;
+                }
+
+                if ($ch === '=' && !$inQuotes) {
+                    $chars = substr($entry, $i + 1);
+                    break;
+                }
+
+                $entity .= $ch;
+            }
+
+            // Unescape entity
+            if (substr_compare($entity, '"', 0, 1) === 0) {
+                $entity = substr($entity, 1, -1);
+                $entity = str_replace('""', '"', $entity);
+            }
+
+            // --- Build result row ---
+            $row = [
+                'type' => $type,
+                'entity' => $entity,
+                'privileges' => [],
+                'grantor' => '',
+                'grantable' => [],
+            ];
+
+            // --- Parse privilege chars ---
+            $len3 = strlen($chars);
+            for ($i = 0; $i < $len3; $i++) {
+                $ch = $chars[$i];
+
+                // WITH GRANT OPTION
+                if ($ch === '*') {
+                    $prev = $chars[$i - 1] ?? null;
+                    if ($prev && isset(self::PRIV_MAP[$prev])) {
+                        $row['grantable'][] = self::PRIV_MAP[$prev];
+                    }
+                    continue;
+                }
+
+                // WITH GRANT OPTION FOR ALL PRIVILEGES
+                if ($ch === 'm') {
+                    foreach ($row['privileges'] as $priv) {
+                        $row['grantable'][] = $priv;
+                    }
+                    continue;
+                }
+
+                // GRANTOR
+                if ($ch === '/') {
+                    $grantor = substr($chars, $i + 1);
+                    if (isset($grantor[0]) && $grantor[0] === '"') {
+                        $grantor = substr($grantor, 1, -1);
+                        $grantor = str_replace('""', '"', $grantor);
+                    }
+                    $row['grantor'] = $grantor;
+                    break;
+                }
+
+                // Normal privilege
+                if (!isset(self::PRIV_MAP[$ch])) {
+                    return -3;
+                }
+
+                $row['privileges'][] = self::PRIV_MAP[$ch];
+            }
+
+            $result[] = $row;
+        }
+
+        return $result;
+    }
+
 
     /**
      * Grabs an array of users and their privileges for an object, given its type.
@@ -151,8 +313,8 @@ class AclActions extends AbstractActions
         switch ($type) {
             case 'column':
                 $this->connection->clean($table);
-                $sql = "
-                    SELECT E'{' || pg_catalog.array_to_string(attacl, E',') || E'}' as acl
+                $sql =
+                    "SELECT E'{' || pg_catalog.array_to_string(attacl, E',') || E'}' as acl
                     FROM pg_catalog.pg_attribute a
                         LEFT JOIN pg_catalog.pg_class c ON (a.attrelid = c.oid)
                         LEFT JOIN pg_catalog.pg_namespace n ON (c.relnamespace=n.oid)
@@ -163,8 +325,8 @@ class AclActions extends AbstractActions
             case 'table':
             case 'view':
             case 'sequence':
-                $sql = "
-                    SELECT relacl AS acl FROM pg_catalog.pg_class
+                $sql =
+                    "SELECT relacl AS acl FROM pg_catalog.pg_class
                     WHERE relname='{$object}'
                         AND relnamespace=(SELECT oid FROM pg_catalog.pg_namespace
                             WHERE nspname='{$c_schema}')";

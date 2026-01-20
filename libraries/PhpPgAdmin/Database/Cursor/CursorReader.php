@@ -40,6 +40,11 @@ class CursorReader
     protected $chunkSize;
 
     /**
+     * @var string|null Relation kind (table, view, etc.)
+     */
+    protected $relationKind;
+
+    /**
      * @var bool Whether we're in a transaction
      */
     protected $inTransaction = false;
@@ -98,18 +103,20 @@ class CursorReader
         string $sql,
         ?int $chunkSize = null,
         ?string $tableName = null,
-        ?string $schemaName = null
+        ?string $schemaName = null,
+        ?string $relationKind = null
     ) {
         $this->connection = $connection;
         $this->sql = trim($sql);
         $this->tableName = $tableName;
         $this->schemaName = $schemaName ?? $connection->_schema;
+        $this->relationKind = $relationKind;
 
         // Get native pg connection resource from ADODB
         $this->pgResource = $connection->conn->_connectionID;
 
         // Generate unique cursor name
-        $this->cursorName = 'cursor_' . uniqid() . '_' . mt_rand(1000, 9999);
+        $this->cursorName = 'cursor_' . uniqid(true);
 
         // Calculate or set chunk size
         if ($chunkSize !== null) {
@@ -520,7 +527,8 @@ class CursorReader
             $result = ChunkCalculator::calculate(
                 $this->connection,
                 $this->tableName,
-                $this->schemaName
+                $this->schemaName,
+                $this->relationKind
             );
 
             error_log(sprintf(

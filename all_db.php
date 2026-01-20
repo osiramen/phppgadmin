@@ -46,8 +46,7 @@ function doAlter($confirm)
 				<?php if ($roleActions->isSuperUser()): ?>
 					<?php
 					// Fetch all users
-					$rs = $databaseActions->getDatabaseOwner($dbName);
-					$owner = $rs->fields['usename'] ?? '';
+					$owner = $databaseActions->getDatabaseOwner($dbName);
 					$users = $roleActions->getUsers();
 					?>
 					<tr>

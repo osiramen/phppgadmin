@@ -54,7 +54,12 @@ class SequenceDumper extends ExportDumper
             $this->write("\nCOMMENT ON SEQUENCE {$schemaQuoted}.{$sequenceQuoted} IS '{$comment}';\n");
         }
 
-        $this->writePrivileges($sequence, 'sequence', $schema);
+        $this->writePrivileges(
+            $sequence,
+            'sequence',
+            $schema,
+            $rs->fields['seqowner']
+        );
 
     }
 }

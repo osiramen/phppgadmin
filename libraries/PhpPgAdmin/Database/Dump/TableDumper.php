@@ -67,7 +67,8 @@ class TableDumper extends ExportDumper
                 $sql,
                 null, // Auto-calculate chunk size
                 $table,
-                $schema
+                $schema,
+                'r' // relation kind
             );
 
             // Open cursor (begins transaction)
@@ -101,19 +102,17 @@ class TableDumper extends ExportDumper
         $tableActions = new TableActions($this->connection);
         $t = $tableActions->getTable($table);
         if (!is_object($t) || $t->recordCount() != 1) {
-            $this->connection->rollbackTransaction();
             return false;
         }
 
         $atts = $tableActions->getTableAttributes($table);
         if (!is_object($atts)) {
-            $this->connection->rollbackTransaction();
             return false;
         }
 
-        $cons = (new ConstraintActions($this->connection))->getConstraints($table);
+        $constraintActions = new ConstraintActions($this->connection);
+        $cons = $constraintActions->getConstraints($table);
         if (!is_object($cons)) {
-            $this->connection->rollbackTransaction();
             return false;
         }
 
@@ -139,11 +138,7 @@ class TableDumper extends ExportDumper
             ) {
                 $this->write(($atts->fields['type'] == 'integer') ? " SERIAL" : " BIGSERIAL");
             } else {
-                $type = $this->connection->formatType(
-                    $atts->fields['type'],
-                    $atts->fields['atttypmod']
-                );
-                $this->write(" " . $type);
+                $this->write(" " . $atts->fields['type']);
                 if ($this->connection->phpBool($atts->fields['attnotnull'])) {
                     $this->write(" NOT NULL");
                 }
@@ -153,8 +148,8 @@ class TableDumper extends ExportDumper
             }
 
             if ($atts->fields['comment'] !== null) {
-                $this->connection->clean($atts->fields['comment']);
-                $col_comments_sql .= "COMMENT ON COLUMN {$this->schemaQuoted}.{$this->tableQuoted}.{$this->connection->quoteIdentifier($atts->fields['attname'])} IS '{$atts->fields['comment']}';\n";
+                $comment = $this->connection->escapeString($atts->fields['comment']);
+                $col_comments_sql .= "COMMENT ON COLUMN {$this->schemaQuoted}.{$this->tableQuoted}.{$this->connection->quoteIdentifier($atts->fields['attname'])} IS '{$comment}';\n";
             }
 
             $atts->moveNext();
@@ -168,25 +163,24 @@ class TableDumper extends ExportDumper
                 continue;
             }
             $this->write(",\n");
-            $this->connection->fieldClean($cons->fields['conname']);
-            $this->write("    CONSTRAINT \"{$cons->fields['conname']}\" ");
-            if ($cons->fields['consrc'] !== null) {
-                $this->write($cons->fields['consrc']);
-            } else {
+            $name = $this->connection->quoteIdentifier($cons->fields['conname']);
+            $this->write("    CONSTRAINT {$name} ");
+            $src = $cons->fields['consrc'];
+            if (empty($src)) {
+                // Build constraint source from type and columns
+                $columns = trim($cons->fields['columns'], '{}');
                 switch ($cons->fields['contype']) {
                     case 'p':
-                        $keys = $tableActions->getAttributeNames($table, explode(' ', $cons->fields['indkey']));
-                        $this->write("PRIMARY KEY (" . join(',', $keys) . ")");
+                        $src = "PRIMARY KEY ($columns)";
                         break;
                     case 'u':
-                        $keys = $tableActions->getAttributeNames($table, explode(' ', $cons->fields['indkey']));
-                        $this->write("UNIQUE (" . join(',', $keys) . ")");
+                        $src = "UNIQUE ($columns)";
                         break;
                     default:
-                        $this->connection->rollbackTransaction();
                         return false;
                 }
             }
+            $this->write($src);
 
             $cons->moveNext();
         }
@@ -205,14 +199,13 @@ class TableDumper extends ExportDumper
         $atts->moveFirst();
         $first = true;
         while (!$atts->EOF) {
-            $this->connection->fieldClean($atts->fields['attname']);
+            $fieldQuoted = $this->connection->quoteIdentifier($atts->fields['attname']);
             // Only output SET STATISTICS if the value is non-negative and not empty
-            if (isset($atts->fields['attstattarget']) && $atts->fields['attstattarget'] !== '' && $atts->fields['attstattarget'] >= 0) {
+            if ($atts->fields['attstattarget'] >= 0) {
                 if ($first) {
                     $this->write("\n");
                     $first = false;
                 }
-                $fieldQuoted = $this->connection->quoteIdentifier($atts->fields['attname']);
                 $this->write("ALTER TABLE ONLY {$this->schemaQuoted}.{$this->tableQuoted} ALTER COLUMN {$fieldQuoted} SET STATISTICS {$atts->fields['attstattarget']};\n");
             }
             if ($atts->fields['attstorage'] != $atts->fields['typstorage']) {
@@ -231,10 +224,8 @@ class TableDumper extends ExportDumper
                         $storage = 'EXTENDED';
                         break;
                     default:
-                        $this->connection->rollbackTransaction();
                         return false;
                 }
-                $fieldQuoted = $this->connection->quoteIdentifier($atts->fields['attname']);
                 $this->write("ALTER TABLE ONLY {$this->schemaQuoted}.{$this->tableQuoted} ALTER COLUMN {$fieldQuoted} SET STORAGE {$storage};\n");
             }
 
@@ -243,9 +234,9 @@ class TableDumper extends ExportDumper
 
         // table comment
         if ($t->fields['relcomment'] !== null) {
-            $this->connection->clean($t->fields['relcomment']);
+            $comment = $this->connection->escapeString($t->fields['relcomment']);
             $this->write("\n-- Comment\n\n");
-            $this->write("COMMENT ON TABLE {$this->schemaQuoted}.{$this->tableQuoted} IS '{$t->fields['relcomment']}';\n");
+            $this->write("COMMENT ON TABLE {$this->schemaQuoted}.{$this->tableQuoted} IS '{$comment}';\n");
         }
 
         // column comments
@@ -254,17 +245,12 @@ class TableDumper extends ExportDumper
         }
 
         // privileges
-        $privs = (new AclActions($this->connection))->getPrivileges($table, 'table');
-        if (!is_array($privs)) {
-            $this->connection->rollbackTransaction();
-            return false;
-        }
-
-        if (sizeof($privs) > 0) {
-            $this->write("\n-- Privileges\n\n");
-            $this->write("REVOKE ALL ON TABLE {$this->schemaQuoted}.{$this->tableQuoted} FROM PUBLIC;\n");
-            $this->writePrivilegesFromArray($privs, $t);
-        }
+        $this->writePrivileges(
+            $table,
+            'table',
+            $t->fields['relowner'],
+            $t->fields['relacl']
+        );
 
         $this->write("\n");
 
@@ -362,76 +348,6 @@ class TableDumper extends ExportDumper
             $def = str_replace('CREATE RULE', 'CREATE OR REPLACE RULE', $def);
             $this->write("$def;\n");
             $rules->moveNext();
-        }
-    }
-
-    /**
-     * Take the privileges array format used previously and write corresponding GRANT/SET/RESET statements.
-     */
-    private function writePrivilegesFromArray($privs, $t)
-    {
-        foreach ($privs as $v) {
-            $nongrant = array_diff($v[2], $v[4]);
-            if (sizeof($v[2]) == 0 || ($v[0] == 'user' && $v[1] == $t->fields['relowner']))
-                continue;
-            if ($v[3] != $t->fields['relowner']) {
-                $grantor = $v[3];
-                $this->connection->clean($grantor);
-                $this->write("SET SESSION AUTHORIZATION '{$grantor}';\n");
-            }
-            $this->write("GRANT " . join(', ', $nongrant) . " ON TABLE \"{$t->fields['relname']}\" TO ");
-            switch ($v[0]) {
-                case 'public':
-                    $this->write("PUBLIC;\n");
-                    break;
-                case 'user':
-                    $this->connection->fieldClean($v[1]);
-                    $this->write("\"{$v[1]}\";\n");
-                    break;
-                case 'group':
-                    $this->connection->fieldClean($v[1]);
-                    $this->write("GROUP \"{$v[1]}\";\n");
-                    break;
-                default:
-                    $this->connection->rollbackTransaction();
-                    return;
-            }
-
-            if ($v[3] != $t->fields['relowner']) {
-                $this->write("RESET SESSION AUTHORIZATION;\n");
-            }
-
-            if (sizeof($v[4]) == 0)
-                continue;
-
-            if ($v[3] != $t->fields['relowner']) {
-                $grantor = $v[3];
-                $this->connection->clean($grantor);
-                $this->write("SET SESSION AUTHORIZATION '{$grantor}';\n");
-            }
-
-            $this->write("GRANT " . join(', ', $v[4]) . " ON \"{$t->fields['relname']}\" TO ");
-            switch ($v[0]) {
-                case 'public':
-                    $this->write("PUBLIC");
-                    break;
-                case 'user':
-                    $this->connection->fieldClean($v[1]);
-                    $this->write("\"{$v[1]}\"");
-                    break;
-                case 'group':
-                    $this->connection->fieldClean($v[1]);
-                    $this->write("GROUP \"{$v[1]}\"");
-                    break;
-                default:
-                    $this->connection->rollbackTransaction();
-                    return;
-            }
-            $this->write(" WITH GRANT OPTION;\n");
-
-            if ($v[3] != $t->fields['relowner']) {
-                $this->write("RESET SESSION AUTHORIZATION;\n");
-            }
         }
     }
 

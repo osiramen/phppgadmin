@@ -62,7 +62,9 @@ class TypeDumper extends ExportDumper
                 }
             }
 
-            $this->writePrivileges($typeName, 'type', $schema);
+            /*
+            $this->writePrivileges($typeName, 'type', $rs->fields['typowner']);
+            */
         }
     }
 

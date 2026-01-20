@@ -47,7 +47,12 @@ class TablespaceDumper extends ExportDumper
                 }
             }
 
-            $this->writePrivileges($spcname, 'tablespace');
+            $this->writePrivileges(
+                $spcname,
+                'tablespace',
+                $tablespaces->fields['spcowner'],
+                $tablespaces->fields['spcacl']
+            );
 
             $tablespaces->moveNext();
         }

@@ -2,6 +2,8 @@
 
 namespace PhpPgAdmin\Database\Dump;
 
+use PhpPgAdmin\Database\Actions\SchemaActions;
+
 /**
  * Orchestrator dumper for a PostgreSQL schema.
  */
@@ -28,6 +30,12 @@ class SchemaDumper extends ExportDumper
         $this->hasObjectSelection = isset($options['objects']);
         $this->selectedObjects = array_combine($this->selectedObjects, $this->selectedObjects);
         $includeSchemaObjects = $options['include_schema_objects'] ?? true;
+
+        $schemaActions = new SchemaActions($this->connection);
+        $rs = $schemaActions->getSchemaByName($schema);
+        if (!$rs || $rs->EOF) {
+            return;
+        }
 
         // Save and set schema context for Actions that depend on it
         $oldSchema = $this->connection->_schema;
@@ -73,7 +81,12 @@ class SchemaDumper extends ExportDumper
         $this->dumpViews($schema, $options);
 
         // 8. Privileges
-        $this->writePrivileges($schema, 'schema');
+        $this->writePrivileges(
+            $schema,
+            'schema',
+            $rs->fields['ownername'],
+            $rs->fields['nspacl']
+        );
 
         // Restore original schema context
         $this->connection->_schema = $oldSchema;

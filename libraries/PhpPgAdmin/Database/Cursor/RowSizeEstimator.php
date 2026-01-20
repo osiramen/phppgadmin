@@ -34,17 +34,19 @@ class RowSizeEstimator
      * @param string $schemaName Schema name
      * @param int $sampleSize Number of rows to sample (default 1000)
      * @return int Estimated maximum row size in bytes
+     * @param string|null $relationKind Relation kind (table, view, etc.)
      */
     public static function estimateMaxRowSize(
         Postgres $connection,
         string $tableName,
         string $schemaName,
-        int $sampleSize = 1000
+        int $sampleSize = 1000,
+        string $relationKind = null
     ): int {
         try {
             // Get all column names
             $columns = self::getTableColumns($connection, $tableName, $schemaName);
-            
+
             if (empty($columns)) {
                 return 1024; // Default fallback: 1KB per row
             }
@@ -61,30 +63,37 @@ class RowSizeEstimator
             // Sample random rows and get maximum total size
             $escapedSchema = $connection->fieldClean($schemaName);
             $escapedTable = $connection->fieldClean($tableName);
-            
+
+            if ($relationKind === null) {
+                $relationKind = self::getRelationKind($connection, $tableName, $schemaName);
+            }
+
+            // TABLESAMPLE is only valid for ordinary tables, partitioned tables, and materialized views
+            $hasTableSample = in_array($relationKind, ['r', 'p', 'm'], true);
             $sql = sprintf(
                 'SELECT MAX(row_size) as max_size, AVG(row_size) as avg_size, MIN(row_size) as min_size
-                FROM (
-                    SELECT (%s) as row_size
-                    FROM %s.%s
-                    TABLESAMPLE SYSTEM(10)
-                    LIMIT %d
-                ) t',
+                    FROM (
+                        SELECT (%s) as row_size
+                        FROM %s.%s
+                        %s
+                        LIMIT %d
+                    ) t',
                 $sizeSql,
                 $escapedSchema,
                 $escapedTable,
+                $hasTableSample ? 'TABLESAMPLE SYSTEM(10)' : '',
                 $sampleSize
             );
 
             $result = $connection->selectSet($sql);
-            
+
             if ($result && !$result->EOF) {
                 $maxSize = (int) $result->fields['max_size'];
                 $avgSize = (int) $result->fields['avg_size'];
-                
+
                 // Use max size, but add 20% buffer for variability
                 $estimatedSize = (int) ceil($maxSize * 1.2);
-                
+
                 // Minimum 100 bytes per row
                 return max(100, $estimatedSize);
             }
@@ -94,7 +103,7 @@ class RowSizeEstimator
 
         } catch (\Exception $e) {
             error_log('Failed to estimate row size: ' . $e->getMessage());
-            
+
             // Fallback to conservative estimate
             return 5000; // 5KB per row default
         }
@@ -108,6 +117,7 @@ class RowSizeEstimator
      * @param string $schemaName Schema name
      * @return array Array of column names with large types
      */
+    /*
     public static function getLargeColumns(
         Postgres $connection,
         string $tableName,
@@ -116,12 +126,12 @@ class RowSizeEstimator
         try {
             $escapedSchema = $connection->clean($schemaName);
             $escapedTable = $connection->clean($tableName);
-            
+
             // Build type list for WHERE clause
-            $typeList = array_map(function($type) use ($connection) {
+            $typeList = array_map(function ($type) use ($connection) {
                 return $connection->clean($type);
             }, self::TOAST_TYPES);
-            
+
             $typeListSql = "'" . implode("','", array_map('pg_escape_string', self::TOAST_TYPES)) . "'";
 
             $sql = sprintf(
@@ -147,7 +157,7 @@ class RowSizeEstimator
             );
 
             $result = $connection->selectSet($sql);
-            
+
             $largeColumns = [];
             while ($result && !$result->EOF) {
                 $largeColumns[] = [
@@ -165,6 +175,7 @@ class RowSizeEstimator
             return [];
         }
     }
+    */
 
     /**
      * Get table statistics (size, row count, average row size)
@@ -174,6 +185,7 @@ class RowSizeEstimator
      * @param string $schemaName Schema name
      * @return array ['total_bytes' => int, 'row_count' => int, 'avg_row_bytes' => int]
      */
+    /*
     public static function getTableStats(
         Postgres $connection,
         string $tableName,
@@ -222,7 +234,7 @@ class RowSizeEstimator
 
         } catch (\Exception $e) {
             error_log('Failed to get table stats: ' . $e->getMessage());
-            
+
             return [
                 'total_bytes' => 0,
                 'table_bytes' => 0,
@@ -231,6 +243,7 @@ class RowSizeEstimator
             ];
         }
     }
+    */
 
     /**
      * Get list of table columns
@@ -264,7 +277,7 @@ class RowSizeEstimator
             );
 
             $result = $connection->selectSet($sql);
-            
+
             $columns = [];
             while ($result && !$result->EOF) {
                 $columns[] = $result->fields['column_name'];
@@ -280,6 +293,46 @@ class RowSizeEstimator
     }
 
     /**
+     * Get relation kind from pg_class for given schema/table
+     *
+     * @param Postgres $connection Database connection
+     * @param string $tableName Table name
+     * @param string $schemaName Schema name
+     * @return string|null relkind or null if not found
+     */
+    protected static function getRelationKind(
+        Postgres $connection,
+        string $tableName,
+        string $schemaName
+    ): ?string {
+        try {
+            $escapedSchema = $connection->clean($schemaName);
+            $escapedTable = $connection->clean($tableName);
+
+            $sql = sprintf(
+                "SELECT c.relkind
+                 FROM pg_class c
+                 JOIN pg_namespace n ON c.relnamespace = n.oid
+                 WHERE n.nspname = '%s'
+                   AND c.relname = '%s'",
+                $escapedSchema,
+                $escapedTable
+            );
+
+            $result = $connection->selectSet($sql);
+
+            if ($result && !$result->EOF) {
+                return $result->fields['relkind'];
+            }
+
+            return null;
+        } catch (\Exception $e) {
+            error_log('Failed to get relation kind: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
      * Check if table is likely to have large rows (based on TOAST columns)
      * 
      * @param Postgres $connection Database connection
@@ -287,6 +340,7 @@ class RowSizeEstimator
      * @param string $schemaName Schema name
      * @return bool True if table has TOAST-capable columns
      */
+    /*
     public static function hasLargeColumns(
         Postgres $connection,
         string $tableName,
@@ -295,6 +349,7 @@ class RowSizeEstimator
         $largeColumns = self::getLargeColumns($connection, $tableName, $schemaName);
         return !empty($largeColumns);
     }
+    */
 
     /**
      * Get comprehensive table size analysis
@@ -304,6 +359,7 @@ class RowSizeEstimator
      * @param string $schemaName Schema name
      * @return array Comprehensive analysis
      */
+    /*
     public static function analyzeTable(
         Postgres $connection,
         string $tableName,
@@ -323,7 +379,8 @@ class RowSizeEstimator
             'max_row_bytes_estimated' => $maxRowSize,
             'has_large_columns' => !empty($largeColumns),
             'large_columns' => $largeColumns,
-            'recommended_chunk_size' => max(50, min(50000, (int)(5 * 1024 * 1024 / max(1, $maxRowSize)))),
+            'recommended_chunk_size' => max(50, min(50000, (int) (5 * 1024 * 1024 / max(1, $maxRowSize)))),
         ];
     }
+    */
 }

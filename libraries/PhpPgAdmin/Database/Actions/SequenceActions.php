@@ -124,7 +124,7 @@ class SequenceActions extends AbstractActions
         $this->connection->fieldClean($sequence);
         $this->connection->clean($sequence);
 
-        $sql = "SELECT pg_catalog.NEXTVAL('\"{$f_schema}\".\"{$sequence}\"')";
+        $sql = "SELECT pg_catalog.SETVAL('\"{$f_schema}\".\"{$sequence}\"', pg_catalog.NEXTVAL('\"{$f_schema}\".\"{$sequence}\"'), true);";
 
         return $this->connection->execute($sql);
     }
@@ -141,7 +141,7 @@ class SequenceActions extends AbstractActions
         $this->connection->clean($sequence);
         $this->connection->clean($nextvalue);
 
-        $sql = "SELECT pg_catalog.SETVAL('\"{$f_schema}\".\"{$sequence}\"', '{$nextvalue}')";
+        $sql = "SELECT pg_catalog.SETVAL('\"{$f_schema}\".\"{$sequence}\"', '{$nextvalue}', true)";
 
         return $this->connection->execute($sql);
     }
@@ -185,9 +185,15 @@ class SequenceActions extends AbstractActions
     /**
      * Creates a new sequence.
      */
-    public function createSequence($sequence, $increment, $minvalue, $maxvalue,
-        $startvalue, $cachevalue, $cycledvalue)
-    {
+    public function createSequence(
+        $sequence,
+        $increment,
+        $minvalue,
+        $maxvalue,
+        $startvalue,
+        $cachevalue,
+        $cycledvalue
+    ) {
         $f_schema = $this->connection->_schema;
         $this->connection->fieldClean($f_schema);
         $this->connection->fieldClean($sequence);
@@ -270,9 +276,16 @@ class SequenceActions extends AbstractActions
     /**
      * Alter a sequence's properties.
      */
-    public function alterSequenceProps($seqrs, $increment, $minvalue, $maxvalue,
-        $restartvalue, $cachevalue, $cycledvalue, $startvalue)
-    {
+    public function alterSequenceProps(
+        $seqrs,
+        $increment,
+        $minvalue,
+        $maxvalue,
+        $restartvalue,
+        $cachevalue,
+        $cycledvalue,
+        $startvalue
+    ) {
         $sql = '';
         if (!empty($increment) && ($increment != $seqrs->fields['increment_by'])) {
             $sql .= " INCREMENT {$increment}";
@@ -310,12 +323,23 @@ class SequenceActions extends AbstractActions
      * Internal helper to alter a sequence; must be run inside a transaction.
      * Returns 0 on success or negative error codes from legacy flow.
      */
-    private function alterSequenceInternal($seqrs, $name, $comment, $owner, $schema, $increment,
-        $minvalue, $maxvalue, $restartvalue, $cachevalue, $cycledvalue, $startvalue)
-    {
+    private function alterSequenceInternal(
+        $seqrs,
+        $name,
+        $comment,
+        $owner,
+        $schema,
+        $increment,
+        $minvalue,
+        $maxvalue,
+        $restartvalue,
+        $cachevalue,
+        $cycledvalue,
+        $startvalue
+    ) {
         $this->connection->fieldArrayClean($seqrs->fields);
 
-            $status = $this->connection->setComment('SEQUENCE', $seqrs->fields['seqname'], '', $comment);
+        $status = $this->connection->setComment('SEQUENCE', $seqrs->fields['seqname'], '', $comment);
         if ($status != 0) {
             return -4;
         }
@@ -357,9 +381,20 @@ class SequenceActions extends AbstractActions
      * Alters a sequence.
      * @return int 0 success, -1 transaction error, -2 get existing sequence error, or internal error codes
      */
-    public function alterSequence($sequence, $name, $comment, $owner = null, $schema = null, $increment = null,
-        $minvalue = null, $maxvalue = null, $restartvalue = null, $cachevalue = null, $cycledvalue = null, $startvalue = null)
-    {
+    public function alterSequence(
+        $sequence,
+        $name,
+        $comment,
+        $owner = null,
+        $schema = null,
+        $increment = null,
+        $minvalue = null,
+        $maxvalue = null,
+        $restartvalue = null,
+        $cachevalue = null,
+        $cycledvalue = null,
+        $startvalue = null
+    ) {
         $this->connection->fieldClean($sequence);
 
         $data = $this->getSequence($sequence);
@@ -374,8 +409,20 @@ class SequenceActions extends AbstractActions
             return -1;
         }
 
-        $status = $this->alterSequenceInternal($data, $name, $comment, $owner, $schema, $increment,
-            $minvalue, $maxvalue, $restartvalue, $cachevalue, $cycledvalue, $startvalue);
+        $status = $this->alterSequenceInternal(
+            $data,
+            $name,
+            $comment,
+            $owner,
+            $schema,
+            $increment,
+            $minvalue,
+            $maxvalue,
+            $restartvalue,
+            $cachevalue,
+            $cycledvalue,
+            $startvalue
+        );
 
         if ($status != 0) {
             $this->connection->rollbackTransaction();

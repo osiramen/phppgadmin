@@ -417,7 +417,29 @@ function doExport($msg = '')
 	]);
 }
 
+function doImport()
+{
+	$pg = AppContainer::getPostgres();
+	$misc = AppContainer::getMisc();
+	$lang = AppContainer::getLang();
 
+	$schemaActions = new SchemaActions($pg);
+	$rs = $schemaActions->getSchemaByName($_REQUEST['schema']);
+	if (!$rs || $rs->EOF) {
+		doDefault($lang['strnoschema']);
+		return;
+	}
+	if ($rs->fields['oid'] < 16384) {
+		doDefault($lang['strsystemobjectdenied']);
+		return;
+	}
+
+	$misc->printTrail('database');
+	$misc->printTabs('schema', 'import');
+	$import = new ImportFormRenderer();
+	$import->renderImportForm('schema', ['scope_ident' => $_REQUEST['schema'] ?? '']);
+
+}
 
 /**
  * Generate XML for the browser tree.
@@ -496,6 +518,7 @@ $misc = AppContainer::getMisc();
 $lang = AppContainer::getLang();
 
 $action = $_REQUEST['action'] ?? '';
+//exit;
 
 
 if ($action == 'tree')
@@ -532,10 +555,7 @@ switch ($action) {
 		doExport();
 		break;
 	case 'import':
-		$misc->printTrail('database');
-		$misc->printTabs('schema', 'import');
-		$import = new ImportFormRenderer();
-		$import->renderImportForm('schema', ['scope_ident' => $_REQUEST['schema'] ?? '']);
+		doImport();
 		break;
 	default:
 		doDefault();

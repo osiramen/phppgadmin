@@ -2,6 +2,8 @@
 
 namespace PhpPgAdmin\Database\Dump;
 
+use PhpPgAdmin\Database\Actions\DomainActions;
+
 /**
  * Dumper for PostgreSQL domains.
  */
@@ -16,19 +18,8 @@ class DomainDumper extends ExportDumper
             return;
         }
 
-        $c_schema = $this->connection->escapeString($schema);
-        $c_domain = $this->connection->escapeString($domainName);
-
-        $sql = "SELECT t.oid, t.typname,
-                pg_catalog.format_type(t.typbasetype, t.typtypmod) AS basetype,
-                t.typdefault, t.typnotnull,
-                (SELECT pg_catalog.obj_description(t.oid, 'pg_type')) AS comment
-                FROM pg_catalog.pg_type t
-                JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
-                WHERE t.typname = '{$c_domain}' AND n.nspname = '{$c_schema}'
-                    AND t.typtype = 'd'";
-
-        $rs = $this->connection->selectSet($sql);
+        $domainActions = new DomainActions($this->connection);
+        $rs = $domainActions->getDomain($domainName);
 
         if (!$rs || $rs->EOF) {
             return;
@@ -40,32 +31,40 @@ class DomainDumper extends ExportDumper
         $this->write("\n-- Domain: $schemaQuoted.$domainQuoted\n");
         $this->writeDrop('DOMAIN', "$schemaQuoted.$domainQuoted", $options);
 
-        $this->write("CREATE DOMAIN $schemaQuoted.$domainQuoted AS {$rs->fields['basetype']}");
+        $this->write("CREATE DOMAIN $schemaQuoted.$domainQuoted AS {$rs->fields['domtype']}");
 
-        if (isset($rs->fields['typdefault']) && $rs->fields['typdefault'] !== null) {
-            $this->write("\n    DEFAULT {$rs->fields['typdefault']}");
+        if (isset($rs->fields['domdef'])) {
+            $this->write("\n    DEFAULT {$rs->fields['domdef']}");
         }
 
-        if ($this->connection->phpBool($rs->fields['typnotnull'])) {
+        $notNull = false;
+        if ($this->connection->phpBool($rs->fields['domnotnull'])) {
             $this->write("\n    NOT NULL");
+            $notNull = true;
         }
 
         // Constraints
-        $this->dumpConstraints($rs->fields['oid'], $options);
+        $this->dumpConstraints($rs->fields['oid'], $notNull);
 
         $this->write(";\n");
 
-        if ($this->shouldIncludeComments($options) && isset($rs->fields['comment']) && $rs->fields['comment'] !== null) {
-            $this->connection->clean($rs->fields['comment']);
+        if ($this->shouldIncludeComments($options) && !empty($rs->fields['domcomment'])) {
+            $comment = $this->connection->escapeString($rs->fields['domcomment']);
             $this->write(
-                "\nCOMMENT ON DOMAIN $schemaQuoted.$domainQuoted IS '{$rs->fields['comment']}';\n"
+                "\nCOMMENT ON DOMAIN $schemaQuoted.$domainQuoted IS '{$comment}';\n"
             );
         }
 
-        $this->writePrivileges($domainName, 'type', $schema);
+        /*
+        $this->writePrivileges(
+            $domainName,
+            'type',
+            $rs->fields['domowner']
+        );
+        */
     }
 
-    protected function dumpConstraints($domainOid, $options)
+    protected function dumpConstraints($domainOid, $notNull)
     {
         $sql = "SELECT conname, pg_catalog.pg_get_constraintdef(oid, true) AS consrc
                 FROM pg_catalog.pg_constraint
@@ -76,6 +75,12 @@ class DomainDumper extends ExportDumper
             return;
         }
         while (!$rs->EOF) {
+            $src = $rs->fields['consrc'];
+            // Skip NOT NULL constraint if already handled
+            if ($notNull && stripos($src, 'NOT NULL') !== false) {
+                $rs->moveNext();
+                continue;
+            }
             $conname = $this->connection->escapeIdentifier($rs->fields['conname']);
             $this->write("\n    CONSTRAINT $conname {$rs->fields['consrc']}");
             $rs->moveNext();

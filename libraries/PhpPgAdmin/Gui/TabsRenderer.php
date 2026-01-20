@@ -354,19 +354,19 @@ class TabsRenderer extends AbstractContext
 
             case 'table':
                 $tabs = [
-                    'columns' => [
-                        'title' => $lang['strcolumns'],
-                        'url' => 'tblproperties.php',
-                        'urlvars' => ['subject' => 'table', 'table' => field('table')],
-                        'icon' => 'Columns',
-                        'branch' => true,
-                    ],
                     'browse' => [
                         'title' => $lang['strbrowse'],
                         'icon' => 'Table',
                         'url' => 'display.php',
                         'urlvars' => ['subject' => 'table', 'table' => field('table')],
                         'return' => 'table',
+                    ],
+                    'columns' => [
+                        'title' => $lang['strcolumns'],
+                        'url' => 'tblproperties.php',
+                        'urlvars' => ['subject' => 'table', 'table' => field('table')],
+                        'icon' => 'Columns',
+                        'branch' => true,
                     ],
                     'select' => [
                         'title' => $lang['strselect'],
@@ -660,12 +660,9 @@ class TabsRenderer extends AbstractContext
     public function getLastTabURL($section)
     {
         $tabs = $this->getNavTabs($section);
-
-        if (isset($_SESSION['webdbLastTab'][$section]) && isset($tabs[$_SESSION['webdbLastTab'][$section]])) {
-            $tab = $tabs[$_SESSION['webdbLastTab'][$section]];
-        } else {
-            $tab = reset($tabs);
-        }
+        //$tab = $tabs[$_SESSION['webdbLastTab'][$section]] ?? reset($tabs);
+        // Use first tab to avoid ambiguous behavior
+        $tab = reset($tabs);
 
         return isset($tab['url']) ? $tab : null;
     }

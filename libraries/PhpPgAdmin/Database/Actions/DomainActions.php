@@ -16,8 +16,9 @@ class DomainActions extends AbstractActions
         $this->connection->clean($c_schema);
         $this->connection->clean($domain);
 
-        $sql = "
-            SELECT
+        $sql =
+            "SELECT
+                t.oid,
                 t.typname AS domname,
                 pg_catalog.format_type(t.typbasetype, t.typtypmod) AS domtype,
                 t.typnotnull AS domnotnull,

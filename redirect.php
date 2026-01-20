@@ -20,7 +20,6 @@ if (isset($url['urlvars'])) {
 	$_GET = array_merge($_GET, $urlvars);
 }
 
-//var_dump($url['url']);
+//var_dump($url);
 //exit;
 require $url['url'];
-

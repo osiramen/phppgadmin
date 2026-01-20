@@ -139,6 +139,7 @@ $lang['strfileimported'] = 'File imported.';
 $lang['struploadfile'] = 'Upload file';
 $lang['strupload'] = 'Upload';
 $lang['strnewwindow'] = 'Open New Window';
+$lang['strsystemobjectdenied'] = 'It is a system object and cannot be modified.';
 
 # Import form labels
 $lang['strimportroles'] = 'Import roles';

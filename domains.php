@@ -291,6 +291,7 @@ function doProperties($msg = '')
 					]
 				]
 			],
+			'icon' => $misc->icon('Delete'),
 			'content' => $lang['strdrop']
 		],
 		'addcheck' => [
@@ -306,6 +307,7 @@ function doProperties($msg = '')
 					]
 				]
 			],
+			'icon' => $misc->icon('AddCheckConstraint'),
 			'content' => $lang['straddcheck']
 		],
 		'alter' => [
@@ -321,7 +323,22 @@ function doProperties($msg = '')
 					]
 				]
 			],
+			'icon' => $misc->icon('Edit'),
 			'content' => $lang['stralter']
+		],
+		'default' => [
+			'attr' => [
+				'href' => [
+					'url' => 'domains.php',
+					'urlvars' => [
+						'server' => $_REQUEST['server'],
+						'database' => $_REQUEST['database'],
+						'schema' => $_REQUEST['schema'],
+					]
+				]
+			],
+			'icon' => $misc->icon('Domains'),
+			'content' => $lang['strdomains']
 		],
 	];
 

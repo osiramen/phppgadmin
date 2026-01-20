@@ -14,7 +14,10 @@ class DatabaseActions extends AbstractActions
     public function getDatabase($database)
     {
         $this->connection->clean($database);
-        $sql = "SELECT * FROM pg_database WHERE datname='{$database}'";
+        $sql =
+            "SELECT d.*, pg_catalog.pg_get_userbyid(d.datdba) AS owner
+            FROM pg_database d
+            WHERE datname='{$database}'";
         return $this->connection->selectSet($sql);
     }
 
@@ -94,8 +97,11 @@ class DatabaseActions extends AbstractActions
     public function getDatabaseOwner($database)
     {
         $this->connection->clean($database);
-        $sql = "SELECT usename FROM pg_user, pg_database WHERE pg_user.usesysid = pg_database.datdba AND pg_database.datname = '{$database}' ";
-        return $this->connection->selectSet($sql);
+        $sql =
+            "SELECT pg_catalog.pg_get_userbyid(datdba) AS owner
+            FROM pg_catalog.pg_database
+            WHERE datname = '{$database}'";
+        return $this->connection->selectField($sql, 'owner');
     }
 
     /**

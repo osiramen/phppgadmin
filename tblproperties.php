@@ -217,9 +217,20 @@ function doExport($msg = '')
 
 function doImport($msg = '')
 {
-	//$pg = AppContainer::getPostgres();
+	$pg = AppContainer::getPostgres();
 	$misc = AppContainer::getMisc();
-	//$lang = AppContainer::getLang();
+	$lang = AppContainer::getLang();
+
+	$tableActions = new TableActions($pg);
+	$rs = $tableActions->getTable($_REQUEST['table']);
+	if ($rs->recordCount() == 0 || $rs->fields['relkind'] != 'r') {
+		doDefault($lang['strnotable']);
+		return;
+	}
+	if ($rs->fields['oid'] < 16384) {
+		doDefault($lang['strsystemobjectdenied']);
+		return;
+	}
 
 	$misc->printTrail('table');
 	$misc->printTabs('table', 'import');

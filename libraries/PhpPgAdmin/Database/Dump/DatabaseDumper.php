@@ -3,8 +3,9 @@
 namespace PhpPgAdmin\Database\Dump;
 
 use PhpPgAdmin\Core\AppContainer;
-use PhpPgAdmin\Database\Actions\SchemaActions;
 use PhpPgAdmin\Database\Connector;
+use PhpPgAdmin\Database\Actions\SchemaActions;
+use PhpPgAdmin\Database\Actions\DatabaseActions;
 
 /**
  * Orchestrator dumper for a PostgreSQL database.
@@ -18,10 +19,15 @@ class DatabaseDumper extends ExportDumper
             return;
         }
 
-        $c_database = $database;
-        $this->connection->clean($c_database);
+        $databaseActions = new DatabaseActions($this->connection);
+        $rs = $databaseActions->getDatabase($database);
+        if (!$rs || $rs->EOF) {
+            return;
+        }
 
-        $this->writeHeader("Database: \"{$c_database}\"");
+        $databaseQuoted = $this->connection->quoteIdentifier($database);
+
+        $this->writeHeader("Database: {$databaseQuoted}");
 
         // Emit global preliminaries (ON_ERROR_STOP) unless suppressed
         if (empty($options['suppress_preliminaries'])) {
@@ -33,9 +39,9 @@ class DatabaseDumper extends ExportDumper
         if (!empty($options['add_create_database'])) {
             $this->write("-- Database creation\n");
             if (!empty($options['clean'])) {
-                $this->write("DROP DATABASE IF EXISTS \"" . addslashes($c_database) . "\" CASCADE;\n");
+                $this->write("DROP DATABASE IF EXISTS {$databaseQuoted} CASCADE;\n");
             }
-            $this->write("CREATE DATABASE \"" . addslashes($c_database) . "\";\n");
+            $this->write("CREATE DATABASE {$databaseQuoted};\n");
         }
 
         $this->writeConnectHeader($database);
@@ -72,7 +78,7 @@ class DatabaseDumper extends ExportDumper
 
         // Iterate through schemas
         $schemaActions = new SchemaActions($this->connection);
-        $schemas = $schemaActions->getSchemas();
+        $schemas = $schemaActions->getSchemas(false);
 
         $dumper = $this->createSubDumper('schema');
         while ($schemas && !$schemas->EOF) {
@@ -83,7 +89,12 @@ class DatabaseDumper extends ExportDumper
             $schemas->moveNext();
         }
 
-        $this->writePrivileges($database, 'database');
+        $this->writePrivileges(
+            $database,
+            'database',
+            $rs->fields['owner'],
+            $rs->fields['datacl']
+        );
 
         // End transaction for this database
         if (empty($options['structure_only'])) {

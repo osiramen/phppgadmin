@@ -192,7 +192,7 @@ function doProperties($msg = '')
 		echo "<th class=\"data\">{$lang['strcancycle']}</th>";
 		echo "<th class=\"data\">{$lang['striscalled']}</th></tr>";
 		echo "<tr>";
-		echo "<td class=\"data1\">", $misc->printVal($sequence->fields['seqname']), "</td>";
+		echo "<td class=\"data1 no-wrap\"><img src=\"", $misc->icon('Sequence'), "\" alt=\"Sequence\" class=\"icon\" />", $misc->printVal($sequence->fields['seqname']), "</td>";
 		if ($pg->hasAlterSequenceStart()) {
 			echo "<td class=\"data1\">", $misc->printVal($sequence->fields['start_value']), "</td>";
 		}
@@ -221,6 +221,7 @@ function doProperties($msg = '')
 						]
 					]
 				],
+				'icon' => $misc->icon('Edit'),
 				'content' => $lang['stralter']
 			],
 			'setval' => [
@@ -236,6 +237,7 @@ function doProperties($msg = '')
 						]
 					]
 				],
+				'icon' => $misc->icon('UniqueConstraint'),
 				'content' => $lang['strsetval']
 			],
 			'nextval' => [
@@ -251,6 +253,7 @@ function doProperties($msg = '')
 						]
 					]
 				],
+				'icon' => $misc->icon('Operator'),
 				'content' => $lang['strnextval']
 			],
 			'restart' => [
@@ -266,6 +269,7 @@ function doProperties($msg = '')
 						]
 					]
 				],
+				'icon' => $misc->icon('Undo'),
 				'content' => $lang['strrestart']
 			],
 			'reset' => [
@@ -281,6 +285,7 @@ function doProperties($msg = '')
 						]
 					]
 				],
+				'icon' => $misc->icon('Refresh'),
 				'content' => $lang['strreset']
 			],
 			'showall' => [
@@ -294,6 +299,7 @@ function doProperties($msg = '')
 						]
 					]
 				],
+				'icon' => $misc->icon('Sequences'),
 				'content' => $lang['strshowallsequences']
 			]
 		];
@@ -559,8 +565,7 @@ function doSetval($msg = '')
 		echo "<table border=\"0\">";
 		echo "<tr><th class=\"data left required\">{$lang['strlastvalue']}</th>\n";
 		echo "<td class=\"data1\">";
-		echo "<input name=\"nextvalue\" size=\"32\" maxlength=\"{$pg->_maxNameLen}\" value=\"",
-			$misc->printVal($sequence->fields['last_value']), "\" /></td></tr>\n";
+		echo "<input name=\"nextvalue\" size=\"32\" maxlength=\"{$pg->_maxNameLen}\" value=\"", $sequence->fields['last_value'], "\" /></td></tr>\n";
 		echo "</table>\n";
 		echo "<p><input type=\"hidden\" name=\"action\" value=\"setval\" />\n";
 		echo "<input type=\"hidden\" name=\"sequence\" value=\"", html_esc($_REQUEST['sequence']), "\" />\n";
@@ -569,7 +574,7 @@ function doSetval($msg = '')
 		echo "<input type=\"submit\" name=\"cancel\" value=\"{$lang['strcancel']}\" /></p>\n";
 		echo "</form>\n";
 	} else
-		echo "<p>{$lang['strnodata']}</p>\n";
+		echo "<p class=\"no-data\">{$lang['strnodata']}</p>\n";
 }
 
 /**

@@ -45,7 +45,8 @@ class ChunkCalculator
         Postgres $connection,
         string $tableName,
         ?string $schemaName = null,
-        ?int $memoryLimitBytes = null
+        ?int $memoryLimitBytes = null,
+        ?string $relationKind = null
     ): array {
         $schemaName = $schemaName ?? $connection->_schema;
 
@@ -56,8 +57,8 @@ class ChunkCalculator
 
         // Calculate available memory for chunking
         $currentUsage = memory_get_usage(true);
-        $availableMemory = $memoryLimitBytes > 0 
-            ? (int)(($memoryLimitBytes - $currentUsage) * self::MEMORY_SAFETY_FACTOR)
+        $availableMemory = $memoryLimitBytes > 0
+            ? (int) (($memoryLimitBytes - $currentUsage) * self::MEMORY_SAFETY_FACTOR)
             : self::TARGET_MEMORY_MAX;
 
         // Ensure we have at least some memory to work with
@@ -65,9 +66,15 @@ class ChunkCalculator
 
         // Get table statistics
         //$stats = RowSizeEstimator::getTableStats($connection, $tableName, $schemaName);
-        
+
         // Estimate maximum row size
-        $maxRowBytes = RowSizeEstimator::estimateMaxRowSize($connection, $tableName, $schemaName, 1000);
+        $maxRowBytes = RowSizeEstimator::estimateMaxRowSize(
+            $connection,
+            $tableName,
+            $schemaName,
+            1000,
+            $relationKind
+        );
 
         // Calculate chunk size based on available memory and row size
         if ($maxRowBytes > 0) {
@@ -195,8 +202,8 @@ class ChunkCalculator
         $peak = memory_get_peak_usage(true);
         $limit = self::parseMemoryLimit(ini_get('memory_limit'));
 
-        $percent = ($limit > 0 && $limit !== PHP_INT_MAX) 
-            ? ($current / $limit) * 100 
+        $percent = ($limit > 0 && $limit !== PHP_INT_MAX)
+            ? ($current / $limit) * 100
             : 0;
 
         return [

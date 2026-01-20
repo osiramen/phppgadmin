@@ -218,23 +218,23 @@ function doDefault($msg = '')
 		foreach ($privileges as $v) {
 			$id = (($i & 1) == 0 ? '1' : '2');
 			echo "<tr class=\"data{$id}\">\n";
-			echo "<td><img class=\"icon\" src=\"", $misc->icon('Role'), "\" alt=\"", $lang['strrole'], "\" /> <b>", $misc->printVal($v[1]), "</b></td>\n";
+			echo "<td><img class=\"icon\" src=\"", $misc->icon('Role'), "\" alt=\"", $lang['strrole'], "\" /> <b>", $misc->printVal($v['entity']), "</b></td>\n";
 			foreach (AclActions::PRIV_LIST[$_REQUEST['subject']] as $v2) {
 				// Skip over ALL PRIVILEGES
 				if ($v2 == 'ALL PRIVILEGES')
 					continue;
 				echo "<td>";
-				if (in_array($v2, $v[2]))
+				if (in_array($v2, $v['privileges']))
 					echo $lang['stryes'];
 				else
 					echo $lang['strno'];
 				// If we have grant option for this, end mark
-				if ($pg->hasGrantOption() && in_array($v2, $v[4]))
+				if ($pg->hasGrantOption() && in_array($v2, $v['grantable']))
 					echo $lang['strasterisk'];
 				echo "</td>\n";
 			}
 			if ($pg->hasGrantOption()) {
-				echo "<td>", $misc->printVal($v[3]), "</td>\n";
+				echo "<td>", $misc->printVal($v['grantor']), "</td>\n";
 			}
 			echo "</tr>\n";
 			$i++;

@@ -30,7 +30,7 @@ class TablespaceActions extends AbstractActions
 		} else {
 			$spclocation = "spclocation";
 		}
-		$sql = "SELECT spcname, pg_catalog.pg_get_userbyid(spcowner) AS spcowner, $spclocation,
+		$sql = "SELECT spcname, spcacl, pg_catalog.pg_get_userbyid(spcowner) AS spcowner, $spclocation,
                     (SELECT description FROM pg_catalog.pg_shdescription pd WHERE pg_tablespace.oid=pd.objoid AND pd.classoid='pg_tablespace'::regclass) AS spccomment
 				FROM pg_catalog.pg_tablespace";
 

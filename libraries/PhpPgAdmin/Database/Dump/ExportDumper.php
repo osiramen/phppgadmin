@@ -67,14 +67,14 @@ abstract class ExportDumper extends AbstractContext
         }
     }
 
-    private $headerLevel = 0;
+    private static $headerLevel = 0;
 
     /**
      * Generates a header for the dump.
      */
     protected function writeHeader($title)
     {
-        if ($this->headerLevel++ > 0) {
+        if (self::$headerLevel++ > 0) {
             return;
         }
         $name = AppContainer::getAppName();
@@ -88,7 +88,7 @@ abstract class ExportDumper extends AbstractContext
 
     protected function writeFooter()
     {
-        if ($this->headerLevel-- > 1) {
+        if (self::$headerLevel-- > 1) {
             return;
         }
         $this->write("-- Dump completed on " . date('Y-m-d H:i:s') . "\n");
@@ -99,7 +99,7 @@ abstract class ExportDumper extends AbstractContext
         if (!isset($database)) {
             $database = $this->connection->conn->database;
         }
-        if ($this->headerLevel++ > 1) {
+        if (self::$headerLevel++ > 1) {
             return;
         }
         $this->write("\\connect " . $this->connection->quoteIdentifier($database) . "\n");
@@ -123,7 +123,7 @@ abstract class ExportDumper extends AbstractContext
 
     protected function writeConnectFooter()
     {
-        if ($this->headerLevel-- > 2) {
+        if (self::$headerLevel-- > 2) {
             return;
         }
         // After dumping this database, reset session_replication_role to origin
@@ -131,38 +131,101 @@ abstract class ExportDumper extends AbstractContext
     }
 
     /**
-     * Generates GRANT/REVOKE SQL for an object.
-     * 
+     * Generates full GRANT/REVOKE SQL for an object, including:
+     * - REVOKE ALL FROM PUBLIC (falls nötig)
+     * - GRANT ... 
+     * - GRANT ... WITH GRANT OPTION
+     * - SET/RESET SESSION AUTHORIZATION für Grantor ≠ Owner
+     *
      * @param string $objectName
-     * @param string $objectType (table, view, sequence, database, function, language, schema, tablespace)
-     * @param string|null $schema
+     * @param string $objectType
+     * @param string $owner
      */
-    protected function writePrivileges($objectName, $objectType, $schema = null)
+    protected function writePrivileges($objectName, $objectType, $owner, $acl = null)
     {
         $aclActions = new AclActions($this->connection);
-        $privileges = $aclActions->getPrivileges($objectName, $objectType);
+        if (isset($acl)) {
+            $privileges = $aclActions->parseAcl($acl);
+        } else {
+            $privileges = $aclActions->getPrivileges($objectName, $objectType);
+        }
+        $nameQuoted = $this->connection->quoteIdentifier($objectName);
 
-        // Handle error codes returned as integers (-1 for unsupported type, -2 for invalid entity)
         if (!is_array($privileges) || empty($privileges)) {
             return;
         }
 
-        $this->write("\n-- Privileges for {$objectType} {$objectName}\n");
+        $this->write("\n-- Privileges for {$objectType} {$nameQuoted}\n");
 
-        // Reconstruct GRANTS from parsed ACLs
-        // This logic is adapted from TableActions::getPrivilegesSql but generalized
+        // ---------------------------------------------------------
+        // 1) REVOKE ALL FROM PUBLIC (only if PUBLIC is explicitly in the ACL)
+        // ---------------------------------------------------------
         foreach ($privileges as $priv) {
-            $grantee = ($priv[1] == '') ? 'PUBLIC' : "\"{$priv[1]}\"";
-            $privs = implode(', ', $priv[2]);
+            if ($priv['entity'] === '' && empty($priv['privileges'])) {
+                // PUBLIC explicitly has NO rights → REVOKE needed
+                $this->write("REVOKE ALL ON {$objectType} {$nameQuoted} FROM PUBLIC;\n");
+                break;
+            }
+        }
 
-            if ($privs == 'ALL PRIVILEGES') {
-                $this->write("GRANT ALL ON {$objectType} \"{$objectName}\" TO {$grantee};\n");
-            } else {
-                $this->write("GRANT {$privs} ON {$objectType} \"{$objectName}\" TO {$grantee}");
-                if (!empty($priv[4])) {
-                    $this->write(" WITH GRANT OPTION");
+        // ---------------------------------------------------------
+        // 2) GRANT / GRANT OPTION for each role
+        // ---------------------------------------------------------
+        foreach ($privileges as $priv) {
+
+            $entity = $priv['entity'];
+            $grantee = ($entity === '') ? 'PUBLIC' : $this->connection->quoteIdentifier($entity);
+
+            $normalPrivs = array_diff($priv['privileges'], $priv['grantable']);
+            $grantablePrivs = $priv['grantable'];
+
+            // Skip: no privileges and no GRANT OPTION → nothing to do
+            if (empty($normalPrivs) && empty($grantablePrivs)) {
+                continue;
+            }
+
+            // Skip: Owner gets no GRANTs (pg_dump does the same)
+            if ($entity !== '' && $entity === $owner) {
+                continue;
+            }
+
+            // ---------------------------------------------------------
+            // 2a) GRANT WITHOUT GRANT OPTION
+            // ---------------------------------------------------------
+            if (!empty($normalPrivs)) {
+
+                // Session Authorization falls Grantor ≠ Owner
+                if ($priv['grantor'] !== $owner) {
+                    $grantor = $priv['grantor'];
+                    $this->connection->clean($grantor);
+                    $this->write("SET SESSION AUTHORIZATION '{$grantor}';\n");
                 }
-                $this->write(";\n");
+
+                $privList = implode(', ', $normalPrivs);
+                $this->write("GRANT {$privList} ON {$objectType} {$nameQuoted} TO {$grantee};\n");
+
+                if ($priv['grantor'] !== $owner) {
+                    $this->write("RESET SESSION AUTHORIZATION;\n");
+                }
+            }
+
+            // ---------------------------------------------------------
+            // 2b) GRANT WITH GRANT OPTION
+            // ---------------------------------------------------------
+            if (!empty($grantablePrivs)) {
+
+                if ($priv['grantor'] !== $owner) {
+                    $grantor = $priv['grantor'];
+                    $this->connection->clean($grantor);
+                    $this->write("SET SESSION AUTHORIZATION '{$grantor}';\n");
+                }
+
+                $privList = implode(', ', $grantablePrivs);
+                $this->write("GRANT {$privList} ON {$objectType} {$nameQuoted} TO {$grantee} WITH GRANT OPTION;\n");
+
+                if ($priv['grantor'] !== $owner) {
+                    $this->write("RESET SESSION AUTHORIZATION;\n");
+                }
             }
         }
     }

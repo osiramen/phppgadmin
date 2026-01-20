@@ -344,7 +344,7 @@ function doExport($msg = '')
 	$misc->printMsg($msg);
 
 	$schemaActions = new SchemaActions($pg);
-	$schemas = $schemaActions->getSchemas();
+	$schemas = $schemaActions->getSchemas(false);
 	$schemaNames = [];
 	while (!$schemas->EOF) {
 		$schemaNames[] = $schemas->fields['nspname'];
@@ -361,6 +361,22 @@ function doExport($msg = '')
 		'objects_by_type' => [
 			'schemas' => $schemaNames,
 		],
+	]);
+}
+
+function doImport($msg = '')
+{
+	$misc = AppContainer::getMisc();
+	$lang = AppContainer::getLang();
+	$pg = AppContainer::getPostgres();
+
+	$misc->printTrail('database');
+	$misc->printTabs('database', 'import');
+	$misc->printMsg($msg);
+
+	$import = new ImportFormRenderer();
+	$import->renderImportForm('database', [
+		'scope_ident' => $_REQUEST['database'] ?? ''
 	]);
 }
 
@@ -788,11 +804,7 @@ switch ($action) {
 		doExport();
 		break;
 	case 'import':
-		// Render database-scoped import form
-		$misc->printTrail('database');
-		$misc->printTabs('database', 'import');
-		$import = new ImportFormRenderer();
-		$import->renderImportForm('database', ['scope_ident' => $_REQUEST['database'] ?? '']);
+		doImport();
 		break;
 	case 'signal':
 		doSignal();

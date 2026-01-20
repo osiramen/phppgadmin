@@ -8,27 +8,37 @@ class SchemaActions extends AbstractActions
 {
     /**
      * Return all schemas in the current database.
+     * @param bool|null $showSystem whether to include system schemas; if null, use global setting
      */
-    public function getSchemas()
+    public function getSchemas(bool $showSystem = null)
     {
         $conf = $this->conf();
 
-        if (!$conf['show_system']) {
-            $where = "WHERE nspname NOT LIKE 'pg@_%' ESCAPE '@' AND nspname != 'information_schema'";
+        if ($showSystem === null) {
+            $showSystem = $conf['show_system'];
+        }
+        if (!$showSystem) {
+            // Only user-defined schemas
+            $where = "WHERE pn.nspname NOT LIKE 'pg_%'
+                  AND pn.nspname <> 'information_schema'";
         } else {
-            $where = "WHERE nspname !~ '^pg_t(emp_[0-9]+|oast)$'";
+            // All except temporary and toast schemas
+            $where = "WHERE pn.nspname NOT LIKE 'pg_temp%'
+                  AND pn.nspname NOT LIKE 'pg_toast%'";
         }
 
-        $sql = "
-            SELECT pn.nspname, pu.rolname AS nspowner,
+        $sql =
+            "SELECT pn.nspname, pu.rolname AS nspowner, pn.oid,
                 pg_catalog.obj_description(pn.oid, 'pg_namespace') AS nspcomment
             FROM pg_catalog.pg_namespace pn
-                LEFT JOIN pg_catalog.pg_roles pu ON (pn.nspowner = pu.oid)
+            LEFT JOIN pg_catalog.pg_roles pu ON (pn.nspowner = pu.oid)
             {$where}
-            ORDER BY nspname";
+            ORDER BY nspname
+        ";
 
         return $this->connection->selectSet($sql);
     }
+
 
     /**
      * Return all information relating to a schema.
@@ -36,12 +46,16 @@ class SchemaActions extends AbstractActions
     public function getSchemaByName($schema)
     {
         $this->connection->clean($schema);
-        $sql = "
-            SELECT nspname, nspowner, r.rolname AS ownername, nspacl,
-                pg_catalog.obj_description(pn.oid, 'pg_namespace') as nspcomment
+        $sql =
+            "SELECT
+                pn.oid,
+                pn.nspname,
+                pn.nspowner,
+                pg_catalog.pg_get_userbyid(pn.nspowner) AS ownername,
+                pn.nspacl,
+                pg_catalog.obj_description(pn.oid, 'pg_namespace') AS nspcomment
             FROM pg_catalog.pg_namespace pn
-                LEFT JOIN pg_roles as r ON pn.nspowner = r.oid
-            WHERE nspname='{$schema}'";
+            WHERE pn.nspname = '{$schema}'";
         return $this->connection->selectSet($sql);
     }
 

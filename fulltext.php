@@ -34,6 +34,7 @@ function doDefault($msg = '')
 			'field' => field('name'),
 			'url' => "fulltext.php?action=viewconfig&amp;{$misc->href}&amp;",
 			'vars' => ['ftscfg' => 'name'],
+			'icon' => $misc->icon('FtsCfg'),
 		],
 		'schema' => [
 			'title' => $lang['strschema'],
@@ -419,13 +420,14 @@ function doViewParsers($msg = '')
 	$parsers = $ftsActions->getFtsParsers(false);
 
 	$columns = [
-		'schema' => [
-			'title' => $lang['strschema'],
-			'field' => field('schema'),
-		],
 		'name' => [
 			'title' => $lang['strname'],
 			'field' => field('name'),
+			'icon' => $misc->icon('FtsParser'),
+		],
+		'schema' => [
+			'title' => $lang['strschema'],
+			'field' => field('schema'),
 		],
 		'comment' => [
 			'title' => $lang['strcomment'],
@@ -459,13 +461,14 @@ function doViewDicts($msg = '')
 	$dicts = $ftsActions->getFtsDictionaries(false);
 
 	$columns = [
-		'schema' => [
-			'title' => $lang['strschema'],
-			'field' => field('schema'),
-		],
 		'name' => [
 			'title' => $lang['strname'],
 			'field' => field('name'),
+			'icon' => $misc->icon('FtsDict'),
+		],
+		'schema' => [
+			'title' => $lang['strschema'],
+			'field' => field('schema'),
 		],
 		'actions' => [
 			'title' => $lang['stractions'],

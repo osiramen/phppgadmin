@@ -105,16 +105,26 @@ class AppContainer
 	}
 
 	/** Explicit setters/getters for common dependencies */
+
+	/**
+	 * Config array by reference.
+	 */
 	public static function setConf(array &$conf): void
 	{
 		self::instance()->conf = &$conf;
 	}
 
+	/**
+	 * Config array by reference.
+	 */
 	public static function &getConf(): array
 	{
 		return self::instance()->conf;
 	}
 
+	/**
+	 * Language array.
+	 */
 	public static function setLang(array $lang): void
 	{
 		self::instance()->lang = $lang;
