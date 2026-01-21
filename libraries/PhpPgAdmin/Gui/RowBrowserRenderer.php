@@ -15,14 +15,142 @@ use PhpPgAdmin\Database\Actions\ConstraintActions;
 class RowBrowserRenderer extends AppContext
 {
 
+    private const NO_ORDER_BY_TYPES = [
+        'json' => true,
+        'xml' => true,
+    ];
+
+    /** @var array<int, array<string, list<int>>> */
+    private $fieldNameIndexMapCache = [];
+
+    private function getFieldCount($rs): int
+    {
+        return is_array($rs->fields) ? count($rs->fields) : 0;
+    }
+
+    private function shouldSkipOidColumn($finfo, bool $withOid): bool
+    {
+        $pg = AppContainer::getPostgres();
+        $conf = AppContainer::getConf();
+
+        return ($finfo->name === $pg->id) && (!($withOid && $conf['show_oids']));
+    }
+
+    private function getByteaColumnsForCurrentQuery(): array
+    {
+        $queryHash = $_SESSION['bytea_query_hash'] ?? null;
+        if (!$queryHash) {
+            return [];
+        }
+
+        $cols = $_SESSION['bytea_columns'][$queryHash] ?? [];
+        return is_array($cols) ? $cols : [];
+    }
+
+    private function renderForeignKeyLinks($rs, array $nameIndexMap, array $fkey_information, string $fieldName): bool
+    {
+        $misc = AppContainer::getMisc();
+
+        if (!isset($fkey_information['byfield'][$fieldName])) {
+            return false;
+        }
+
+        $renderedAny = false;
+        foreach ($fkey_information['byfield'][$fieldName] as $conid) {
+            $query_params = $fkey_information['byconstr'][$conid]['url_data'];
+
+            $fkValuesComplete = true;
+            foreach ($fkey_information['byconstr'][$conid]['fkeys'] as $p_field => $f_field) {
+                $pVal = $this->getFieldValueByName($rs, $nameIndexMap, (string) $p_field);
+                if ($pVal === null) {
+                    $fkValuesComplete = false;
+                    break;
+                }
+                $query_params .= '&amp;' . urlencode("fkey[{$f_field}]") . '=' . urlencode((string) $pVal);
+            }
+
+            if (!$fkValuesComplete) {
+                continue;
+            }
+
+            /* $fkey_information['common_url'] is already urlencoded */
+            $query_params .= '&amp;' . $fkey_information['common_url'];
+            echo "<div style=\"display:inline-block;\">";
+            echo "<a class=\"fk fk_" . htmlentities($conid, ENT_QUOTES, 'UTF-8') . "\" href=\"#\" data-href=\"display.php?{$query_params}\">";
+            echo "<img src=\"" . $misc->icon('ForeignKey') . "\" style=\"vertical-align:middle;\" alt=\"[fk]\" title=\""
+                . htmlentities($fkey_information['byconstr'][$conid]['consrc'], ENT_QUOTES, 'UTF-8')
+                . "\" />";
+            echo "</a>";
+            echo "</div>";
+
+            $renderedAny = true;
+        }
+
+        return $renderedAny;
+    }
+
+    private function renderByteaCellValue($rs, array $nameIndexMap, $finfo, $value, array $valParams, array $byteaCols): bool
+    {
+        if (empty($byteaCols) || !isset($byteaCols[$finfo->name]) || !is_array($byteaCols[$finfo->name])) {
+            return false;
+        }
+
+        $pg = AppContainer::getPostgres();
+        $misc = AppContainer::getMisc();
+        $lang = AppContainer::getLang();
+
+        $meta = $byteaCols[$finfo->name];
+        $schema = $meta['schema'] ?? ($_REQUEST['schema'] ?? $pg->_schema);
+        $table = $meta['table'] ?? ($_REQUEST['table'] ?? '');
+        $column = $meta['column'] ?? $finfo->name;
+        $keyFields = $meta['key_fields'] ?? [];
+
+        $canLink = !empty($schema) && !empty($table) && !empty($column) && !empty($keyFields);
+        $keyValues = [];
+        if ($canLink) {
+            foreach ($keyFields as $keyField) {
+                $keyVal = $this->getFieldValueByName($rs, $nameIndexMap, (string) $keyField);
+                if ($keyVal === null) {
+                    $canLink = false;
+                    break;
+                }
+                $keyValues[$keyField] = $keyVal;
+            }
+        }
+
+        $sizeText = $misc->printVal($value, 'prettysize', $valParams);
+        echo $sizeText;
+        if ($canLink && $value !== null) {
+            $params = [
+                'action' => 'downloadbytea',
+                'server' => $_REQUEST['server'],
+                'database' => $_REQUEST['database'],
+                'schema' => $schema,
+                'table' => $table,
+                'column' => $column,
+                'key' => $keyValues,
+                'output' => 'download', // for frameset.js to detect
+            ];
+            $url = 'display.php?' . http_build_query($params);
+            echo ' <a class="ui-btn" href="' . $url . '">' . htmlspecialchars($lang['strdownload']) . '</a>';
+        }
+
+        return true;
+    }
+
     /**
      * Build a map of column name => list of numeric indexes in the recordset.
      * Works with ADO fetch mode set to numeric.
      */
     protected function buildFieldNameIndexMap($rs): array
     {
+        $cacheKey = is_object($rs) ? spl_object_id($rs) : null;
+        if ($cacheKey !== null && isset($this->fieldNameIndexMapCache[$cacheKey])) {
+            return $this->fieldNameIndexMapCache[$cacheKey];
+        }
+
         $map = [];
-        $fieldCount = is_array($rs->fields) ? count($rs->fields) : 0;
+        $fieldCount = $this->getFieldCount($rs);
         for ($i = 0; $i < $fieldCount; $i++) {
             $finfo = $rs->fetchField($i);
             if (!$finfo || !isset($finfo->name)) {
@@ -34,6 +162,11 @@ class RowBrowserRenderer extends AppContext
             }
             $map[$name][] = $i;
         }
+
+        if ($cacheKey !== null) {
+            $this->fieldNameIndexMapCache[$cacheKey] = $map;
+        }
+
         return $map;
     }
 
@@ -110,12 +243,11 @@ class RowBrowserRenderer extends AppContext
         $pg = AppContainer::getPostgres();
         $conf = AppContainer::getConf();
         $j = 0;
-        $noOrderBy = ['json' => true, 'xml' => true];
 
-        $fieldCount = is_array($rs->fields) ? count($rs->fields) : 0;
+        $fieldCount = $this->getFieldCount($rs);
         for ($j = 0; $j < $fieldCount; $j++) {
             $finfo = $rs->fetchField($j);
-            if (($finfo->name === $pg->id) && (!($withOid && $conf['show_oids']))) {
+            if ($this->shouldSkipOidColumn($finfo, (bool) $withOid)) {
                 continue;
             }
 
@@ -129,7 +261,7 @@ class RowBrowserRenderer extends AppContext
                 $keys = array_keys($_REQUEST['orderby']);
 
                 echo "<th class=\"data\">\n";
-                if (!isset($noOrderBy[$finfo->type])) {
+                if (!isset(self::NO_ORDER_BY_TYPES[$finfo->type])) {
                     echo "<span><a class=\"orderby\" data-col=\"", htmlspecialchars($finfo->name), "\" data-type=\"", htmlspecialchars($finfo->type), "\" href=\"display.php?{$sortLink}\"><span>", htmlspecialchars($finfo->name), "</span>";
                     if (isset($_REQUEST['orderby'][$finfo->name])) {
                         if ($_REQUEST['orderby'][$finfo->name] === 'desc')
@@ -166,17 +298,19 @@ class RowBrowserRenderer extends AppContext
 
         $nameIndexMap = $this->buildFieldNameIndexMap($rs);
 
+        $byteaCols = $this->getByteaColumnsForCurrentQuery();
+
         if (!isset($_REQUEST['strings']))
             $_REQUEST['strings'] = 'collapsed';
 
         $class = $editable ? "editable" : "";
 
-        $fieldCount = is_array($rs->fields) ? count($rs->fields) : 0;
+        $fieldCount = $this->getFieldCount($rs);
         for ($j = 0; $j < $fieldCount; $j++) {
             $finfo = $rs->fetchField($j);
             $v = $rs->fields[$j] ?? null;
 
-            if (($finfo->name === $pg->id) && (!($withOid && $conf['show_oids'])))
+            if ($this->shouldSkipOidColumn($finfo, (bool) $withOid))
                 continue;
             elseif ($v !== null && $v == '')
                 echo "<td>&nbsp;</td>";
@@ -188,79 +322,12 @@ class RowBrowserRenderer extends AppContext
                     'null' => true,
                     'clip' => ($_REQUEST['strings'] == 'collapsed')
                 ];
-                if (($v !== null) && isset($fkey_information['byfield'][$finfo->name])) {
-                    foreach ($fkey_information['byfield'][$finfo->name] as $conid) {
-
-                        $query_params = $fkey_information['byconstr'][$conid]['url_data'];
-
-                        $fkValuesComplete = true;
-
-                        foreach ($fkey_information['byconstr'][$conid]['fkeys'] as $p_field => $f_field) {
-                            $pVal = $this->getFieldValueByName($rs, $nameIndexMap, (string) $p_field);
-                            if ($pVal === null) {
-                                $fkValuesComplete = false;
-                                break;
-                            }
-                            $query_params .= '&amp;' . urlencode("fkey[{$f_field}]") . '=' . urlencode((string) $pVal);
-                        }
-
-                        if (!$fkValuesComplete) {
-                            continue;
-                        }
-
-                        /* $fkey_information['common_url'] is already urlencoded */
-                        $query_params .= '&amp;' . $fkey_information['common_url'];
-                        echo "<div style=\"display:inline-block;\">";
-                        echo "<a class=\"fk fk_" . htmlentities($conid, ENT_QUOTES, 'UTF-8') . "\" href=\"#\" data-href=\"display.php?{$query_params}\">";
-                        echo "<img src=\"" . $misc->icon('ForeignKey') . "\" style=\"vertical-align:middle;\" alt=\"[fk]\" title=\""
-                            . htmlentities($fkey_information['byconstr'][$conid]['consrc'], ENT_QUOTES, 'UTF-8')
-                            . "\" />";
-                        echo "</a>";
-                        echo "</div>";
-                    }
+                if (($v !== null) && $this->renderForeignKeyLinks($rs, $nameIndexMap, $fkey_information, (string) $finfo->name)) {
                     $valParams['class'] = 'fk_value';
                 }
+
                 // If this is a modified bytea column, show size + download link
-                $queryHash = $_SESSION['bytea_query_hash'] ?? null;
-                $byteaCols = ($queryHash && isset($_SESSION['bytea_columns'][$queryHash])) ? $_SESSION['bytea_columns'][$queryHash] : [];
-
-                if (!empty($byteaCols) && isset($byteaCols[$finfo->name]) && is_array($byteaCols[$finfo->name])) {
-                    $meta = $byteaCols[$finfo->name];
-                    $schema = $meta['schema'] ?? ($_REQUEST['schema'] ?? $pg->_schema);
-                    $table = $meta['table'] ?? ($_REQUEST['table'] ?? '');
-                    $column = $meta['column'] ?? $finfo->name;
-                    $keyFields = $meta['key_fields'] ?? [];
-
-                    $canLink = !empty($schema) && !empty($table) && !empty($column) && !empty($keyFields);
-                    $keyValues = [];
-                    if ($canLink) {
-                        foreach ($keyFields as $keyField) {
-                            $keyVal = $this->getFieldValueByName($rs, $nameIndexMap, (string) $keyField);
-                            if ($keyVal === null) {
-                                $canLink = false;
-                                break;
-                            }
-                            $keyValues[$keyField] = $keyVal;
-                        }
-                    }
-
-                    $sizeText = $misc->printVal($v, 'prettysize', $valParams);
-                    echo $sizeText;
-                    if ($canLink && $v !== null) {
-                        $params = [
-                            'action' => 'downloadbytea',
-                            'server' => $_REQUEST['server'],
-                            'database' => $_REQUEST['database'],
-                            'schema' => $schema,
-                            'table' => $table,
-                            'column' => $column,
-                            'key' => $keyValues,
-                            'output' => 'download', // for frameset.js to detect
-                        ];
-                        $url = 'display.php?' . http_build_query($params);
-                        echo ' <a class="ui-btn" href="' . $url . '">' . htmlspecialchars($lang['strdownload']) . '</a>';
-                    }
-                } else {
+                if (!$this->renderByteaCellValue($rs, $nameIndexMap, $finfo, $v, $valParams, $byteaCols)) {
                     echo $misc->printVal($v, $finfo->type, $valParams);
                 }
                 echo "</td>";
@@ -322,6 +389,263 @@ class RowBrowserRenderer extends AppContext
         echo "</div>\n";
     }
 
+    private function initBrowseRequestDefaults(array $conf): void
+    {
+        // If current page is not set, default to first page
+        if (!isset($_REQUEST['page'])) {
+            $_REQUEST['page'] = 1;
+        }
+
+        if (!isset($_REQUEST['orderby'])) {
+            $_REQUEST['orderby'] = [];
+        }
+
+        if (!isset($_REQUEST['strings'])) {
+            $_REQUEST['strings'] = 'collapsed';
+        }
+
+        if (!isset($_REQUEST['max_rows'])) {
+            $_REQUEST['max_rows'] = $conf['max_rows'];
+        }
+    }
+
+    private function resolveKeyFields(RowActions $rowActions, $table_name, array $key_fields_early): array
+    {
+        if (!empty($key_fields_early)) {
+            return $key_fields_early;
+        }
+        if (isset($table_name)) {
+            return $rowActions->getRowIdentifier($table_name);
+        }
+        return [];
+    }
+
+    private function filterKeyFieldsToThoseInResult(array $key_fields, array $nameIndexMap): array
+    {
+        // Check that the key is actually in the result set.  This can occur for select
+        // operations where the key fields aren't part of the select.  XXX:  We should
+        // be able to support this, somehow.
+        foreach ($key_fields as $v) {
+            // If a key column is not found in the record set, then we
+            // can't use the key.
+            if (!isset($nameIndexMap[$v])) {
+                return [];
+            }
+        }
+        return $key_fields;
+    }
+
+    private function prepareBrowseActionButtons(array $_gets, $plugin_manager, array $lang): array
+    {
+        $misc = AppContainer::getMisc();
+
+        $buttons = [
+            'edit' => [
+                'icon' => $misc->icon('Edit'),
+                'content' => $lang['stredit'],
+                'attr' => [
+                    'href' => [
+                        'url' => 'display.php',
+                        'urlvars' => array_merge([
+                            'action' => 'confeditrow',
+                            'strings' => $_REQUEST['strings'],
+                            'page' => $_REQUEST['page'],
+                        ], $_gets)
+                    ]
+                ]
+            ],
+            'delete' => [
+                'icon' => $misc->icon('Delete'),
+                'content' => $lang['strdelete'],
+                'attr' => [
+                    'href' => [
+                        'url' => 'display.php',
+                        'urlvars' => array_merge([
+                            'action' => 'confdelrow',
+                            'strings' => $_REQUEST['strings'],
+                            'page' => $_REQUEST['page'],
+                        ], $_gets)
+                    ]
+                ]
+            ],
+        ];
+
+        $actions = [
+            'actionbuttons' => $buttons,
+            'place' => 'display-browse'
+        ];
+        $plugin_manager->do_hook('actionbuttons', $actions);
+
+        foreach (array_keys($actions['actionbuttons']) as $action) {
+            $actions['actionbuttons'][$action]['attr']['href']['urlvars'] = array_merge(
+                $actions['actionbuttons'][$action]['attr']['href']['urlvars'],
+                $_gets
+            );
+        }
+
+        $edit_params = $actions['actionbuttons']['edit'] ?? [];
+        $delete_params = $actions['actionbuttons']['delete'] ?? [];
+
+        // Display edit and delete actions if we have a key
+        $colspan = min(1, count($buttons));
+
+
+        return [$actions, $edit_params, $delete_params, $colspan];
+    }
+
+    private function buildBrowseNavLinks($type, $table_name, $subject, array $_gets, $rs, array $fields, array $lang): array
+    {
+        $misc = AppContainer::getMisc();
+
+        // Navigation links
+        $navlinks = [];
+
+        // Return
+        if (isset($_REQUEST['return'])) {
+            $urlvars = $misc->getSubjectParams($_REQUEST['return']);
+
+            $navlinks['back'] = [
+                'attr' => [
+                    'href' => [
+                        'url' => $urlvars['url'],
+                        'urlvars' => $urlvars['params']
+                    ]
+                ],
+                'icon' => $misc->icon('Return'),
+                'content' => $lang['strback']
+            ];
+        }
+
+        // Edit SQL link
+        if ($type == 'QUERY') {
+            $navlinks['edit'] = [
+                'attr' => [
+                    'href' => [
+                        'url' => 'database.php',
+                        'urlvars' => array_merge($fields, [
+                            'action' => 'sql',
+                            'paginate' => 'on',
+                        ])
+                    ]
+                ],
+                'icon' => $misc->icon('Edit'),
+                'content' => $lang['streditsql']
+            ];
+        }
+
+        // Expand/Collapse
+        if ($_REQUEST['strings'] == 'expanded') {
+            $navlinks['collapse'] = [
+                'attr' => [
+                    'href' => [
+                        'url' => 'display.php',
+                        'urlvars' => array_merge(
+                            $_gets,
+                            [
+                                'strings' => 'collapsed',
+                                'page' => $_REQUEST['page']
+                            ]
+                        )
+                    ]
+                ],
+                'icon' => $misc->icon('TextShrink'),
+                'content' => $lang['strcollapse']
+            ];
+        } else {
+            $navlinks['collapse'] = [
+                'attr' => [
+                    'href' => [
+                        'url' => 'display.php',
+                        'urlvars' => array_merge(
+                            $_gets,
+                            [
+                                'strings' => 'expanded',
+                                'page' => $_REQUEST['page']
+                            ]
+                        )
+                    ]
+                ],
+                'icon' => $misc->icon('TextExpand'),
+                'content' => $lang['strexpand']
+            ];
+        }
+
+        // Create view and download
+        if (isset($_REQUEST['query']) && is_object($rs) && $rs->recordCount() > 0) {
+
+            // Report views don't set a schema, so we need to disable
+            // create view in that case
+            if (isset($_REQUEST['schema'])) {
+
+                $navlinks['createview'] = [
+                    'attr' => [
+                        'href' => [
+                            'url' => 'views.php',
+                            'urlvars' => array_merge($fields, [
+                                'action' => 'create',
+                                'formDefinition' => $_REQUEST['query']
+                            ])
+                        ]
+                    ],
+                    'icon' => $misc->icon('CreateView'),
+                    'content' => $lang['strcreateview']
+                ];
+            }
+
+            $urlvars = [];
+            if (isset($_REQUEST['search_path'])) {
+                $urlvars['search_path'] = $_REQUEST['search_path'];
+            }
+
+            $navlinks['download'] = [
+                'attr' => [
+                    'href' => [
+                        'url' => 'dataexport.php',
+                        'urlvars' => array_merge($fields, $urlvars, ['query' => $_REQUEST['query']])
+                    ]
+                ],
+                'icon' => $misc->icon('Download'),
+                'content' => $lang['strdownload']
+            ];
+        }
+
+        // Insert
+        if (isset($table_name) && (isset($subject) && $subject == 'table')) {
+            $navlinks['insert'] = [
+                'attr' => [
+                    'href' => [
+                        'url' => 'display.php',
+                        'urlvars' => array_merge($_gets, [
+                            'action' => 'confinsertrow',
+                        ])
+                    ]
+                ],
+                'icon' => $misc->icon('Add'),
+                'content' => $lang['strinsert']
+            ];
+        }
+
+        // Refresh
+        $navlinks['refresh'] = [
+            'attr' => [
+                'href' => [
+                    'url' => 'display.php',
+                    'urlvars' => array_merge(
+                        $_gets,
+                        [
+                            'strings' => $_REQUEST['strings'],
+                            'page' => $_REQUEST['page']
+                        ]
+                    )
+                ]
+            ],
+            'icon' => $misc->icon('Refresh'),
+            'content' => $lang['strrefresh']
+        ];
+
+        return $navlinks;
+    }
+
     /**
      * Displays requested data
      */
@@ -367,26 +691,9 @@ class RowBrowserRenderer extends AppContext
 
         $misc->printMsg($msg);
 
-        // If current page is not set, default to first page
-        if (!isset($_REQUEST['page']))
-            $_REQUEST['page'] = 1;
+        $this->initBrowseRequestDefaults($conf);
 
-        if (!isset($_REQUEST['orderby']))
-            $_REQUEST['orderby'] = [];
-
-        if (!isset($_REQUEST['strings']))
-            $_REQUEST['strings'] = 'collapsed';
-
-        if (!isset($_REQUEST['max_rows']))
-            $_REQUEST['max_rows'] = $conf['max_rows'];
-
-        if (!empty($key_fields_early)) {
-            $key_fields = $key_fields_early;
-        } elseif (isset($table_name)) {
-            $key_fields = $rowActions->getRowIdentifier($table_name);
-        } else {
-            $key_fields = [];
-        }
+        $key_fields = $this->resolveKeyFields($rowActions, $table_name ?? null, $key_fields_early);
 
         $this->applyOrderByFromRequest($query, $parsed, $orderBySet);
 
@@ -447,77 +754,29 @@ class RowBrowserRenderer extends AppContext
 
             $nameIndexMap = $this->buildFieldNameIndexMap($rs);
 
-            // Check that the key is actually in the result set.  This can occur for select
-            // operations where the key fields aren't part of the select.  XXX:  We should
-            // be able to support this, somehow.
-            foreach ($key_fields as $v) {
-                // If a key column is not found in the record set, then we
-                // can't use the key.
-                if (!isset($nameIndexMap[$v])) {
-                    $key_fields = [];
-                    break;
-                }
-            }
+            $key_fields = $this->filterKeyFieldsToThoseInResult($key_fields, $nameIndexMap);
 
-            $buttons = [
-                'edit' => [
-                    'icon' => $misc->icon('Edit'),
-                    'content' => $lang['stredit'],
-                    'attr' => [
-                        'href' => [
-                            'url' => 'display.php',
-                            'urlvars' => array_merge([
-                                'action' => 'confeditrow',
-                                'strings' => $_REQUEST['strings'],
-                                'page' => $_REQUEST['page'],
-                            ], $_gets)
-                        ]
-                    ]
-                ],
-                'delete' => [
-                    'icon' => $misc->icon('Delete'),
-                    'content' => $lang['strdelete'],
-                    'attr' => [
-                        'href' => [
-                            'url' => 'display.php',
-                            'urlvars' => array_merge([
-                                'action' => 'confdelrow',
-                                'strings' => $_REQUEST['strings'],
-                                'page' => $_REQUEST['page'],
-                            ], $_gets)
-                        ]
-                    ]
-                ],
-            ];
-            $actions = [
-                'actionbuttons' => &$buttons,
-                'place' => 'display-browse'
-            ];
-            $plugin_manager->do_hook('actionbuttons', $actions);
+            [$actions, $edit_params, $delete_params, $colspan] = $this->prepareBrowseActionButtons(
+                $_gets,
+                $plugin_manager,
+                $lang
+            );
 
-            foreach (array_keys($actions['actionbuttons']) as $action) {
-                $actions['actionbuttons'][$action]['attr']['href']['urlvars'] = array_merge(
-                    $actions['actionbuttons'][$action]['attr']['href']['urlvars'],
-                    $_gets
-                );
-            }
-
-            $edit_params = $actions['actionbuttons']['edit'] ?? [];
-            $delete_params = $actions['actionbuttons']['delete'] ?? [];
+            $edit_url = $actions['actionbuttons']['edit']['attr']['href'] ?? null;
 
             $table_data = "";
-            $edit_url_vars = $actions['actionbuttons']['edit']['attr']['href']['urlvars'] ?? null;
-            if (!empty($key_fields) && !empty($edit_url_vars)) {
-                $table_data .= " data-edit=\"" . htmlspecialchars(http_build_query($edit_url_vars)) . "\"";
+            if (!empty($key_fields) && !empty($edit_url)) {
+                $table_data .= " data-schema=\"" . htmlspecialchars($_gets['schema']) . "\"";
+                $table_data .= " data-table=\"" . htmlspecialchars($_gets['table']) . "\"";
+                $load_url = $edit_url;
+                $load_url['urlvars']['action'] = 'popupedit';
+                $table_data .= " data-load=\"{$load_url['url']}?" . htmlspecialchars(http_build_query($load_url['urlvars'])) . "\"";
             }
 
-            //echo "<div class=\"scroll-container\">\n";
             echo "<table id=\"data\"{$table_data}>\n";
             echo "<thead id=\"sticky-thead\">\n";
             echo "<tr data-orderby-desc=\"", htmlspecialchars($lang['strorderbyhelp']), "\">\n";
 
-            // Display edit and delete actions if we have a key
-            $colspan = min(1, count($buttons));
             //var_dump($key_fields);
             if ($colspan > 0 and count($key_fields) > 0) {
                 $collapsed = $_REQUEST['strings'] === 'collapsed';
@@ -592,7 +851,7 @@ class RowBrowserRenderer extends AppContext
                         }
 
                         if ($editable) {
-                            $tr_data .= " data-keys=\"" . htmlspecialchars(http_build_query($keys_array)) . "\"";
+                            $tr_data .= " data-keys='" . htmlspecialchars(json_encode($keys_array)) . "'";
                         }
                     }
 
@@ -630,156 +889,16 @@ class RowBrowserRenderer extends AppContext
             echo "<p class=\"nodata\">{$lang['strnodata']}</p>\n";
         }
 
-        // Navigation links
-        $navlinks = [];
-
         $fields = [
             'server' => $_REQUEST['server'],
             'database' => $_REQUEST['database'],
         ];
 
-        if (isset($_REQUEST['schema']))
+        if (isset($_REQUEST['schema'])) {
             $fields['schema'] = $_REQUEST['schema'];
-
-        // Return
-        if (isset($_REQUEST['return'])) {
-            $urlvars = $misc->getSubjectParams($_REQUEST['return']);
-
-            $navlinks['back'] = [
-                'attr' => [
-                    'href' => [
-                        'url' => $urlvars['url'],
-                        'urlvars' => $urlvars['params']
-                    ]
-                ],
-                'icon' => $misc->icon('Return'),
-                'content' => $lang['strback']
-            ];
         }
 
-        // Edit SQL link
-        if ($type == 'QUERY')
-            $navlinks['edit'] = [
-                'attr' => [
-                    'href' => [
-                        'url' => 'database.php',
-                        'urlvars' => array_merge($fields, [
-                            'action' => 'sql',
-                            'paginate' => 'on',
-                        ])
-                    ]
-                ],
-                'icon' => $misc->icon('Edit'),
-                'content' => $lang['streditsql']
-            ];
-
-        // Expand/Collapse
-        if ($_REQUEST['strings'] == 'expanded')
-            $navlinks['collapse'] = [
-                'attr' => [
-                    'href' => [
-                        'url' => 'display.php',
-                        'urlvars' => array_merge(
-                            $_gets,
-                            [
-                                'strings' => 'collapsed',
-                                'page' => $_REQUEST['page']
-                            ]
-                        )
-                    ]
-                ],
-                'icon' => $misc->icon('TextShrink'),
-                'content' => $lang['strcollapse']
-            ];
-        else
-            $navlinks['collapse'] = [
-                'attr' => [
-                    'href' => [
-                        'url' => 'display.php',
-                        'urlvars' => array_merge(
-                            $_gets,
-                            [
-                                'strings' => 'expanded',
-                                'page' => $_REQUEST['page']
-                            ]
-                        )
-                    ]
-                ],
-                'icon' => $misc->icon('TextExpand'),
-                'content' => $lang['strexpand']
-            ];
-
-        // Create view and download
-        if (isset($_REQUEST['query']) && is_object($rs) && $rs->recordCount() > 0) {
-
-
-            // Report views don't set a schema, so we need to disable
-            // create view in that case
-            if (isset($_REQUEST['schema'])) {
-
-                $navlinks['createview'] = [
-                    'attr' => [
-                        'href' => [
-                            'url' => 'views.php',
-                            'urlvars' => array_merge($fields, [
-                                'action' => 'create',
-                                'formDefinition' => $_REQUEST['query']
-                            ])
-                        ]
-                    ],
-                    'icon' => $misc->icon('CreateView'),
-                    'content' => $lang['strcreateview']
-                ];
-            }
-
-            $urlvars = [];
-            if (isset($_REQUEST['search_path']))
-                $urlvars['search_path'] = $_REQUEST['search_path'];
-
-            $navlinks['download'] = [
-                'attr' => [
-                    'href' => [
-                        'url' => 'dataexport.php',
-                        'urlvars' => array_merge($fields, $urlvars, ['query' => $_REQUEST['query']])
-                    ]
-                ],
-                'icon' => $misc->icon('Download'),
-                'content' => $lang['strdownload']
-            ];
-        }
-
-        // Insert
-        if (isset($table_name) && (isset($subject) && $subject == 'table'))
-            $navlinks['insert'] = [
-                'attr' => [
-                    'href' => [
-                        'url' => 'display.php',
-                        'urlvars' => array_merge($_gets, [
-                            'action' => 'confinsertrow',
-                        ])
-                    ]
-                ],
-                'icon' => $misc->icon('Add'),
-                'content' => $lang['strinsert']
-            ];
-
-        // Refresh
-        $navlinks['refresh'] = [
-            'attr' => [
-                'href' => [
-                    'url' => 'display.php',
-                    'urlvars' => array_merge(
-                        $_gets,
-                        [
-                            'strings' => $_REQUEST['strings'],
-                            'page' => $_REQUEST['page']
-                        ]
-                    )
-                ]
-            ],
-            'icon' => $misc->icon('Refresh'),
-            'content' => $lang['strrefresh']
-        ];
+        $navlinks = $this->buildBrowseNavLinks($type, $table_name ?? null, $subject ?? null, $_gets, $rs, $fields, $lang);
 
         $misc->printNavLinks($navlinks, 'display-browse', get_defined_vars());
 
@@ -1113,7 +1232,8 @@ class RowBrowserRenderer extends AppContext
     private function renderQueryForm($query, $_sub_params, $lang): void
     {
         ?>
-        <form method="get" onsubmit="adjustQueryFormMethod(this)" action="display.php?<?= http_build_query($_sub_params) ?>">
+        <form method="get" id="query-form" onsubmit="adjustQueryFormMethod(this)"
+            action="display.php?<?= http_build_query($_sub_params) ?>">
             <div>
                 <textarea name="query" id="query-editor" class="sql-editor frame resizable auto-expand" width="90%" rows="5"
                     cols="100" resizable="true"><?= html_esc($query) ?></textarea>

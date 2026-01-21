@@ -180,4 +180,31 @@ class FormRenderer extends AppContext
 		}
 	}
 
+	/**
+	 * Returns the HTML code for a particular field as a string
+	 * @param string $name The name to give the field
+	 * @param string $value The value of the field
+	 * @param string $type The database type of the field
+	 * @param array $extras An array of attributes name as key and attributes' values as value
+	 * @param mixed $options Additional options for special field types
+	 * @param bool $includeCheckboxes Whether to include NULL and Expression checkboxes
+	 * @return string The HTML output
+	 */
+	function printFieldAsHTML($name, $value, $type, $extras = [], $options = null, $includeCheckboxes = false)
+	{
+		ob_start();
+		$this->printField($name, $value, $type, $extras, $options);
+		$html = ob_get_clean();
+
+		if ($includeCheckboxes) {
+			$lang = $this->lang();
+			$html .= '<div class="popup-field-options">';
+			$html .= '<label><input type="checkbox" name="_isnull" id="popup-null-cb"> ' . htmlspecialchars($lang['strnull'] ?? 'NULL') . '</label> ';
+			$html .= '<label><input type="checkbox" name="_isexpr" id="popup-expr-cb"> ' . htmlspecialchars($lang['strexpression'] ?? 'Expression') . '</label>';
+			$html .= '</div>';
+		}
+
+		return $html;
+	}
+
 }

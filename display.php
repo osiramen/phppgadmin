@@ -867,6 +867,115 @@ function doBrowse($msg = '')
 	(new RowBrowserRenderer())->doBrowse($msg);
 }
 
+function popupEdit()
+{
+	$pg = AppContainer::getPostgres();
+	$tableActions = new TableActions($pg);
+	$schemaActions = new SchemaActions($pg);
+	$formRenderer = new FormRenderer();
+	$lang = AppContainer::getLang();
+
+	// Check required parameters
+	if (empty($_REQUEST['field']) || empty($_REQUEST['schema']) || empty($_REQUEST['table']) || empty($_REQUEST['keys'])) {
+		header('HTTP/1.0 400 Bad Request');
+		echo 'Missing required parameters';
+		exit;
+	}
+
+	$field = $_REQUEST['field'];
+	$schema = $_REQUEST['schema'];
+	$table = $_REQUEST['table'];
+	$keys = is_array($_REQUEST['keys']) ? $_REQUEST['keys'] : json_decode($_REQUEST['keys'], true);
+
+	if (!is_array($keys) || empty($keys)) {
+		header('HTTP/1.0 400 Bad Request');
+		echo 'Invalid keys parameter';
+		exit;
+	}
+
+	// Set schema context
+	$schemaActions->setSchema($schema);
+
+	// Get field metadata
+	$attrs = $tableActions->getTableAttributes($table);
+	$fieldInfo = null;
+
+	if ($attrs && $attrs->recordCount() > 0) {
+		while (!$attrs->EOF) {
+			if ($attrs->fields['attname'] === $field) {
+				$fieldInfo = $attrs->fields;
+				break;
+			}
+			$attrs->moveNext();
+		}
+	}
+
+	if (!$fieldInfo) {
+		header('HTTP/1.0 404 Not Found');
+		echo 'Field not found';
+		exit;
+	}
+
+	$type = $fieldInfo['type'] ?? 'text';
+
+	// Check type blacklist (bytea and array types)
+	if (strpos($type, 'bytea') === 0 || strpos($type, '_') === 0) {
+		header('HTTP/1.0 400 Bad Request');
+		echo 'Field type not supported for inline editing';
+		exit;
+	}
+
+	// Fetch actual field value from database using keys
+	$whereParts = [];
+	foreach ($keys as $keyName => $keyValue) {
+		// Extract field name from "key[fieldname]" format
+		if (preg_match('/^key\[(.+)\]$/', $keyName, $matches)) {
+			$keyField = $matches[1];
+		} else {
+			$keyField = $keyName;
+		}
+
+		if ($keyValue === null || (is_string($keyValue) && strcasecmp($keyValue, 'NULL') === 0)) {
+			$whereParts[] = $pg->escapeIdentifier($keyField) . ' IS NULL';
+		} else {
+			$whereParts[] = $pg->escapeIdentifier($keyField) . ' = ' . $pg->clean($keyValue);
+		}
+	}
+
+	if (empty($whereParts)) {
+		header('HTTP/1.0 400 Bad Request');
+		echo 'No valid key fields provided';
+		exit;
+	}
+
+	$whereClause = implode(' AND ', $whereParts);
+	$valueSql = 'SELECT ' . $pg->escapeIdentifier($field) . ' FROM ' .
+		$pg->escapeIdentifier($schema) . '.' . $pg->escapeIdentifier($table) .
+		' WHERE ' . $whereClause . ' LIMIT 1';
+
+	$valueResult = $pg->selectSet($valueSql);
+	if (!$valueResult || $valueResult->recordCount() !== 1) {
+		header('HTTP/1.0 404 Not Found');
+		echo 'Row not found';
+		exit;
+	}
+
+	$value = $valueResult->fields[$field];
+
+	$extras = [
+		'data-field' => $field,
+		'class' => 'popup-field-input',
+		'autofocus' => 'autofocus',
+	];
+
+	echo '<div class="popup-field-editor" data-field="' . htmlspecialchars($field) . '" data-type="' . htmlspecialchars($type) . '">';
+	echo '<div class="popup-field-label">' . htmlspecialchars($field) . '</div>';
+	echo $formRenderer->printFieldAsHTML('value', $value, $type, $extras, null, true);
+	echo '</div>';
+
+	exit;
+}
+
 
 // Main program
 
@@ -883,6 +992,9 @@ switch ($action) {
 		break;
 	case 'downloadbytea':
 		doDownloadBytea();
+		break;
+	case 'popupedit':
+		popupEdit();
 		break;
 }
 

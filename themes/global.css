@@ -784,3 +784,56 @@ pre code.hljs {
 	font-weight: bold;
 	border-bottom: 1px solid #d1d1d1;
 }
+
+/* Popup Field Editor */
+.field-popup-container {
+	position: absolute;
+	z-index: 10000;
+	min-width: 200px;
+	max-width: 500px;
+}
+
+.popup-field-editor {
+	background: #fff;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+	padding: 8px;
+}
+
+.popup-field-label {
+	font-weight: bold;
+	margin-bottom: 4px;
+	font-size: 12px;
+	color: #333;
+}
+
+.popup-field-input {
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.popup-field-options {
+	margin-top: 6px;
+	font-size: 12px;
+}
+
+.popup-field-options label {
+	display: inline-block;
+	margin-right: 10px;
+	cursor: pointer;
+}
+
+.popup-field-options input[type="checkbox"] {
+	margin-right: 3px;
+	cursor: pointer;
+}
+
+td.editable {
+	cursor: pointer;
+}
+
+td.editable:hover {
+	background-color: #f5f5f5;
+	outline: 1px solid #ddd;
+}

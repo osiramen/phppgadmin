@@ -84,7 +84,7 @@
 				.then((response) => {
 					if (!response.ok)
 						throw new Error(
-							`HTTP error! status: ${response.status}`
+							`HTTP error! status: ${response.status}`,
 						);
 					return response.text();
 				})
@@ -231,7 +231,7 @@
 		closePopup(popupDiv) {
 			// Remove from tracking array
 			const index = this.openPopups.findIndex(
-				(p) => p.element === popupDiv
+				(p) => p.element === popupDiv,
 			);
 			if (index !== -1) {
 				this.openPopups.splice(index, 1);
@@ -361,4 +361,305 @@
 	});
 
 	/* End Column Sorting Management */
+
+	/* SQL Quoting Helpers */
+	window.pgQuoteIdent = function (ident) {
+		return '"' + String(ident).replace(/"/g, '""') + '"';
+	};
+
+	window.pgQuoteLiteral = function (value) {
+		if (value === null || value === undefined || value === "") {
+			return "NULL";
+		}
+		return "'" + String(value).replace(/'/g, "''") + "'";
+	};
+
+	/* Popup Field Editor Management */
+	const FieldPopupEditor = {
+		currentPopup: null,
+		popperInstance: null,
+		currentCell: null,
+		originalValue: null,
+
+		init() {
+			const dataTable = document.querySelector("table#data");
+			if (!dataTable) return;
+
+			// Attach double-click handler using event delegation
+			dataTable.addEventListener("dblclick", (e) =>
+				this.handleDoubleClick(e),
+			);
+
+			// Attach click-outside handler
+			document.addEventListener("click", (e) =>
+				this.handleOutsideClick(e),
+			);
+
+			// Attach keydown handler for Escape
+			document.addEventListener("keydown", (e) => this.handleKeydown(e));
+		},
+
+		handleDoubleClick(e) {
+			const cell = e.target.closest("td.editable");
+			if (!cell) return;
+
+			e.preventDefault();
+			e.stopPropagation();
+
+			this.openEditor(cell);
+		},
+
+		handleOutsideClick(e) {
+			if (!this.currentPopup) return;
+
+			// Check if click is outside popup
+			if (!this.currentPopup.contains(e.target)) {
+				this.saveAndClose();
+			}
+		},
+
+		handleKeydown(e) {
+			if (!this.currentPopup) return;
+
+			if (e.key === "Escape") {
+				e.preventDefault();
+				this.close();
+			} else if (e.key === "Enter" && !e.shiftKey) {
+				const target = e.target;
+				// Allow Enter in textareas
+				if (target.tagName === "TEXTAREA") return;
+				e.preventDefault();
+				this.saveAndClose();
+			}
+		},
+
+		openEditor(cell) {
+			// Close existing popup
+			if (this.currentPopup) {
+				this.close();
+			}
+
+			const fieldName = cell.dataset.name;
+			const fieldType = cell.dataset.type;
+			const row = cell.closest("tr");
+			const table = cell.closest("table#data");
+
+			if (!fieldName || !row || !table) return;
+
+			const schema = table.dataset.schema;
+			const tableName = table.dataset.table;
+
+			if (!schema || !tableName) {
+				console.error("Missing schema or table information");
+				return;
+			}
+
+			// Get row keys
+			const keysJson = row.dataset.keys;
+			if (!keysJson) {
+				console.error("Missing row keys");
+				return;
+			}
+
+			this.currentCell = cell;
+
+			// Build URL
+			const params = new URLSearchParams({
+				action: "popupedit",
+				server: new URLSearchParams(window.location.search).get(
+					"server",
+				),
+				database: new URLSearchParams(window.location.search).get(
+					"database",
+				),
+				schema: schema,
+				table: tableName,
+				field: fieldName,
+				keys: keysJson,
+			});
+
+			// Fetch editor HTML
+			fetch("display.php?" + params.toString())
+				.then((response) => {
+					if (!response.ok) throw new Error("Failed to load editor");
+					return response.text();
+				})
+				.then((html) => {
+					this.showPopup(
+						cell,
+						html,
+						row,
+						schema,
+						tableName,
+						fieldName,
+					);
+				})
+				.catch((err) => {
+					console.error("Error loading editor:", err);
+				});
+		},
+
+		showPopup(cell, html, row, schema, tableName, fieldName) {
+			// Create popup element
+			const popup = document.createElement("div");
+			popup.className = "field-popup-container";
+			popup.innerHTML = html;
+			document.body.appendChild(popup);
+
+			this.currentPopup = popup;
+
+			// Create Popper instance
+			if (window.Popper) {
+				this.popperInstance = window.Popper.createPopper(cell, popup, {
+					placement: "bottom-start",
+					modifiers: [
+						{
+							name: "flip",
+							options: {
+								fallbackPlacements: [
+									"top-start",
+									"bottom-end",
+									"top-end",
+								],
+							},
+						},
+						{
+							name: "preventOverflow",
+							options: {
+								padding: 8,
+							},
+						},
+					],
+				});
+			}
+
+			// Focus input
+			const input = popup.querySelector("input, textarea, select");
+			if (input) {
+				setTimeout(() => {
+					input.focus();
+					if (input.select) input.select();
+				}, 50);
+			}
+
+			// Store row data for SQL generation
+			popup.dataset.schema = schema;
+			popup.dataset.table = tableName;
+			popup.dataset.field = fieldName;
+			popup.dataset.keys = row.dataset.keys || "{}";
+		},
+
+		saveAndClose() {
+			if (!this.currentPopup) return;
+
+			const schema = this.currentPopup.dataset.schema;
+			const table = this.currentPopup.dataset.table;
+			const field = this.currentPopup.dataset.field;
+			const keys = JSON.parse(this.currentPopup.dataset.keys || "{}");
+
+			// Get input value
+			const input = this.currentPopup.querySelector(
+				'input[name="value"], textarea[name="value"], select[name="value"]',
+			);
+			const nullCheckbox =
+				this.currentPopup.querySelector("#popup-null-cb");
+			const exprCheckbox =
+				this.currentPopup.querySelector("#popup-expr-cb");
+
+			if (!input) {
+				this.close();
+				return;
+			}
+
+			const newValue = input.value;
+			const isNull = nullCheckbox && nullCheckbox.checked;
+			const isExpr = exprCheckbox && exprCheckbox.checked;
+
+			// Generate UPDATE SQL
+			let sql =
+				"UPDATE " +
+				window.pgQuoteIdent(schema) +
+				"." +
+				window.pgQuoteIdent(table) +
+				" SET ";
+
+			// SET clause
+			if (isNull) {
+				sql += window.pgQuoteIdent(field) + " = NULL";
+			} else if (isExpr) {
+				sql += window.pgQuoteIdent(field) + " = " + newValue;
+			} else {
+				sql +=
+					window.pgQuoteIdent(field) +
+					" = " +
+					window.pgQuoteLiteral(newValue);
+			}
+
+			// WHERE clause
+			const whereParts = [];
+			for (const [keyName, keyValue] of Object.entries(keys)) {
+				// Extract field name from "key[fieldname]" format
+				const match = keyName.match(/^key\[(.+)\]$/);
+				if (!match) continue;
+				const fieldName = match[1];
+
+				if (keyValue === null || keyValue === "NULL") {
+					whereParts.push(
+						window.pgQuoteIdent(fieldName) + " IS NULL",
+					);
+				} else {
+					whereParts.push(
+						window.pgQuoteIdent(fieldName) +
+							" = " +
+							window.pgQuoteLiteral(keyValue),
+					);
+				}
+			}
+
+			if (whereParts.length > 0) {
+				sql += " WHERE " + whereParts.join(" AND ");
+			}
+
+			sql += ";";
+
+			// Update query editor and submit form
+			if (typeof setEditorValue === "function") {
+				setEditorValue("query-editor", sql);
+			}
+
+			const form = document.getElementById("query-form");
+			if (form) {
+				form.submit();
+			}
+
+			this.close();
+		},
+
+		close() {
+			if (this.popperInstance) {
+				this.popperInstance.destroy();
+				this.popperInstance = null;
+			}
+
+			if (this.currentPopup) {
+				this.currentPopup.remove();
+				this.currentPopup = null;
+			}
+
+			this.currentCell = null;
+			this.originalValue = null;
+		},
+
+		unload() {
+			this.close();
+		},
+	};
+
+	// Initialize on load
+	FieldPopupEditor.init();
+
+	// Cleanup on unload
+	document.addEventListener("beforeFrameUnload", () => {
+		FieldPopupEditor.unload();
+	});
 })();
