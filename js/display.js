@@ -382,10 +382,18 @@
 			this._boundOutsideClick = this.handleOutsideClick.bind(this);
 			this._boundKeydown = this.handleKeydown.bind(this);
 
-			// Attach double-click handler using event delegation
-			dataTable.addEventListener("dblclick", (e) =>
-				this.handleDoubleClick(e),
-			);
+			let lastTap = 0;
+
+			dataTable.addEventListener("click", (e) => {
+				const now = Date.now();
+				const delta = now - lastTap;
+
+				if (delta < 300 && delta > 0) {
+					this.handleDoubleClick(e);
+				}
+
+				lastTap = now;
+			});
 
 			// Attach click-outside handler
 			document.addEventListener("click", this._boundOutsideClick);
@@ -544,11 +552,15 @@
 			}
 
 			// Focus input
-			const input = popup.querySelector(
+			const inputs = popup.querySelectorAll(
 				"input[name=value], textarea[name=value], select[name=value]",
 			);
+			// Get radio separated
+			const checkedRadio = this.currentPopup.querySelector(
+				"input[name=value][type=radio]:checked",
+			);
 			const nullCb = popup.querySelector("#popup-null-cb");
-			if (input) {
+			inputs.forEach((input) => {
 				setTimeout(() => {
 					input.focus();
 					if (input.select) input.select();
@@ -557,6 +569,9 @@
 					if (nullCb) nullCb.checked = false;
 				};
 				popup.dataset.value = input.value;
+			});
+			if (checkedRadio) {
+				popup.dataset.value = checkedRadio.value;
 			}
 			popup.dataset.isNull = nullCb?.checked ?? false;
 
@@ -651,6 +666,10 @@
 			const inputField = this.currentPopup.querySelector(
 				"input[name=value], textarea[name=value], select[name=value]",
 			);
+			// Get radio separated
+			const checkedRadio = this.currentPopup.querySelector(
+				"input[name=value][type=radio]:checked",
+			);
 			const nullCheckbox =
 				this.currentPopup.querySelector("#popup-null-cb");
 			const exprCheckbox =
@@ -664,10 +683,20 @@
 				return;
 			}
 
-			const newValue = inputField.value;
+			const newValue = checkedRadio
+				? checkedRadio.value
+				: inputField.value;
 			const isNull = nullCheckbox && nullCheckbox.checked;
 			const isExpr = exprCheckbox && exprCheckbox.checked;
 			const functionValue = functionSelect && functionSelect.value;
+			console.log(
+				"New Value:",
+				newValue,
+				"isNull:",
+				isNull,
+				"isExpr:",
+				isExpr,
+			);
 
 			if (
 				newValue === this.currentPopup.dataset.value &&

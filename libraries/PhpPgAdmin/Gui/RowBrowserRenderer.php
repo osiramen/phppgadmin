@@ -2,6 +2,7 @@
 
 namespace PhpPgAdmin\Gui;
 
+use PhpPgAdmin\Database\Actions\TypeActions;
 use PHPSQLParser\PHPSQLParser;
 use PhpPgAdmin\Core\AppContainer;
 use PhpPgAdmin\Core\AppContext;
@@ -14,11 +15,6 @@ use PhpPgAdmin\Database\Actions\ConstraintActions;
 
 class RowBrowserRenderer extends AppContext
 {
-
-    private const NO_ORDER_BY_TYPES = [
-        'json' => true,
-        'xml' => true,
-    ];
 
     /** @var array<int, array<string, list<int>>> */
     private $fieldNameIndexMapCache = [];
@@ -38,13 +34,7 @@ class RowBrowserRenderer extends AppContext
 
     private function getByteaColumnsForCurrentQuery(): array
     {
-        $queryHash = $_SESSION['bytea_query_hash'] ?? null;
-        if (!$queryHash) {
-            return [];
-        }
-
-        $cols = $_SESSION['bytea_columns'][$queryHash] ?? [];
-        return is_array($cols) ? $cols : [];
+        return $this->byteaColumns ?? [];
     }
 
     private function renderForeignKeyLinks($rs, array $nameIndexMap, array $fkey_information, string $fieldName): bool
@@ -182,6 +172,22 @@ class RowBrowserRenderer extends AppContext
         return $rs->fields[$idx] ?? null;
     }
 
+    protected function getTypesMetaForRecordSet($rs): array
+    {
+        $pg = AppContainer::getPostgres();
+        $typeNames = [];
+        $fieldCount = $this->getFieldCount($rs);
+        for ($i = 0; $i < $fieldCount; $i++) {
+            $finfo = $rs->fetchField($i);
+            if ($finfo && isset($finfo->type)) {
+                $typeNames[] = $finfo->type;
+            }
+        }
+
+        $typeActions = new TypeActions($pg);
+        return $typeActions->getTypeMetasByNames($typeNames);
+    }
+
     /* build & return the FK information data structure
      * used when deciding if a field should have a FK link or not*/
     function getFKInfo()
@@ -234,48 +240,60 @@ class RowBrowserRenderer extends AppContext
     }
 
 
-    /* Print table header cells
+    /**
+     *  Print table header cells
+     * @param \ADORecordSet $rs
      * @param $args - associative array for sort link parameters
-     * */
+     **/
     function printTableHeaderCells($rs, $args, $withOid)
     {
-        $misc = AppContainer::getMisc();
         $pg = AppContainer::getPostgres();
-        $conf = AppContainer::getConf();
-        $j = 0;
+        $misc = AppContainer::getMisc();
+        $typeActions = new TypeActions($pg);
+        $metas = $this->getTypesMetaForRecordSet($rs);
+        $keys = array_keys($_REQUEST['orderby']);
 
         $fieldCount = $this->getFieldCount($rs);
+
         for ($j = 0; $j < $fieldCount; $j++) {
+
             $finfo = $rs->fetchField($j);
+
             if ($this->shouldSkipOidColumn($finfo, (bool) $withOid)) {
                 continue;
             }
 
             if ($args === false) {
                 echo "<th class=\"data\"><span>", htmlspecialchars($finfo->name), "</span></th>\n";
-            } else {
-                $args['page'] = $_REQUEST['page'];
-
-                $sortLink = http_build_query($args);
-
-                $keys = array_keys($_REQUEST['orderby']);
-
-                echo "<th class=\"data\">\n";
-                if (!isset(self::NO_ORDER_BY_TYPES[$finfo->type])) {
-                    echo "<span><a class=\"orderby\" data-col=\"", htmlspecialchars($finfo->name), "\" data-type=\"", htmlspecialchars($finfo->type), "\" href=\"display.php?{$sortLink}\"><span>", htmlspecialchars($finfo->name), "</span>";
-                    if (isset($_REQUEST['orderby'][$finfo->name])) {
-                        if ($_REQUEST['orderby'][$finfo->name] === 'desc')
-                            echo '<img src="' . $misc->icon('LowerArgument') . '" alt="desc">';
-                        else
-                            echo '<img src="' . $misc->icon('RaiseArgument') . '" alt="asc">';
-                        echo "<span class='small'>", array_search($finfo->name, $keys) + 1, "</span>";
-                    }
-                    echo "</a></span>\n";
-                } else {
-                    echo "<span>", htmlspecialchars($finfo->name), "</span>\n";
-                }
-                echo "</th>\n";
+                continue;
             }
+
+            $args['page'] = $_REQUEST['page'];
+            $sortLink = http_build_query($args);
+            $class = 'data';
+            if ($typeActions->isLargeTypeMeta($metas[$finfo->type])) {
+                $class .= ' large_type';
+            }
+
+            echo "<th class=\"$class\">\n";
+
+            if (!isset(TypeActions::NON_SORTABLE_TYPES[$finfo->type])) {
+                echo "<span><a class=\"orderby\" data-col=\"", htmlspecialchars($finfo->name), "\" data-type=\"", htmlspecialchars($finfo->type), "\" href=\"display.php?{$sortLink}\"><span>", htmlspecialchars($finfo->name), "</span>";
+
+                if (isset($_REQUEST['orderby'][$finfo->name])) {
+                    if ($_REQUEST['orderby'][$finfo->name] === 'desc')
+                        echo '<img src="' . $misc->icon('LowerArgument') . '" alt="desc">';
+                    else
+                        echo '<img src="' . $misc->icon('RaiseArgument') . '" alt="asc">';
+                    echo "<span class='small'>", array_search($finfo->name, $keys) + 1, "</span>";
+                }
+
+                echo "</a></span>\n";
+            } else {
+                echo "<span>", htmlspecialchars($finfo->name), "</span>\n";
+            }
+
+            echo "</th>\n";
         }
 
         reset($rs->fields);
@@ -303,7 +321,7 @@ class RowBrowserRenderer extends AppContext
         if (!isset($_REQUEST['strings']))
             $_REQUEST['strings'] = 'collapsed';
 
-        $class = $editable ? "editable" : "";
+        $editClass = $editable ? "editable" : "";
 
         $fieldCount = $this->getFieldCount($rs);
         for ($j = 0; $j < $fieldCount; $j++) {
@@ -312,31 +330,29 @@ class RowBrowserRenderer extends AppContext
 
             if ($this->shouldSkipOidColumn($finfo, (bool) $withOid))
                 continue;
-            elseif ($v !== null && $v == '')
-                echo "<td>&nbsp;</td>";
-            else {
-                if (isset($byteaCols[$finfo->name]) || str_starts_with($finfo->type, '_')) {
-                    // Bytea and array types are not editable at the
-                    $tdClass = "";
-                } else {
-                    $tdClass = $class;
-                }
-                $type = isset($byteaCols[$finfo->name]) ? 'bytea' : $finfo->type;
-                echo "<td class=\"$tdClass\" data-type=\"$type\" data-name=\"" . htmlspecialchars($finfo->name) . "\">";
-                $valParams = [
-                    'null' => true,
-                    'clip' => ($_REQUEST['strings'] == 'collapsed')
-                ];
-                if (($v !== null) && $this->renderForeignKeyLinks($rs, $nameIndexMap, $fkey_information, (string) $finfo->name)) {
-                    $valParams['class'] = 'fk_value';
-                }
 
-                // If this is a modified bytea column, show size + download link
-                if (!$this->renderByteaCellValue($rs, $nameIndexMap, $finfo, $v, $valParams, $byteaCols)) {
-                    echo $misc->printVal($v, $finfo->type, $valParams);
-                }
-                echo "</td>";
+            $type = $finfo->type;
+            if (isset($byteaCols[$finfo->name])) {
+                // Bytea types are not editable at the moment
+                $class = "";
+                $type = 'bytea';
+            } else {
+                $class = $editClass;
             }
+            echo "<td class=\"$class\" data-type=\"$type\" data-name=\"" . htmlspecialchars($finfo->name) . "\">";
+            $valParams = [
+                'null' => true,
+                'clip' => ($_REQUEST['strings'] == 'collapsed')
+            ];
+            if (($v !== null) && $this->renderForeignKeyLinks($rs, $nameIndexMap, $fkey_information, (string) $finfo->name)) {
+                $valParams['class'] = 'fk_value';
+            }
+
+            // If this is a modified bytea column, show size + download link
+            if (!$this->renderByteaCellValue($rs, $nameIndexMap, $finfo, $v, $valParams, $byteaCols)) {
+                echo $misc->printVal($v, $finfo->type, $valParams);
+            }
+            echo "</td>";
         }
     }
 
@@ -362,11 +378,11 @@ class RowBrowserRenderer extends AppContext
             </div>
         <?php endif ?>
         <div class="actions">
-            [<a href="javascript:void(0)"
+            <a href="javascript:void(0)"
                 onclick="setEditorValue('query-editor', <?= htmlspecialchars(json_encode($query)) ?>);">
                 <span class="psm">✎</span>
                 <?= htmlspecialchars($lang['stredit']) ?>
-            </a>]
+            </a>
             <script>
                 function setEditorValue(id, content) {
                     const element = document.getElementById(id);
@@ -778,7 +794,7 @@ class RowBrowserRenderer extends AppContext
                 $table_data .= " data-table=\"" . htmlspecialchars($_gets['table']) . "\"";
             }
 
-            echo "<table id=\"data\"{$table_data}>\n";
+            echo "<table id=\"data\" class=\"query-result\"{$table_data}>\n";
             echo "<thead id=\"sticky-thead\">\n";
             echo "<tr data-orderby-desc=\"", htmlspecialchars($lang['strorderbyhelp']), "\">\n";
 
@@ -1106,6 +1122,8 @@ class RowBrowserRenderer extends AppContext
         }
     }
 
+    private $byteaColumns = null;
+
     private function prepareExecQuery($query, PHPSQLParser $parser, RowActions $rowActions, $pg): array
     {
         $displayQuery = $query;
@@ -1151,12 +1169,7 @@ class RowBrowserRenderer extends AppContext
                 $execQuery = $modifierResult['query'];
 
                 if (!empty($modifierResult['bytea_columns'])) {
-                    $execHash = md5($execQuery);
-                    if (!isset($_SESSION['bytea_columns'])) {
-                        $_SESSION['bytea_columns'] = [];
-                    }
-                    $_SESSION['bytea_columns'][$execHash] = $modifierResult['bytea_columns'];
-                    $_SESSION['bytea_query_hash'] = $execHash;
+                    $this->byteaColumns = $modifierResult['bytea_columns'];
                 }
             }
         }
@@ -1165,8 +1178,7 @@ class RowBrowserRenderer extends AppContext
         $normalizedForProbe = ltrim($normalizedForProbe);
         $isSelectOrWith = preg_match('/^(SELECT|WITH)\b/i', $normalizedForProbe);
         if ($isSelectOrWith) {
-            $currentHash = md5($execQuery);
-            $alreadyHasMeta = !empty($_SESSION['bytea_columns'][$currentHash] ?? null);
+            $alreadyHasMeta = !empty($this->byteaColumns);
             if (!$alreadyHasMeta) {
                 $probe = new QueryResultMetadataProbe();
                 $probeResult = $probe->probeResultFields($execQuery);
@@ -1192,12 +1204,7 @@ class RowBrowserRenderer extends AppContext
                             }
                         }
                         if (!empty($probeMeta)) {
-                            if (!isset($_SESSION['bytea_columns'])) {
-                                $_SESSION['bytea_columns'] = [];
-                            }
-                            $newHash = md5($execQuery);
-                            $_SESSION['bytea_columns'][$newHash] = $probeMeta;
-                            $_SESSION['bytea_query_hash'] = $newHash;
+                            $this->byteaColumns = $probeMeta;
                         }
                     }
                 }

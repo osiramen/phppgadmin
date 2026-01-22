@@ -124,7 +124,7 @@ $conf['show_advanced'] = true;
 $conf['show_system'] = false;
 
 // Minimum length users can set their password to.
-$conf['min_password_length'] = 1;
+$conf['min_password_length'] = 3;
 
 // Width of the left frame in pixels (object browser)
 $conf['left_width'] = 250;
@@ -161,7 +161,7 @@ $conf['help_base'] = 'http://www.postgresql.org/docs/%s/interactive/';
 // Time in seconds. If set to 0, refreshing data using ajax will be disabled (locks and activity pages)
 $conf['ajax_refresh'] = 3;
 
-// Maximum length of an SQL query when sent via GET method
+// Maximum length of an SQL read query when sent via GET method
 // Set it to zero to send all queries via POST method
 $conf['max_get_query_length'] = 5000;
 

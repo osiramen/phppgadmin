@@ -106,7 +106,7 @@ function pg_escape_id($id = ''): string
 }
 
 /**
- * HTML-escape a string
+ * HTML-escape a string, brings null check back to PHP 8.2+
  * @param string|null $string
  * @param int $flags
  * @param string $encoding
@@ -115,7 +115,7 @@ function pg_escape_id($id = ''): string
  */
 function html_esc(
 	$string,
-	$flags = ENT_QUOTES | ENT_SUBSTITUTE,
+	$flags = ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5,
 	$encoding = 'UTF-8',
 	$double_encode = true
 ): string {

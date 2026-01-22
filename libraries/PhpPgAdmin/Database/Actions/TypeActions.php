@@ -2,12 +2,28 @@
 
 namespace PhpPgAdmin\Database\Actions;
 
+use ADORecordSet_array;
+use ADORecordSet_empty;
 use PhpPgAdmin\Database\AppActions;
 
 class TypeActions extends AppActions
 {
     // Base constructor inherited from Actions
 
+
+    public const NON_SORTABLE_TYPES = [
+        'xml' => 'xml',
+        'json' => 'json',
+        'bytea' => 'bytea',
+        'tsvector' => 'tsvector',
+        'tsquery' => 'tsquery',
+        'record' => 'record'
+    ];
+
+    public const NON_COMPARABLE_TYPES = [
+        'xml' => 'xml',
+        'record' => 'record',
+    ];
 
 
     /**
@@ -78,6 +94,104 @@ class TypeActions extends AppActions
 
         return $this->connection->selectSet($sql);
     }
+
+    /**
+     * Normalizes a type name to its internal representation.
+     */
+    private function normalizeTypeName(string $t): string
+    {
+        $t = strtolower($t);
+
+        // Recognize Array types first
+        $isArray = false;
+        if (substr($t, -2) === '[]') {
+            $isArray = true;
+            $t = substr($t, 0, -2); // Extract base type
+        }
+
+        // SQL → internal mapping
+        static $map = [
+        'integer' => 'int4',
+        'smallint' => 'int2',
+        'bigint' => 'int8',
+        'character varying' => 'varchar',
+        'character' => 'bpchar',
+        'timestamp without time zone' => 'timestamp',
+        'timestamp with time zone' => 'timestamptz',
+        ];
+
+        $internal = $map[$t] ?? $t;
+
+        // Array types internally with underscore
+        if ($isArray) {
+            return '_' . $internal;
+        }
+
+        return $internal;
+    }
+
+    /**
+     * Returns type metadata for a list of type names.
+     */
+    public function getTypeMetasByNames(array $typeNames)
+    {
+        if (empty($typeNames)) {
+            return [];
+        }
+
+        $queryTypes = [];
+        foreach ($typeNames as $t) {
+            $t = $this->normalizeTypeName($t);
+            $t = $this->connection->escapeLiteral($t);
+            $queryTypes[] = $t;
+        }
+
+        $sql =
+            "SELECT 
+                t.typname,
+                t.typtype,
+                t.typlen,
+                t.typcategory,
+                t.typbasetype::regtype AS base_type
+            FROM pg_type t
+            WHERE t.typname IN (" . implode(',', $queryTypes) . ")";
+
+        $rs = $this->connection->selectSet($sql);
+
+        $metas = [];
+        if (is_object($rs) && $rs->recordCount() > 0) {
+            while (!$rs->EOF) {
+                $metas[$rs->fields['typname']] = $rs->fields;
+                $rs->moveNext();
+            }
+        }
+        return $metas;
+    }
+
+    /**
+     * Determines if a type is a large type (varlena) or not.
+     */
+    public function isLargeTypeMeta($meta)
+    {
+        // Arrays are always varlena
+        if ($meta['typcategory'] === 'A') {
+            return true;
+        }
+
+        // Enums are always small
+        if ($meta['typtype'] === 'e') {
+            return false;
+        }
+
+        // varlena → large
+        if ($meta['typlen'] == -1) {
+            return true;
+        }
+
+        // all other → small
+        return false;
+    }
+
 
     /**
      * Creates a new base type.

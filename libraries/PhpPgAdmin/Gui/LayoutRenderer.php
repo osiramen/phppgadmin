@@ -602,7 +602,7 @@ EOT;
 					$mult *= 1024;
 					$idx++;
 				}
-				$out = floor(($str + $mult / 2) / $mult) . ' ' . $units[$idx];
+				$out = floor(((float) $str + $mult / 2) / $mult) . ' ' . $units[$idx];
 				break;
 			case 'time':
 			case 'timetz':

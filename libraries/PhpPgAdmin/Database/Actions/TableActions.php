@@ -192,7 +192,8 @@ class TableActions extends AppActions
             "SELECT
                 a.attname,
                 a.attnum,
-                format_type(a.atttypid, a.atttypmod) AS type,
+                pg_catalog.format_type(a.atttypid, a.atttypmod) AS type,
+                pg_catalog.format_type(a.atttypid, NULL) as base_type,
                 a.atttypmod,
                 a.attnotnull,
                 a.atthasdef,

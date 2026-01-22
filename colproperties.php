@@ -3,6 +3,7 @@
 use PhpPgAdmin\Core\AppContainer;
 use PhpPgAdmin\Database\Actions\TableActions;
 use PhpPgAdmin\Database\Actions\ColumnActions;
+use PhpPgAdmin\Database\Actions\TypeActions;
 use PhpPgAdmin\Gui\ColumnFormRenderer;
 
 /**
@@ -227,7 +228,7 @@ function doDefault($msg = '', $isTable = true)
 		$pg->fieldClean($f_table);
 		$pg->fieldClean($f_schema);
 
-		if (in_array($type, ColumnActions::NON_SORTABLE_TYPES)) {
+		if (isset(TypeActions::NON_SORTABLE_TYPES[$type])) {
 			$order_clause = '';
 		} else {
 			$order_clause = " ORDER BY \"{$f_attname}\"";
@@ -321,7 +322,7 @@ function doDefault($msg = '', $isTable = true)
 			];
 		}
 
-		if (in_array($type, ColumnActions::NON_COMPARABLE_TYPES)) {
+		if (isset(TypeActions::NON_COMPARABLE_TYPES[$type])) {
 			unset($navlinks['browse']);
 		}
 

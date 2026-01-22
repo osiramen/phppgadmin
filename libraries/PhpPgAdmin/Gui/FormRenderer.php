@@ -118,13 +118,13 @@ class FormRenderer extends AppContext
 				$showTextarea = !($byteaLimit > 0 && $byteaSize > $byteaLimit);
 
 				if ($showTextarea) {
-					if (!is_null($value)) {
+					// Todo: move bin2hex conversion to form actions
+					/*
+					if (!empty($value) && !str_starts_with($value, '\\x')) {
 						$value = '\\x' . strtoupper(bin2hex($value));
 					}
-					$n = substr_count($value ?? '', "\n");
-					$n = $n < 5 ? 5 : $n;
-					$n = $n > 20 ? 20 : $n;
-					echo "<textarea name=\"", htmlspecialchars($name), "\" rows=\"{$n}\" cols=\"75\"{$extra_str}>\n";
+					*/
+					echo "<textarea name=\"", htmlspecialchars($name), "\" rows=\"5\" cols=\"75\"{$extra_str}>\n";
 					echo htmlspecialchars($value ?? '');
 					echo "</textarea>\n";
 				} else {
@@ -153,11 +153,10 @@ class FormRenderer extends AppContext
 				echo "</div>\n";
 				break;
 			case 'text':
-			case 'text[]':
 			case 'json':
 			case 'jsonb':
 			case 'xml':
-			case 'xml[]':
+			case 'character':
 				$n = substr_count($value ?? '', "\n");
 				$n = $n < 5 ? 5 : $n;
 				$n = $n > 20 ? 20 : $n;
@@ -165,17 +164,14 @@ class FormRenderer extends AppContext
 				echo htmlspecialchars($value ?? '');
 				echo "</textarea>\n";
 				break;
-			case 'character':
-			case 'character[]':
-				$n = substr_count($value, "\n");
-				$n = $n < 5 ? 5 : $n;
-				$n = $n > 20 ? 20 : $n;
-				echo "<textarea name=\"", htmlspecialchars($name), "\" rows=\"{$n}\" cols=\"35\"{$extra_str}>\n";
-				echo htmlspecialchars($value ?? '');
-				echo "</textarea>\n";
-				break;
 			default:
-				echo "<input name=\"", htmlspecialchars($name), "\" value=\"", htmlspecialchars($value ?? ''), "\" size=\"35\"{$extra_str} />\n";
+				if (str_ends_with($base_type, '[]')) {
+					echo "<textarea name=\"", htmlspecialchars($name), "\" rows=\"5\" cols=\"75\"{$extra_str}>\n";
+					echo htmlspecialchars($value ?? '');
+					echo "</textarea>\n";
+				} else {
+					echo "<input name=\"", htmlspecialchars($name), "\" value=\"", htmlspecialchars($value ?? ''), "\" size=\"35\"{$extra_str} />\n";
+				}
 				break;
 		}
 	}

@@ -494,19 +494,25 @@
 			.querySelectorAll("input[data-type^=timestamp]")
 			.forEach((element) => {
 				//console.log(element);
-				createDateTimePicker(element);
+				if (!element.dataset.type.endsWith("[]")) {
+					createDateTimePicker(element);
+				}
 			});
 		rootElement
 			.querySelectorAll("input[data-type^=date]")
 			.forEach((element) => {
 				//console.log(element);
-				createDatePicker(element);
+				if (!element.dataset.type.endsWith("[]")) {
+					createDatePicker(element);
+				}
 			});
 		rootElement
 			.querySelectorAll("input[data-type^=time]")
 			.forEach((element) => {
 				//console.log(element);
-				createTimePicker(element);
+				if (!element.dataset.type.endsWith("[]")) {
+					createTimePicker(element);
+				}
 			});
 	}
 

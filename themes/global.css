@@ -832,3 +832,7 @@ td.editable.active {
 	background-color: #e6f7ff;
 	outline: 1px solid #1890ff;
 }
+
+th.large_type {
+	min-width: 100px;
+}

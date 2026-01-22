@@ -152,15 +152,6 @@ function doEditRow($confirm, $msg = '')
 		}
 	}
 
-	if (isset($_REQUEST['edit-inline'])) {
-		// edit field inline
-		if ($confirm) {
-			// load data
-		} else {
-			// save data
-		}
-	}
-
 	if ($confirm) {
 
 		$formRenderer = new FormRenderer();
@@ -333,6 +324,9 @@ function doEditRow($confirm, $msg = '')
 						'download_url' => $downloadUrl,
 						'max_upload_size' => $byteaMaxUploadSize,
 					];
+					if ($initial && !empty($value) && !str_starts_with($value, '\\x')) {
+						$value = '\\x' . bin2hex($value);
+					}
 				}
 
 				$formRenderer->printField(
@@ -940,7 +934,6 @@ function popupEdit()
 	echo "<label class=\"mr-2\"><input type=\"checkbox\" name=\"_isnull\" id=\"popup-null-cb\" class=\"mr-1\"{$nullChecked}>" . htmlspecialchars($lang['strnull']) . "</label> ";
 	echo '<label><input type="checkbox" name="_isexpr" id="popup-expr-cb" class="mr-1"> ' . htmlspecialchars($lang['strexpression']) . '</label>';
 	echo '</div>';
-
 	echo '</div>';
 
 	exit;
