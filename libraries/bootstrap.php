@@ -6,15 +6,17 @@
  * $Id: bootstrap.php,v 1.123 2008/04/06 01:10:35 xzilla Exp $
  */
 
+use PhpPgAdmin\Core\AppContainer;
+use PhpPgAdmin\Database\Actions\SchemaActions;
+use PhpPgAdmin\Misc;
+use PhpPgAdmin\PluginManager;
+
 require_once __DIR__ . '/decorator.php';
 require_once __DIR__ . '/helper.php';
 require_once __DIR__ . '/../lang/translations.php';
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use PhpPgAdmin\Core\AppContainer;
-use PhpPgAdmin\Database\Actions\SchemaActions;
-use PhpPgAdmin\Misc;
-use PhpPgAdmin\PluginManager;
+const ROOT_PATH = __DIR__ . '/..';
 
 // Set error reporting level to max
 error_reporting(E_ALL);

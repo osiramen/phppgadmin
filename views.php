@@ -1,6 +1,7 @@
 <?php
 
 use PhpPgAdmin\Gui\FormRenderer;
+use PhpPgAdmin\Gui\SearchFormRenderer;
 use PhpPgAdmin\Core\AppContainer;
 use PhpPgAdmin\Database\Actions\ViewActions;
 use PhpPgAdmin\Database\Actions\TableActions;
@@ -21,114 +22,13 @@ include_once('./libraries/bootstrap.php');
  */
 function doSelectRows($confirm, $msg = '')
 {
-	$pg = AppContainer::getPostgres();
-	$misc = AppContainer::getMisc();
-	$lang = AppContainer::getLang();
-	$tableActions = new TableActions($pg);
-	$formRenderer = new FormRenderer();
-
-	if ($confirm) {
-		$misc->printTrail('view');
-		$misc->printTabs('view', 'select');
-		$misc->printMsg($msg);
-
-		$attrs = $tableActions->getTableAttributes($_REQUEST['view']);
-
-		echo "<form action=\"views.php\" method=\"get\" id=\"selectform\">\n";
-		if ($attrs->recordCount() > 0) {
-			// JavaScript for select all feature
-			echo "<script type=\"text/javascript\">\n";
-			echo "//<![CDATA[\n";
-			echo "	function selectAll() {\n";
-			echo "		for (var i=0; i<document.getElementById('selectform').elements.length; i++) {\n";
-			echo "			var e = document.getElementById('selectform').elements[i];\n";
-			echo "			if (e.name.indexOf('show') == 0) e.checked = document.getElementById('selectform').selectall.checked;\n";
-			echo "		}\n";
-			echo "	}\n";
-			echo "//]]>\n";
-			echo "</script>\n";
-
-			echo "<table>\n";
-
-			// Output table header
-			echo "<tr><th class=\"data\">{$lang['strshow']}</th><th class=\"data\">{$lang['strcolumn']}</th>";
-			echo "<th class=\"data\">{$lang['strtype']}</th><th class=\"data\">{$lang['stroperator']}</th>";
-			echo "<th class=\"data\">{$lang['strvalue']}</th></tr>";
-
-			$i = 0;
-			while (!$attrs->EOF) {
-				$attrs->fields['attnotnull'] = $pg->phpBool($attrs->fields['attnotnull']);
-				// Set up default value if there isn't one already
-				if (!isset($_REQUEST['values'][$attrs->fields['attname']]))
-					$_REQUEST['values'][$attrs->fields['attname']] = null;
-				if (!isset($_REQUEST['ops'][$attrs->fields['attname']]))
-					$_REQUEST['ops'][$attrs->fields['attname']] = null;
-				// Continue drawing row
-				$id = (($i % 2) == 0 ? '1' : '2');
-				echo "<tr class=\"data{$id}\">\n";
-				echo "<td style=\"white-space:nowrap;\">";
-				echo "<input type=\"checkbox\" name=\"show[", html_esc($attrs->fields['attname']), "]\"",
-					isset($_REQUEST['show'][$attrs->fields['attname']]) ? ' checked="checked"' : '', " /></td>";
-				echo "<td style=\"white-space:nowrap;\">", $misc->printVal($attrs->fields['attname']), "</td>";
-				echo "<td style=\"white-space:nowrap;\">", $misc->printVal($pg->formatType($attrs->fields['type'], $attrs->fields['atttypmod'])), "</td>";
-				echo "<td style=\"white-space:nowrap;\">";
-				echo "<select name=\"ops[{$attrs->fields['attname']}]\">\n";
-				foreach (array_keys($pg->selectOps) as $v) {
-					echo "<option value=\"", html_esc($v), "\"", ($v == $_REQUEST['ops'][$attrs->fields['attname']]) ? ' selected="selected"' : '',
-						">", html_esc($v), "</option>\n";
-				}
-				echo "</select></td>\n";
-				echo "<td style=\"white-space:nowrap;\">", $formRenderer->printField(
-					"values[{$attrs->fields['attname']}]",
-					$_REQUEST['values'][$attrs->fields['attname']],
-					$attrs->fields['type']
-				), "</td>";
-				echo "</tr>\n";
-				$i++;
-				$attrs->moveNext();
-			}
-			// Select all checkbox
-			echo "<tr><td colspan=\"5\"><input type=\"checkbox\" id=\"selectall\" name=\"selectall\" accesskey=\"a\" onclick=\"javascript:selectAll()\" /><label for=\"selectall\">{$lang['strselectallfields']}</label></td></tr>";
-			echo "</table>\n";
-		} else
-			echo "<p>{$lang['strinvalidparam']}</p>\n";
-
-		echo "<p><input type=\"hidden\" name=\"action\" value=\"selectrows\" />\n";
-		echo "<input type=\"hidden\" name=\"view\" value=\"", html_esc($_REQUEST['view']), "\" />\n";
-		echo "<input type=\"hidden\" name=\"subject\" value=\"view\" />\n";
-		echo $misc->form;
-		echo "<input type=\"submit\" name=\"select\" accesskey=\"r\" value=\"{$lang['strselect']}\" />\n";
-		echo "<input type=\"submit\" name=\"cancel\" value=\"{$lang['strcancel']}\" /></p>\n";
-		echo "</form>\n";
-	} else {
-		if (!isset($_REQUEST['show']))
-			$_REQUEST['show'] = [];
-		if (!isset($_REQUEST['values']))
-			$_REQUEST['values'] = [];
-		if (!isset($_REQUEST['nulls']))
-			$_REQUEST['nulls'] = [];
-
-		// Verify that they haven't supplied a value for unary operators
-		foreach ($_REQUEST['ops'] as $k => $v) {
-			if ($pg->selectOps[$v] == 'p' && $_REQUEST['values'][$k] != '') {
-				doSelectRows(true, $lang['strselectunary']);
-				return;
-			}
-		}
-
-		// Generate query SQL
-		$query = $pg->getSelectSQL(
-			$_REQUEST['view'],
-			array_keys($_REQUEST['show']),
-			$_REQUEST['values'],
-			$_REQUEST['ops']
-		);
-		$_REQUEST['query'] = $query;
-		$_REQUEST['return'] = "schema";
-		AppContainer::setSkipHtmlFrame(true);
-		require __DIR__ . '/display.php';
-		exit;
-	}
+	SearchFormRenderer::renderSelectRowsForm(
+		$confirm,
+		$msg,
+		'view',
+		$_REQUEST['view'],
+		'schema'
+	);
 }
 
 /**

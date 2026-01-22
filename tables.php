@@ -1,6 +1,7 @@
 <?php
 
 use PhpPgAdmin\Gui\FormRenderer;
+use PhpPgAdmin\Gui\SearchFormRenderer;
 use PhpPgAdmin\Core\AppContainer;
 use PhpPgAdmin\Database\Actions\RowActions;
 use PhpPgAdmin\Database\Actions\TypeActions;
@@ -387,149 +388,13 @@ function doCreateLike($confirm, $msg = '')
  */
 function doSelectRows($confirm, $msg = '')
 {
-	$pg = AppContainer::getPostgres();
-	$misc = AppContainer::getMisc();
-	$lang = AppContainer::getLang();
-	$tableActions = new TableActions($pg);
-	$formRenderer = new FormRenderer();
-
-	if (!$confirm) {
-		if (!isset($_REQUEST['show']))
-			$_REQUEST['show'] = [];
-		if (!isset($_REQUEST['values']))
-			$_REQUEST['values'] = [];
-		if (!isset($_REQUEST['nulls']))
-			$_REQUEST['nulls'] = [];
-
-		// Verify that they haven't supplied a value for unary operators
-		foreach ($_REQUEST['ops'] as $k => $v) {
-			if ($pg->selectOps[$v] == 'p' && $_REQUEST['values'][$k] != '') {
-				doSelectRows(true, $lang['strselectunary']);
-				return;
-			}
-		}
-
-		// Generate query SQL
-		$query = $pg->getSelectSQL(
-			$_REQUEST['table'],
-			array_keys($_REQUEST['show']),
-			$_REQUEST['values'],
-			$_REQUEST['ops']
-		);
-		$_REQUEST['query'] = $query;
-		$_REQUEST['return'] = 'selectrows';
-		//var_dump($_REQUEST);
-
-		AppContainer::setSkipHtmlFrame(true);
-		include './display.php';
-		exit;
-	}
-
-	$misc->printTrail('table');
-	$misc->printTabs('table', 'select');
-	$misc->printMsg($msg);
-
-	$attrs = $tableActions->getTableAttributes($_REQUEST['table']);
-	if (!is_object($attrs) || $attrs->recordCount() == 0) {
-		$misc->printMsg($lang['strinvalidparam']);
-		return;
-	}
-
-	$typeNames = [];
-	$typeActions = new TypeActions($pg);
-	while (!$attrs->EOF) {
-		$typeNames[] = $attrs->fields['type'];
-		$attrs->moveNext();
-	}
-	$attrs->moveFirst();
-	$typeMetas = $typeActions->getTypeMetasByNames($typeNames);
-
-	// Get FK properties for search form if autocomplete is enabled
-	$conf = AppContainer::getConf();
-	if (($conf['autocomplete'] != 'disable')) {
-		$fksprops = $misc->getAutocompleteFKProperties($_REQUEST['table'], 'search');
-		if ($fksprops !== false)
-			echo $fksprops['code'];
-	} else
-		$fksprops = false;
-
-	echo "<form action=\"tables.php\" method=\"get\" id=\"selectform\">\n";
-	// JavaScript for select all feature
-	echo "<script>\n";
-	echo "	function selectAll() {\n";
-	echo "		for (var i=0; i<document.getElementById('selectform').elements.length; i++) {\n";
-	echo "			var e = document.getElementById('selectform').elements[i];\n";
-	echo "			if (e.name.indexOf('show') == 0) e.checked = document.getElementById('selectform').selectall.checked;\n";
-	echo "		}\n";
-	echo "	}\n";
-	echo "</script>\n";
-
-	echo "<table>\n";
-
-	// Output table header
-	echo "<tr><th class=\"data\">{$lang['strshow']}</th><th class=\"data\">{$lang['strcolumn']}</th>";
-	echo "<th class=\"data\">{$lang['strtype']}</th><th class=\"data\">{$lang['stroperator']}</th>";
-	echo "<th class=\"data\">{$lang['strvalue']}</th></tr>";
-
-	$i = 0;
-	while (!$attrs->EOF) {
-		$attrs->fields['attnotnull'] = $pg->phpBool($attrs->fields['attnotnull']);
-		// Set up default value if there isn't one already
-		if (!isset($_REQUEST['values'][$attrs->fields['attname']]))
-			$_REQUEST['values'][$attrs->fields['attname']] = null;
-		if (!isset($_REQUEST['ops'][$attrs->fields['attname']]))
-			$_REQUEST['ops'][$attrs->fields['attname']] = null;
-		// Continue drawing row
-		$id = (($i % 2) == 0 ? '1' : '2');
-		echo "<tr class=\"data{$id}\">\n";
-		echo "<td style=\"white-space:nowrap;\">";
-		echo "<input type=\"checkbox\" name=\"show[", html_esc($attrs->fields['attname']), "]\"",
-			isset($_REQUEST['show'][$attrs->fields['attname']]) ? ' checked="checked"' : '', " /></td>";
-		echo "<td style=\"white-space:nowrap;\">", $misc->printVal($attrs->fields['attname']), "</td>";
-		echo "<td style=\"white-space:nowrap;\">", $misc->printVal($pg->formatType($attrs->fields['type'], $attrs->fields['atttypmod'])), "</td>";
-		echo "<td style=\"white-space:nowrap;\">";
-		echo "<select name=\"ops[{$attrs->fields['attname']}]\">\n";
-		foreach (array_keys($pg->selectOps) as $v) {
-			echo "<option value=\"", html_esc($v), "\"", ($v == $_REQUEST['ops'][$attrs->fields['attname']]) ? ' selected="selected"' : '',
-				">", html_esc($v), "</option>\n";
-		}
-		echo "</select>\n</td>\n";
-		echo "<td style=\"white-space:nowrap;\" id=\"row_att_search_{$attrs->fields['attnum']}\">";
-
-		// Build extras array for FK field detection
-		$extras = [];
-		if (($fksprops !== false) && isset($fksprops['byfield'][$attrs->fields['attnum']])) {
-			$extras['id'] = "attr_{$attrs->fields['attnum']}";
-			$extras['autocomplete'] = 'off';
-			$extras['data-fk-context'] = 'search';
-			$extras['data-attnum'] = $attrs->fields['attnum'];
-		}
-
-		$formRenderer->printField(
-			"values[{$attrs->fields['attname']}]",
-			$_REQUEST['values'][$attrs->fields['attname']],
-			$attrs->fields['type'],
-			$extras,
-			[
-				'is_large_type' => $typeActions->isLargeTypeMeta($typeMetas[$attrs->fields['type']]),
-			]
-		);
-		echo "</td>";
-		echo "</tr>\n";
-		$i++;
-		$attrs->moveNext();
-	}
-	// Select all checkbox
-	echo "<tr><td colspan=\"5\"><input type=\"checkbox\" id=\"selectall\" name=\"selectall\" accesskey=\"a\" onclick=\"javascript:selectAll()\" /> <label for=\"selectall\">{$lang['strselectallfields']}</label></td>";
-	echo "</tr></table>\n";
-
-	echo "<p><input type=\"hidden\" name=\"action\" value=\"selectrows\" />\n";
-	echo "<input type=\"hidden\" name=\"table\" value=\"", html_esc($_REQUEST['table']), "\" />\n";
-	echo "<input type=\"hidden\" name=\"subject\" value=\"table\" />\n";
-	echo $misc->form;
-	echo "<input type=\"submit\" name=\"select\" accesskey=\"r\" value=\"{$lang['strselect']}\" />\n";
-	echo "<input type=\"submit\" name=\"cancel\" value=\"{$lang['strcancel']}\" /></p>\n";
-	echo "</form>\n";
+	SearchFormRenderer::renderSelectRowsForm(
+		$confirm,
+		$msg,
+		'table',
+		$_REQUEST['table'],
+		'selectrows'
+	);
 }
 
 /**
