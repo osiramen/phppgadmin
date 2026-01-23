@@ -101,15 +101,14 @@ function renderQueryResult($result, $query, $lineInfo = null)
 		echo "<tr class=\"data{$id} data-row\">\n";
 		foreach ($rs->fields as $k => $v) {
 			$finfo = $rs->fetchField($k);
-			$typeMeta = $typesMeta[$finfo->type] ?? null;
 			$isArray = substr_compare($finfo->type, '_', 0, 1) === 0;
 			$array = $isArray ? "array" : "no-array";
 			$hasLineBreak = isset($v) && str_contains($v, "\n");
 			$lineBreak = $hasLineBreak ? "line-break" : "no-line-break";
-			echo "<td class=\"auto-wrap field $finfo->type $array $lineBreak\">";
-			echo "<div class=\"$finfo->type wrapper\">";
+			echo "<td class=\"auto-wrap field $finfo->type $array $lineBreak\">\n";
+			echo "<div class=\"wrapper\">\n";
 			echo $misc->printVal($v, $finfo->type, array('null' => true));
-			echo "</div>";
+			echo "</div>\n";
 			echo "</td>\n";
 		}
 		echo "</tr>\n";

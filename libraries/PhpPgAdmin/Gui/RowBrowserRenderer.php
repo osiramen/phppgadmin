@@ -317,11 +317,9 @@ class RowBrowserRenderer extends AppContext
         $j = 0;
 
         $nameIndexMap = $this->buildFieldNameIndexMap($rs);
+        $collapsed = ($_REQUEST['strings'] ?? 'collapsed') === 'collapsed';
 
         $byteaCols = $this->getByteaColumnsForCurrentQuery();
-
-        if (!isset($_REQUEST['strings']))
-            $_REQUEST['strings'] = 'collapsed';
 
         $editClass = $editable ? "editable" : "";
 
@@ -341,20 +339,46 @@ class RowBrowserRenderer extends AppContext
             } else {
                 $class = $editClass;
             }
-            echo "<td class=\"$class\" data-type=\"$type\" data-name=\"" . htmlspecialchars($finfo->name) . "\">";
+            if (!$collapsed) {
+                $isArray = substr_compare($finfo->type, '_', 0, 1) === 0;
+                $array = $isArray ? "array" : "no-array";
+                $hasLineBreak = isset($v) && str_contains($v, "\n");
+                $lineBreak = $hasLineBreak ? "line-break" : "no-line-break";
+                $class .= " auto-wrap $array $lineBreak";
+            }
+
+            echo "<td class=\"$class\" data-type=\"$type\" data-name=\"" . htmlspecialchars($finfo->name) . "\">\n";
             $valParams = [
                 'null' => true,
-                'clip' => ($_REQUEST['strings'] == 'collapsed')
+                'clip' => $collapsed,
             ];
-            if (($v !== null) && $this->renderForeignKeyLinks($rs, $nameIndexMap, $fkey_information, (string) $finfo->name)) {
-                $valParams['class'] = 'fk_value';
+            if ($v !== null) {
+                $is_fk = $this->renderForeignKeyLinks(
+                    $rs,
+                    $nameIndexMap,
+                    $fkey_information,
+                    (string) $finfo->name
+                );
+                if ($is_fk) {
+                    $valParams['class'] = 'fk_value';
+                }
             }
 
             // If this is a modified bytea column, show size + download link
-            if (!$this->renderByteaCellValue($rs, $nameIndexMap, $finfo, $v, $valParams, $byteaCols)) {
+            $is_bytea = $this->renderByteaCellValue(
+                $rs,
+                $nameIndexMap,
+                $finfo,
+                $v,
+                $valParams,
+                $byteaCols
+            );
+            if (!$is_bytea) {
+                echo "<div class=\"wrapper\">";
                 echo $misc->printVal($v, $finfo->type, $valParams);
+                echo "</div>";
             }
-            echo "</td>";
+            echo "</td>\n";
         }
     }
 
