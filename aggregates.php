@@ -475,6 +475,13 @@ function doDefault($msg = '')
 		]
 	];
 
+	$isCatalogSchema = $misc->isCatalogSchema();
+	if ($isCatalogSchema) {
+		// Disable actions on system types
+		unset($columns['actions']);
+		$actions = [];
+	}
+
 	$misc->printTable($aggregates, $columns, $actions, 'aggregates-aggregates', $lang['strnoaggregates']);
 
 	$navlinks = [
@@ -494,7 +501,11 @@ function doDefault($msg = '')
 			'content' => $lang['strcreateaggregate']
 		]
 	];
-	$misc->printNavLinks($navlinks, 'aggregates-aggregates', get_defined_vars());
+
+	if (!$isCatalogSchema) {
+		$misc->printNavLinks($navlinks, 'aggregates-aggregates', get_defined_vars());
+	}
+
 }
 
 /**

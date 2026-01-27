@@ -896,6 +896,13 @@ function doDefault($msg = '')
 		],
 	];
 
+	$isCatalogSchema = $misc->isCatalogSchema();
+	if ($isCatalogSchema) {
+		// Disable actions on system types
+		unset($columns['actions']);
+		$actions = [];
+	}
+
 	$misc->printTable($types, $columns, $actions, 'types-types', $lang['strnotypes']);
 
 	$navlinks = [
@@ -956,7 +963,10 @@ function doDefault($msg = '')
 		unset($navlinks['createenum']);
 	}
 
-	$misc->printNavLinks($navlinks, 'types-types', get_defined_vars());
+	if (!$isCatalogSchema) {
+		$misc->printNavLinks($navlinks, 'types-types', get_defined_vars());
+	}
+
 }
 
 /**
