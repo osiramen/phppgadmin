@@ -2,6 +2,7 @@
 
 namespace PhpPgAdmin\Database\Dump;
 
+use PhpPgAdmin\Database\Actions\ViewActions;
 use PhpPgAdmin\Database\Actions\SchemaActions;
 
 /**
@@ -410,37 +411,23 @@ class SchemaDumper extends ExportDumper
     {
         $this->write("\n-- Materialized Views in schema $this->schemaQuoted\n");
 
-        $sql = "SELECT c.relname
-                FROM pg_catalog.pg_class c
-                JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-                WHERE c.relkind = 'm'
-                AND n.nspname = '{$this->schemaEscaped}'
-                ORDER BY c.relname";
-
-        $result = $this->connection->selectSet($sql);
+        $viewActions = new ViewActions($this->connection);
+        $result = $viewActions->getViews(false, true);
 
         if (!$result || $result->EOF) {
             return;
         }
 
+        $dumper = $this->createSubDumper('materialized_view');
+
         while (!$result->EOF) {
             $viewName = $result->fields['relname'];
 
             if (!$this->hasObjectSelection || isset($this->selectedObjects[$viewName])) {
-                // Get the view definition
-                $viewDefSql = "SELECT pg_get_viewdef('{$this->schemaEscaped}.{$viewName}'::regclass, true) AS viewdef";
-                $viewDef = $this->connection->selectField($viewDefSql, 'viewdef');
-
-                if ($viewDef) {
-                    $viewQuoted = $this->connection->quoteIdentifier($viewName);
-                    $this->writeDrop('MATERIALIZED VIEW', "$this->schemaQuoted.$viewQuoted", $options);
-                    $this->write("CREATE MATERIALIZED VIEW " . $this->getIfNotExists($options) . "$this->schemaQuoted.$viewQuoted AS\n");
-                    $this->write($viewDef);
-                    $this->write("\nWITH NO DATA;\n\n");
-
-                    // Defer the REFRESH for after data is loaded
-                    $this->addDeferredMaterializedViewRefresh($schema, $viewName);
-                }
+                $dumper->dump('materialized_view', [
+                    'view' => $viewName,
+                    'schema' => $schema,
+                ], $options);
             }
 
             $result->moveNext();

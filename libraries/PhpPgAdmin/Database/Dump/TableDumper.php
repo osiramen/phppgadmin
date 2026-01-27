@@ -158,28 +158,7 @@ class TableDumper extends ExportDumper
                     $this->write(" NOT NULL");
                 }
 
-                if ($atts->fields['sequence_name'] !== null) {
-                    // Case 1: Owned sequence (has AUTO dependency in pg_depend)
-                    $seqSchema = $this->connection->quoteIdentifier($atts->fields['sequence_schema']);
-                    $seqName = $this->connection->quoteIdentifier($atts->fields['sequence_name']);
-                    $default = "nextval('{$seqSchema}.{$seqName}'::regclass)";
-                    $this->write(" DEFAULT {$default}");
-                } elseif ($atts->fields['adsrc'] !== null && preg_match("/nextval\\('((?:[^']|'')+)'/", $atts->fields['adsrc'], $matches)) {
-                    // Case 2: Non-owned sequence - parse and resolve schema
-                    // Unescape doubled single quotes
-                    $seqIdentifier = str_replace("''", "'", $matches[1]);
-                    $resolvedSeq = $this->resolveSequenceSchema($seqIdentifier);
-
-                    if ($resolvedSeq) {
-                        $seqSchema = $this->connection->quoteIdentifier($resolvedSeq['schema']);
-                        $seqName = $this->connection->quoteIdentifier($resolvedSeq['name']);
-                        $default = "nextval('{$seqSchema}.{$seqName}'::regclass)";
-                        $this->write(" DEFAULT {$default}");
-                    } else {
-                        // Fallback to original if resolution fails
-                        $this->write(" DEFAULT {$atts->fields['adsrc']}");
-                    }
-                } elseif ($atts->fields['adsrc'] !== null) {
+                if ($atts->fields['adsrc'] !== null) {
                     // Case 3: Other defaults (not sequence-related)
                     $this->write(" DEFAULT {$atts->fields['adsrc']}");
                 }
@@ -225,22 +204,6 @@ class TableDumper extends ExportDumper
                         $cons->moveNext();
                         continue 2;
                 }
-            }
-
-            // Add schema qualification to foreign key references
-            // pg_get_constraintdef() doesn't include schema when search_path is empty
-            if ($cons->fields['contype'] === 'f' && !empty($cons->fields['f_schema']) && !empty($cons->fields['f_table'])) {
-                $fSchema = $this->connection->quoteIdentifier($cons->fields['f_schema']);
-                $fTable = $this->connection->quoteIdentifier($cons->fields['f_table']);
-                $unqualifiedTable = $cons->fields['f_table'];
-
-                // Replace unqualified table reference with schema-qualified version
-                // Pattern: REFERENCES tablename( or REFERENCES tablename (
-                $src = preg_replace(
-                    '/REFERENCES\s+' . preg_quote($unqualifiedTable, '/') . '\s*\(/i',
-                    "REFERENCES {$fSchema}.{$fTable}(",
-                    $src
-                );
             }
 
             // Store constraint for later application
@@ -385,13 +348,6 @@ class TableDumper extends ExportDumper
 
             $def = $indexes->fields['inddef'];
 
-            // Replace tablename with schema-qualified name
-            $def = preg_replace(
-                '/ ON ([^ ]+) /',
-                " ON {$this->schemaQuoted}.$1 ",
-                $def
-            );
-
             if (!empty($options['if_not_exists'])) {
                 if ($this->connection->major_version >= 9.5) {
                     $def = str_replace(
@@ -516,47 +472,6 @@ class TableDumper extends ExportDumper
 
             $autovacs->moveNext();
         }
-    }
-
-    /**
-     * Resolve sequence schema from identifier (handles both qualified and unqualified names).
-     * 
-     * @param string $identifier The sequence identifier from nextval() expression
-     * @return array|null Array with 'schema' and 'name' keys, or null if not found
-     */
-    private function resolveSequenceSchema($identifier)
-    {
-        // Remove quotes if present
-        $identifier = trim($identifier, '"');
-
-        // If already schema-qualified (contains dot), parse it
-        if (strpos($identifier, '.') !== false) {
-            $parts = explode('.', $identifier, 2);
-            return [
-                'schema' => trim($parts[0], '"'),
-                'name' => trim($parts[1], '"')
-            ];
-        }
-
-        // Query to find sequence schema (using pg_table_is_visible for search_path)
-        $this->connection->clean($identifier);
-        $sql = "SELECT n.nspname AS schema, c.relname AS name
-                FROM pg_catalog.pg_class c
-                JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
-                WHERE c.relkind = 'S' 
-                  AND c.relname = '{$identifier}'
-                  AND pg_catalog.pg_table_is_visible(c.oid)
-                LIMIT 1";
-
-        $result = $this->connection->selectSet($sql);
-        if ($result && !$result->EOF) {
-            return [
-                'schema' => $result->fields['schema'],
-                'name' => $result->fields['name']
-            ];
-        }
-
-        return null;
     }
 
 }

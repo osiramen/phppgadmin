@@ -185,8 +185,6 @@ lang/                   → Language files
 themes/                 → CSS themes
 docs/                   → Technical documentation
 plugins/                → Plugin system
-temp/                   → Temporary files (exports, imports)
-sessions/               → PHP session files
 ```
 
 ## Testing

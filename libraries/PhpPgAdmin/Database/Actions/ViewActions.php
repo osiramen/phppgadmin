@@ -2,6 +2,8 @@
 
 namespace PhpPgAdmin\Database\Actions;
 
+use ADORecordSet_empty;
+
 
 
 class ViewActions extends ActionsBase
@@ -17,34 +19,54 @@ class ViewActions extends ActionsBase
         $this->connection->clean($view);
 
         $sql =
-            "SELECT c.relname, n.nspname,
+            "SELECT c.relname, n.nspname, c.relkind,
                 pg_catalog.pg_get_userbyid(c.relowner) AS relowner,
                 pg_catalog.pg_get_viewdef(c.oid, true) AS vwdefinition,
                 pg_catalog.obj_description(c.oid, 'pg_class') AS relcomment
             FROM pg_catalog.pg_class c
-                LEFT JOIN pg_catalog.pg_namespace n ON (n.oid = c.relnamespace)
+            LEFT JOIN pg_catalog.pg_namespace n ON (n.oid = c.relnamespace)
             WHERE (c.relname = '{$view}') AND n.nspname='{$c_schema}'";
 
         return $this->connection->selectSet($sql);
     }
 
     /**
-     * Returns a list of all views in the current schema.
+     * Returns a list of views and/or materialized views in the current schema.
+     *
+     * @param bool $normal       get normal views
+     * @param bool $materialized get materialized views
      */
-    public function getViews()
+    public function getViews($normal = true, $materialized = false)
     {
         $c_schema = $this->connection->_schema;
         $this->connection->clean($c_schema);
-        $sql = "
-            SELECT c.relname, pg_catalog.pg_get_userbyid(c.relowner) AS relowner,
-                pg_catalog.obj_description(c.oid, 'pg_class') AS relcomment
+
+        if (!$normal && !$materialized) {
+            return new ADORecordSet_empty();
+        }
+        if ($normal && !$materialized) {
+            $relkind = "'v'";
+        } elseif (!$normal && $materialized) {
+            $relkind = "'m'";
+        } else {
+            $relkind = "'v','m'";
+        }
+
+        $sql =
+            "SELECT c.relname,
+                pg_catalog.pg_get_userbyid(c.relowner) AS relowner,
+                pg_catalog.obj_description(c.oid, 'pg_class') AS relcomment,
+                c.relkind
             FROM pg_catalog.pg_class c
-                LEFT JOIN pg_catalog.pg_namespace n ON (n.oid = c.relnamespace)
-            WHERE (n.nspname='{$c_schema}') AND (c.relkind = 'v'::\"char\")
-            ORDER BY relname";
+            LEFT JOIN pg_catalog.pg_namespace n ON (n.oid = c.relnamespace)
+            WHERE n.nspname = '{$c_schema}'
+            AND c.relkind IN ($relkind)
+            ORDER BY c.relname
+        ";
 
         return $this->connection->selectSet($sql);
     }
+
 
     /**
      * Updates a view (OR REPLACE).

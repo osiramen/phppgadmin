@@ -56,7 +56,7 @@ class SequenceDumper extends ExportDumper
 
         // Defer sequence ownership to be applied after all tables are dumped
         if (!empty($rs->fields['owned_table']) && !empty($rs->fields['owned_column'])) {
-            if ($this->parentDumper && method_exists($this->parentDumper, 'addDeferredSequenceOwnership')) {
+            if ($this->parentDumper instanceof SchemaDumper) {
                 $this->parentDumper->addDeferredSequenceOwnership(
                     $schema,
                     $sequence,

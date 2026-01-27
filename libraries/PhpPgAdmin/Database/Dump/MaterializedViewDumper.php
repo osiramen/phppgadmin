@@ -5,9 +5,9 @@ namespace PhpPgAdmin\Database\Dump;
 use PhpPgAdmin\Database\Actions\ViewActions;
 
 /**
- * Dumper for PostgreSQL views.
+ * Dumper for PostgreSQL materialized views.
  */
-class ViewDumper extends ExportDumper
+class MaterializedViewDumper extends ExportDumper
 {
     private $schemaQuoted = null;
     private $viewQuoted = null;
@@ -37,53 +37,38 @@ class ViewDumper extends ExportDumper
             return;
         }
 
-        $this->write("\n-- View: {$this->schemaQuoted}.{$this->viewQuoted}\n");
+        $this->write("\n-- Materialized View: {$this->schemaQuoted}.{$this->viewQuoted}\n");
 
-        $this->writeDrop('VIEW', "{$this->schemaQuoted}.{$this->viewQuoted}", $options);
+        $this->writeDrop('MATERIALIZED VIEW', "{$this->schemaQuoted}.{$this->viewQuoted}", $options);
 
-        if (!empty($options['if_not_exists'])) {
-            $this->write("CREATE OR REPLACE VIEW {$this->schemaQuoted}.{$this->viewQuoted} AS\n{$rs->fields['vwdefinition']};\n");
-        } else {
-            $this->write("CREATE VIEW {$this->schemaQuoted}.{$this->viewQuoted} AS\n{$rs->fields['vwdefinition']};\n");
+        $viewDef = $rs->fields['vwdefinition'];
+
+        if ($viewDef) {
+            $this->write("CREATE MATERIALIZED VIEW " . $this->getIfNotExists($options) . "{$this->schemaQuoted}.{$this->viewQuoted} AS\n");
+            $this->write($viewDef);
+            $this->write("\nWITH NO DATA;\n\n");
+
+            // Defer the REFRESH for after data is loaded
+            if ($this->parentDumper instanceof SchemaDumper) {
+                $this->parentDumper->addDeferredMaterializedViewRefresh(
+                    $schema,
+                    $view
+                );
+            }
         }
 
         // Add comment if present and requested
         if ($this->shouldIncludeComments($options)) {
             if (!empty($rs->fields['relcomment'])) {
                 $comment = $this->connection->escapeString($rs->fields['relcomment']);
-                $this->write("COMMENT ON VIEW {$this->schemaQuoted}.{$this->viewQuoted} IS '$comment';\\n");
+                $this->write("COMMENT ON MATERIALIZED VIEW {$this->schemaQuoted}.{$this->viewQuoted} IS '$comment';\n");
             }
         }
 
-        $this->deferRules($view, $schema, $options);
         $this->deferTriggers($view, $schema, $options);
 
-        $this->writePrivileges($view, 'view', $rs->fields['relowner']);
-    }
-
-    protected function deferRules($view, $schema, $options)
-    {
-        $sql =
-            "SELECT definition
-            FROM pg_rules
-            WHERE schemaname = '{$this->schemaEscaped}'
-                AND tablename = '{$this->viewEscaped}'";
-        $rs = $this->connection->selectSet($sql);
-        if (!$rs || $rs->EOF) {
-            return;
-        }
-
-        while (!$rs->EOF) {
-            // Add to parent SchemaDumper's deferred collection
-            if ($this->parentDumper instanceof SchemaDumper) {
-                $this->parentDumper->addDeferredRule(
-                    $schema,
-                    $view,
-                    $rs->fields['definition']
-                );
-            }
-            $rs->moveNext();
-        }
+        // Materialized views use table privileges
+        $this->writePrivileges($view, 'table', $rs->fields['relowner']);
     }
 
     protected function deferTriggers($view, $schema, $options)
@@ -100,10 +85,8 @@ class ViewDumper extends ExportDumper
                     )
                 )";
         $rs = $this->connection->selectSet($sql);
-        if (!$rs) {
-            return;
-        }
-        if ($rs->EOF) {
+
+        if (!is_object($rs)) {
             return;
         }
 

@@ -1,9 +1,10 @@
 <?php
 
 use PhpPgAdmin\Core\AppContainer;
-use PhpPgAdmin\Database\Export\DumpManager;
 use PhpPgAdmin\Gui\ExportOutputRenderer;
 use PhpPgAdmin\Database\Dump\DumpFactory;
+use PhpPgAdmin\Database\Export\DumpManager;
+use PhpPgAdmin\Database\Actions\SchemaActions;
 use PhpPgAdmin\Database\Actions\DatabaseActions;
 use PhpPgAdmin\Database\Export\Compression\CompressionFactory;
 
@@ -114,6 +115,9 @@ if ($use_internal) {
 			die("Error: " . htmlspecialchars($e->getMessage()));
 		}
 	}
+
+	// Reset search_path to avoid issues with schema-scoped exports
+	$pg->execute("SELECT pg_catalog.set_config('search_path', '', false)");
 
 	// Execute dump via internal dumper
 	// Note: Dumpers handle their own transaction management (beginDump/endDump)
