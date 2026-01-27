@@ -1,6 +1,6 @@
 # phpPgAdmin
 
-![Logo](themes/bootstrap/title.svg)
+![Logo](images/themes/bootstrap/title.svg)
 
 > **⚠️ DEVELOPMENT VERSION - NOT YET PRODUCTION READY**  
 > This version is under development and should not be used in production environments. Features are being rewritten, tested, and may contain bugs or incomplete functionality. Use at your own risk.
