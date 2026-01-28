@@ -477,7 +477,7 @@ function doDefault($msg = '')
 
 	$isCatalogSchema = $misc->isCatalogSchema();
 	if ($isCatalogSchema) {
-		// Disable actions on system types
+		// Disable actions on system aggregates
 		unset($columns['actions']);
 		$actions = [];
 	}

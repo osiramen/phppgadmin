@@ -53,6 +53,7 @@ class DependencyAnalyzer
         $this->loadFunctions($graph);
         $this->loadTables($graph);
         $this->loadDomains($graph);
+        $this->loadAggregates($graph);
 
         // Build type cache for efficient lookups
         $this->buildTypeCache();
@@ -63,6 +64,7 @@ class DependencyAnalyzer
         $this->addTableToFunctionDependencies($graph);
         $this->addTableToDomainDependencies($graph);
         $this->addDomainToFunctionDependencies($graph);
+        $this->addAggregateToFunctionDependencies($graph);
 
         return $graph;
     }
@@ -157,6 +159,43 @@ class DependencyAnalyzer
                 $result->fields['oid'],
                 'domain',
                 $result->fields['typname'],
+                $result->fields['nspname']
+            );
+            $graph->addNode($node);
+            $result->moveNext();
+        }
+    }
+
+    /**
+     * Load all aggregates in scope as graph nodes.
+     *
+     * @param DependencyGraph $graph Graph to populate
+     */
+    private function loadAggregates(DependencyGraph $graph)
+    {
+        $schemaList = $this->escapeSchemaList();
+
+        // Use prokind for PostgreSQL 11+, proisagg for older versions
+        if ($this->connection->major_version >= 11) {
+            $aggFilter = "p.prokind = 'a'";
+        } else {
+            $aggFilter = "p.proisagg";
+        }
+
+        $sql = "SELECT p.oid, p.proname, n.nspname
+                FROM pg_catalog.pg_proc p
+                JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+                WHERE n.nspname IN ($schemaList)
+                AND $aggFilter
+                ORDER BY p.proname";
+
+        $result = $this->connection->selectSet($sql);
+
+        while ($result && !$result->EOF) {
+            $node = new ObjectNode(
+                $result->fields['oid'],
+                'aggregate',
+                $result->fields['proname'],
                 $result->fields['nspname']
             );
             $graph->addNode($node);
@@ -386,8 +425,64 @@ class DependencyAnalyzer
         }
     }
 
-    /**
-     * Add table → domain dependencies (tables using domains in columns).
+    /**     * Add dependencies for aggregates on their supporting functions.
+     * Aggregates depend on:
+     * - aggtransfn (SFUNC)
+     * - aggfinalfn (FINALFUNC)
+     * - aggcombinefn (COMBINEFUNC)
+     * - aggserialfn (SERIALFUNC)
+     * - aggdeserialfn (DESERIALFUNC)
+     * - aggmtransfn (MSFUNC)
+     * - aggminvtransfn (MINVFUNC)
+     * - aggmfinalfn (MFINALFUNC)
+     *
+     * @param DependencyGraph $graph Graph to populate
+     */
+    private function addAggregateToFunctionDependencies(DependencyGraph $graph)
+    {
+        $schemaList = $this->escapeSchemaList();
+
+        // Query pg_aggregate to get all function dependencies
+        $sql = "SELECT agg.aggfnoid,
+                       agg.aggtransfn, agg.aggfinalfn, agg.aggcombinefn,
+                       agg.aggserialfn, agg.aggdeserialfn,
+                       agg.aggmtransfn, agg.aggminvtransfn, agg.aggmfinalfn,
+                       n.nspname
+                FROM pg_catalog.pg_aggregate agg
+                JOIN pg_catalog.pg_proc p ON p.oid = agg.aggfnoid
+                JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+                WHERE n.nspname IN ($schemaList)";
+
+        $result = $this->connection->selectSet($sql);
+
+        while ($result && !$result->EOF) {
+            $aggOid = $result->fields['aggfnoid'];
+
+            // All the function fields that an aggregate can depend on
+            $functionFields = [
+                'aggtransfn',
+                'aggfinalfn',
+                'aggcombinefn',
+                'aggserialfn',
+                'aggdeserialfn',
+                'aggmtransfn',
+                'aggminvtransfn',
+                'aggmfinalfn'
+            ];
+
+            foreach ($functionFields as $field) {
+                $funcOid = $result->fields[$field];
+                if ($funcOid && $funcOid !== '0' && $funcOid !== '-') {
+                    // Function must come before aggregate
+                    $graph->addEdge($funcOid, $aggOid);
+                }
+            }
+
+            $result->moveNext();
+        }
+    }
+
+    /**     * Add table → domain dependencies (tables using domains in columns).
      *
      * @param DependencyGraph $graph Graph to populate
      */

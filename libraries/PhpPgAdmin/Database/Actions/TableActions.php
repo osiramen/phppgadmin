@@ -195,7 +195,7 @@ class TableActions extends ActionsBase
         }
 
         $sql =
-            "SELECT
+            "SELECT DISTINCT ON (a.attrelid, a.attnum)
                 a.attname,
                 a.attnum,
                 pg_catalog.format_type(a.atttypid, a.atttypmod) AS type,

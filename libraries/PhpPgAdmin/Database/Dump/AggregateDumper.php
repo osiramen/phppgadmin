@@ -38,19 +38,15 @@ class AggregateDumper extends ExportDumper
         $this->write("CREATE AGGREGATE {$schemaQuoted}.{$nameQuoted} (\n");
         $this->write("    BASETYPE = " . (($rs->fields['proargtypes'] === null) ? 'ANY' : $rs->fields['proargtypes']) . ",\n");
 
-        // SFUNC (quote + qualify when needed)
-        $sfuncQuoted = $this->connection->quoteIdentifier($rs->fields['aggtransfn']);
-        $this->write("    SFUNC = {$sfuncQuoted},\n");
+        // SFUNC comes from proname, do not quote
+        $this->write("    SFUNC = {$rs->fields['aggtransfn']},\n");
 
         // STYPE comes from format_type(), do not quote
         $this->write("    STYPE = " . $rs->fields['aggstype']);
 
         if ($rs->fields['aggfinalfn'] !== null && $rs->fields['aggfinalfn'] !== '-') {
-            $finalQuoted = $this->connection->quoteIdentifier($rs->fields['aggfinalfn']);
-            if (!empty($rs->fields['finalfnnspname'])) {
-                $finalQuoted = $this->connection->quoteIdentifier($rs->fields['finalfnnspname']) . '.' . $finalQuoted;
-            }
-            $this->write(",\n    FINALFUNC = " . $finalQuoted);
+            // FINALFUNC: do not quote
+            $this->write(",\n    FINALFUNC = {$rs->fields['aggfinalfn']}");
         }
         if ($rs->fields['agginitval'] !== null) {
             $this->write(",\n    INITCOND = '{$rs->fields['agginitval']}'");

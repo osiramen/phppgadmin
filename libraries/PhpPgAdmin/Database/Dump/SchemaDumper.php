@@ -82,23 +82,18 @@ class SchemaDumper extends ExportDumper
             $this->dumpOperators($schema, $options);
         }
 
-        // 4. UNIFIED TOPOLOGICAL DUMP: Functions, Tables, Domains with dependency analysis
+        // 4. UNIFIED TOPOLOGICAL DUMP: Functions, Tables, Domains, Aggregates with dependency analysis
         $this->dumpObjectsTopologically($schema, $options);
 
-        // 5. Aggregates (after functions, since they depend on SFUNC/FINALFUNC)
-        if ($includeSchemaObjects) {
-            $this->dumpAggregates($schema, $options);
-        }
-
-        // 6. Views (regular views with dependency sorting)
+        // 5. Views (regular views with dependency sorting)
         $this->dumpViews($schema, $options);
 
-        // 7. Materialized Views (WITH NO DATA, refresh deferred)
+        // 6. Materialized Views (WITH NO DATA, refresh deferred)
         if ($includeSchemaObjects) {
             $this->dumpMaterializedViews($schema, $options);
         }
 
-        // 8. Apply deferred objects after all structure is created
+        // 7. Apply deferred objects after all structure is created
         $this->applyDeferredForeignKeys($options);
         $this->applyDeferredMaterializedViewRefreshes($options);
         $this->applyDeferredViews($schema, $options);
@@ -106,7 +101,7 @@ class SchemaDumper extends ExportDumper
         $this->applyDeferredTriggers($options);
         $this->applyDeferredSequenceOwnerships($options);
 
-        // 9. Privileges
+        // 8. Privileges
         $this->writePrivileges(
             $schema,
             'schema',
@@ -260,6 +255,12 @@ class SchemaDumper extends ExportDumper
                         $this->dumpSingleDomain($node, $schema, $dumpOptions);
                     }
                     break;
+
+                case 'aggregate':
+                    if ($includeSchemaObjects) {
+                        $this->dumpSingleAggregate($node, $schema, $dumpOptions);
+                    }
+                    break;
             }
         }
     }
@@ -314,6 +315,34 @@ class SchemaDumper extends ExportDumper
         ], $options);
 
         $this->dumpedDomains[$node->oid] = true;
+    }
+
+    /**
+     * Dump a single aggregate by node.
+     *
+     * @param \PhpPgAdmin\Database\Dump\DependencyGraph\ObjectNode $node Aggregate node
+     * @param string $schema Schema name
+     * @param array $options Dump options
+     */
+    protected function dumpSingleAggregate($node, $schema, $options)
+    {
+        // Query for aggregate's argument types
+        $sql = "SELECT pg_catalog.pg_get_function_arguments(p.oid) AS proargtypes
+                FROM pg_catalog.pg_proc p
+                WHERE p.oid = '{$node->oid}'";
+
+        $result = $this->connection->selectSet($sql);
+
+        if ($result && !$result->EOF) {
+            $basetype = $result->fields['proargtypes'];
+
+            $dumper = $this->createSubDumper('aggregate');
+            $dumper->dump('aggregate', [
+                'aggregate' => $node->name,
+                'basetype' => $basetype,
+                'schema' => $schema,
+            ], $options);
+        }
     }
 
     /**
