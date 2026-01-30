@@ -386,7 +386,7 @@ class RowBrowserRenderer extends AppContext
                 $byteaCols
             );
             if (!$is_bytea) {
-                echo "<div class=\"wrapper\">";
+                echo "<div class=\"wrapper d-inline-block\">";
                 echo $misc->formatVal($v, $finfo->type, $valParams);
                 echo "</div>";
             }
