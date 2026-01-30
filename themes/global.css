@@ -441,6 +441,10 @@ td[class^="opbutton"] img.icon {
 	height: 200px;
 }
 
+.sql-editor.medium {
+	height: 150px;
+}
+
 .sql-editor.high,
 .sql-editor.big {
 	height: 300px;

@@ -383,18 +383,9 @@ class TableActions extends ActionsBase
 
         $sql .= ")";
 
-        if ($withoutoids)
-            $sql .= ' WITHOUT OIDS';
-        else
-            $sql .= ' WITH OIDS';
-
-        if ($this->supportsTablespaces() && $tablespace != '') {
-            $this->connection->fieldClean($tablespace);
-            $sql .= " TABLESPACE \"{$tablespace}\"";
-        }
-
         // Add PARTITION BY clause if partitioning is enabled (PG10+)
-        if ($this->connection->major_version >= 10 && $partitionStrategy !== null && !empty($partitionKeys)) {
+        $hasPartitioning = !empty($partitionStrategy) && !empty($partitionKeys);
+        if ($this->connection->major_version >= 10 && $hasPartitioning) {
             $sql .= " PARTITION BY {$partitionStrategy} (";
             $cleanedKeys = [];
             foreach ($partitionKeys as $key) {
@@ -403,6 +394,16 @@ class TableActions extends ActionsBase
             }
             $sql .= implode(", ", $cleanedKeys);
             $sql .= ")";
+        }
+
+        if ($withoutoids)
+            $sql .= ' WITHOUT OIDS';
+        else
+            $sql .= ' WITH OIDS';
+
+        if ($this->supportsTablespaces() && $tablespace != '') {
+            $this->connection->fieldClean($tablespace);
+            $sql .= " TABLESPACE \"{$tablespace}\"";
         }
 
         $status = $this->connection->execute($sql);

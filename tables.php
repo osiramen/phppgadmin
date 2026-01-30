@@ -1,12 +1,13 @@
 <?php
 
-use PhpPgAdmin\Database\Actions\PartitionActions;
 use PhpPgAdmin\Gui\FormRenderer;
-use PhpPgAdmin\Gui\SearchFormRenderer;
 use PhpPgAdmin\Core\AppContainer;
+use PhpPgAdmin\Gui\ColumnFormRenderer;
+use PhpPgAdmin\Gui\SearchFormRenderer;
 use PhpPgAdmin\Database\Actions\RowActions;
 use PhpPgAdmin\Database\Actions\TypeActions;
 use PhpPgAdmin\Database\Actions\TableActions;
+use PhpPgAdmin\Database\Actions\PartitionActions;
 use PhpPgAdmin\Database\Actions\TablespaceActions;
 
 /**
@@ -39,300 +40,323 @@ function doCreate($msg = '')
 
 	if (!isset($_REQUEST['name']))
 		$_REQUEST['name'] = '';
-	if (!isset($_REQUEST['fields']))
-		$_REQUEST['fields'] = '';
+	if (!isset($_REQUEST['num_columns']))
+		$_REQUEST['num_columns'] = '';
 	if (!isset($_REQUEST['tblcomment']))
 		$_REQUEST['tblcomment'] = '';
 	if (!isset($_REQUEST['spcname']))
 		$_REQUEST['spcname'] = '';
 
-	switch ($_REQUEST['stage']) {
-		case 1:
-			// Fetch all tablespaces from the database
-			if ($pg->hasTablespaces())
-				$tablespaces = $tablespaceActions->getTablespaces();
+	$stage = (int) $_REQUEST['stage'];
 
-			$misc->printTrail('schema');
-			$misc->printTitle($lang['strcreatetable'], 'pg.table.create');
-			$misc->printMsg($msg);
+	if ($stage == 1) {
+		// Fetch all tablespaces from the database
+		if ($pg->hasTablespaces())
+			$tablespaces = $tablespaceActions->getTablespaces();
 
-			echo "<form action=\"tables.php\" method=\"post\">\n";
-			echo "<table>\n";
-			echo "\t<tr>\n\t\t<th class=\"data left required\">{$lang['strname']}</th>\n";
-			echo "\t\t<td class=\"data\"><input name=\"name\" size=\"32\" maxlength=\"{$pg->_maxNameLen}\" value=\"",
-				html_esc($_REQUEST['name']), "\" /></td>\n\t</tr>\n";
-			echo "\t<tr>\n\t\t<th class=\"data left required\">{$lang['strnumcols']}</th>\n";
-			echo "\t\t<td class=\"data\"><input name=\"fields\" size=\"5\" maxlength=\"{$pg->_maxNameLen}\" value=\"",
-				html_esc($_REQUEST['fields']), "\" /></td>\n\t</tr>\n";
-			if ($pg->hasServerOids()) {
-				echo "\t<tr>\n\t\t<th class=\"data left\">{$lang['stroptions']}</th>\n";
-				echo "\t\t<td class=\"data\"><label for=\"withoutoids\"><input type=\"checkbox\" id=\"withoutoids\" name=\"withoutoids\"", isset($_REQUEST['withoutoids']) ? ' checked="checked"' : '', " />WITHOUT OIDS</label></td>\n\t</tr>\n";
-			} else {
-				echo "\t\t<input type=\"hidden\" id=\"withoutoids\" name=\"withoutoids\" value=\"checked\"\n";
-			}
+		$misc->printTrail('schema');
+		$misc->printTitle($lang['strcreatetable'], 'pg.table.create');
+		$misc->printMsg($msg);
 
-			// Tablespace (if there are any)
-			if ($pg->hasTablespaces() && $tablespaces->recordCount() > 0) {
-				echo "\t<tr>\n\t\t<th class=\"data left\">{$lang['strtablespace']}</th>\n";
-				echo "\t\t<td class=\"data1\">\n\t\t\t<select name=\"spcname\">\n";
-				// Always offer the default (empty) option
-				echo "\t\t\t\t<option value=\"\"", ($_REQUEST['spcname'] == '') ? ' selected="selected"' : '', "></option>\n";
-				// Display all other tablespaces
-				while (!$tablespaces->EOF) {
-					$spcname = html_esc($tablespaces->fields['spcname']);
-					echo "\t\t\t\t<option value=\"{$spcname}\"", ($tablespaces->fields['spcname'] == $_REQUEST['spcname']) ? ' selected="selected"' : '', ">{$spcname}</option>\n";
-					$tablespaces->moveNext();
-				}
-				echo "\t\t\t</select>\n\t\t</td>\n\t</tr>\n";
-			}
+		echo '<form action="tables.php" method="post">', "\n";
+		?>
+		<table>
+			<tr>
+				<th class="data left required"><?= $lang['strname'] ?></th>
+				<td class="data"><input name="name" size="32" maxlength="<?= $pg->_maxNameLen ?>"
+						value="<?= html_esc($_REQUEST['name']) ?>" /></td>
+			</tr>
+			<tr>
+				<th class="data left required"><?= $lang['strnumcols'] ?></th>
+				<td class="data"><input name="num_columns" size="5" maxlength="<?= $pg->_maxNameLen ?>"
+						value="<?= html_esc($_REQUEST['num_columns']) ?>" /></td>
+			</tr>
+			<?php if ($pg->hasServerOids()): ?>
+				<tr>
+					<th class="data left"><?= $lang['stroptions'] ?></th>
+					<td class="data"><label for="withoutoids"><input type="checkbox" id="withoutoids" name="withoutoids"
+								<?= isset($_REQUEST['withoutoids']) ? ' checked="checked"' : '' ?> />WITHOUT OIDS</label></td>
+				</tr>
+			<?php else: ?>
+				<input type="hidden" id="withoutoids" name="withoutoids" value="checked" />
+			<?php endif; ?>
 
-			// Partitioning options (PG10+)
-			if ($pg->major_version >= 10) {
+			<?php if ($pg->hasTablespaces() && $tablespaces->recordCount() > 0): ?>
+				<tr>
+					<th class="data left"><?= $lang['strtablespace'] ?></th>
+					<td class="data1">
+						<select name="spcname">
+							<option value="" <?= ($_REQUEST['spcname'] == '') ? ' selected="selected"' : '' ?>></option>
+							<?php while (!$tablespaces->EOF):
+								$spcname = html_esc($tablespaces->fields['spcname']); ?>
+								<option value="<?= $spcname ?>" <?= ($tablespaces->fields['spcname'] == $_REQUEST['spcname']) ? ' selected="selected"' : '' ?>><?= $spcname ?></option>
+								<?php $tablespaces->moveNext(); endwhile; ?>
+						</select>
+					</td>
+				</tr>
+			<?php endif; ?>
+
+			<?php if ($pg->major_version >= 10):
 				if (!isset($_REQUEST['is_partitioned']))
 					$_REQUEST['is_partitioned'] = '';
 				if (!isset($_REQUEST['partition_strategy']))
 					$_REQUEST['partition_strategy'] = '';
+				?>
+				<tr>
+					<th class="data left"><?= $lang['strpartitionstrategy'] ?></th>
+					<td class="data">
+						<label>
+							<input type="checkbox" id="is_partitioned" name="is_partitioned" value="1"
+								<?= $_REQUEST['is_partitioned'] ? ' checked="checked"' : '' ?>
+								onchange="document.getElementById('partition_strategy_row').style.display = this.checked ? '' : 'none';" />
+							<?= $lang['strcreatepartitionedtable'] ?>
+						</label>
+						<div id="partition_strategy_row" class="mt-1"
+							style="display: <?= $_REQUEST['is_partitioned'] ? '' : 'none' ?>;">
+							<select name="partition_strategy" id="partition_strategy">
+								<option value="">
+									<?= $lang['strchoose'] ?>
+								</option>
+								<option value="RANGE" <?= ($_REQUEST['partition_strategy'] == 'RANGE' ? ' selected' : '') ?>>RANGE
+									- <?= $lang['strpartitionrange'] ?></option>
+								<option value="LIST" <?= ($_REQUEST['partition_strategy'] == 'LIST' ? ' selected' : '') ?>>LIST -
+									<?= $lang['strpartitionlist'] ?>
+								</option>
+								<option value="HASH" <?= ($_REQUEST['partition_strategy'] == 'HASH' ? ' selected' : '') ?>>HASH -
+									<?= $lang['strpartitionhash'] ?>
+								</option>
+							</select>
+						</div>
+					</td>
+				</tr>
+			<?php endif; ?>
 
-				echo "\t<tr>\n\t\t<th class=\"data left\">{$lang['strpartitionstrategy']}</th>\n";
-				echo "\t\t<td class=\"data\">\n";
-				echo "\t\t\t<label><input type=\"checkbox\" id=\"is_partitioned\" name=\"is_partitioned\" value=\"1\"";
-				if ($_REQUEST['is_partitioned'])
-					echo ' checked="checked"';
-				echo " onchange=\"document.getElementById('partition_strategy_row').style.display = this.checked ? '' : 'none';\" />";
-				echo " {$lang['strcreatepartitionedtable']}</label>\n";
-				echo "\t\t\t<div id=\"partition_strategy_row\" style=\"display: " . ($_REQUEST['is_partitioned'] ? '' : 'none') . "; margin-top: 8px;\">\n";
-				echo "\t\t\t\t<select name=\"partition_strategy\" id=\"partition_strategy\">\n";
-				echo "\t\t\t\t\t<option value=\"\">{$lang['strselect']}</option>\n";
-				echo "\t\t\t\t\t<option value=\"RANGE\"" . ($_REQUEST['partition_strategy'] == 'RANGE' ? ' selected' : '') . ">RANGE - {$lang['strpartitionrange']}</option>\n";
-				echo "\t\t\t\t\t<option value=\"LIST\"" . ($_REQUEST['partition_strategy'] == 'LIST' ? ' selected' : '') . ">LIST - {$lang['strpartitionlist']}</option>\n";
-				echo "\t\t\t\t\t<option value=\"HASH\"" . ($_REQUEST['partition_strategy'] == 'HASH' ? ' selected' : '') . ">HASH - {$lang['strpartitionhash']}</option>\n";
-				echo "\t\t\t\t</select>\n";
-				echo "\t\t\t</div>\n";
-				echo "\t\t</td>\n\t</tr>\n";
-			}
+		</table>
+		<p>
+			<input type="hidden" name="action" value="create" />
+			<input type="hidden" name="stage" value="2" />
+			<?= $misc->form ?>
+			<input type="submit" value="<?= $lang['strnext'] ?>" />
+			<input type="submit" name="cancel" value="<?= $lang['strcancel'] ?>" />
+		</p>
+		<?php
+		echo "</form>\n";
 
+	} elseif ($stage == 2) {
 
-			echo "</table>\n";
-			echo "<p><input type=\"hidden\" name=\"action\" value=\"create\" />\n";
-			echo "<input type=\"hidden\" name=\"stage\" value=\"2\" />\n";
-			echo $misc->form;
-			echo "<input type=\"submit\" value=\"{$lang['strnext']}\" />\n";
-			echo "<input type=\"submit\" name=\"cancel\" value=\"{$lang['strcancel']}\" /></p>\n";
-			echo "</form>\n";
-			break;
-		case 2:
-			// Check inputs
-			$fields = trim($_REQUEST['fields']);
-			if (trim($_REQUEST['name']) == '') {
+		// Second stage, define columns
+
+		if (trim($_REQUEST['name']) == '') {
+			$_REQUEST['stage'] = 1;
+			doCreate($lang['strtableneedsname']);
+			return;
+		}
+
+		$num_columns = (int) (isset($_REQUEST['num_columns']) ? trim($_REQUEST['num_columns']) : '');
+
+		if ($num_columns <= 0) {
+			$_REQUEST['stage'] = 1;
+			doCreate($lang['strtableneedscols']);
+			return;
+		}
+
+		if (!empty($_REQUEST['is_partitioned'])) {
+			if (empty($_REQUEST['partition_strategy'])) {
 				$_REQUEST['stage'] = 1;
-				doCreate($lang['strtableneedsname']);
+				doCreate($lang['strpartitionstrategyrequired']);
 				return;
-			} elseif ($fields == '' || !is_numeric($fields) || $fields != (int) $fields || $fields < 1) {
+			}
+		}
+
+		$renderer = new ColumnFormRenderer();
+
+		// Prepare columns array for renderer
+		$columns = [];
+		for ($i = 0; $i < $num_columns; $i++) {
+			$columns[] = [
+				'attname' => $_REQUEST['field'][$i] ?? '',
+				'base_type' => $_REQUEST['type'][$i] ?? '',
+				'length' => $_REQUEST['length'][$i] ?? '',
+				'attnotnull' => isset($_REQUEST['notnull'][$i]),
+				'adsrc' => $_REQUEST['default'][$i] ?? '',
+				'comment' => $_REQUEST['colcomment'][$i] ?? '',
+				'default_preset' => $_REQUEST['default_preset'][$i] ?? '',
+				'uniquekey' => isset($_REQUEST['uniquekey'][$i]),
+				'primarykey' => isset($_REQUEST['primarykey'][$i]),
+				'partitionkey' => isset($_REQUEST['partitionkey'][$i]),
+			];
+		}
+
+		$misc->printTrail('schema');
+		$misc->printTitle($lang['strcreatetable'], 'pg.table.create');
+		$misc->printMsg($msg);
+
+		// Determine rendering options
+		$renderOptions = [
+			'showUniqueKey' => true,
+			'showPrimaryKey' => true,
+			'showPartitionKey' => $pg->major_version >= 10 && !empty($_REQUEST['is_partitioned']),
+		];
+
+		?>
+		<form action="tables.php" method="post">
+			<?php $renderer->renderTable($columns, $_REQUEST, $renderOptions); ?>
+			<div class="flex-row my-3">
+				<input type="hidden" name="action" value="create" />
+				<input type="hidden" name="stage" value="3" />
+				<input type="hidden" name="num_columns" id="num_columns" value="<?= (int) $num_columns ?>" />
+				<?= $misc->form ?>
+				<input type="hidden" name="name" value="<?= html_esc($_REQUEST['name'] ?? '') ?>" />
+				<?php if (isset($_REQUEST['withoutoids'])): ?>
+					<input type="hidden" name="withoutoids" value="true" />
+				<?php endif; ?>
+				<input type="hidden" name="tblcomment" value="<?= html_esc($_REQUEST['tblcomment'] ?? '') ?>" />
+				<?php if (isset($_REQUEST['spcname'])): ?>
+					<input type="hidden" name="spcname" value="<?= html_esc($_REQUEST['spcname'] ?? '') ?>" />
+				<?php endif; ?>
+				<?php if ($pg->major_version >= 10): ?>
+					<input type="hidden" name="is_partitioned" value="<?= html_esc($_REQUEST['is_partitioned'] ?? '') ?>" />
+					<input type="hidden" name="partition_strategy" value="<?= html_esc($_REQUEST['partition_strategy'] ?? '') ?>" />
+				<?php endif; ?>
+				<div>
+					<input type="submit" value="<?= $lang['strcreate'] ?>" />
+					<input type="submit" name="cancel" value="<?= $lang['strcancel'] ?>" />
+				</div>
+				<div class="ml-auto">
+					<input type="button" value="<?= $lang['straddmorecolumns'] ?>" onclick="addColumnRow();" />
+				</div>
+			</div>
+		</form>
+		<?php
+		$renderer->renderJavaScriptInit($num_columns);
+
+	} elseif ($stage == 3) {
+
+		// Final stage, create the table
+		if (!isset($_REQUEST['notnull']))
+			$_REQUEST['notnull'] = [];
+		if (!isset($_REQUEST['uniquekey']))
+			$_REQUEST['uniquekey'] = [];
+		if (!isset($_REQUEST['primarykey']))
+			$_REQUEST['primarykey'] = [];
+		if (!isset($_REQUEST['length']))
+			$_REQUEST['length'] = [];
+		// Default tablespace to null if it isn't set
+		if (!isset($_REQUEST['spcname']))
+			$_REQUEST['spcname'] = null;
+
+		// Partition settings
+		$partitionStrategy = null;
+		$partitionKeys = [];
+		if ($pg->major_version >= 10 && !empty($_REQUEST['is_partitioned'])) {
+			$partitionStrategy = $_REQUEST['partition_strategy'] ?? '';
+			if (empty($partitionStrategy)) {
 				$_REQUEST['stage'] = 1;
-				doCreate($lang['strtableneedscols']);
+				doCreate($lang['strpartitionstrategyrequired']);
 				return;
 			}
 
-			$types = $typeActions->getTypes(true, false, true);
-			$types_for_js = [];
-
-			$misc->printTrail('schema');
-			$misc->printTitle($lang['strcreatetable'], 'pg.table.create');
-			$misc->printMsg($msg);
-
-			echo "<script src=\"js/tables.js\" type=\"text/javascript\"></script>";
-			echo "<form action=\"tables.php\" method=\"post\">\n";
-
-			// Output table header
-			echo "<table>\n";
-			echo "\t<tr><th colspan=\"2\" class=\"data required\">{$lang['strcolumn']}</th><th colspan=\"2\" class=\"data required\">{$lang['strtype']}</th>";
-			echo "<th class=\"data\">{$lang['strlength']}</th><th class=\"data\">{$lang['strnotnull']}</th>";
-			echo "<th class=\"data\">{$lang['struniquekey']}</th><th class=\"data\">{$lang['strprimarykey']}</th>";
-			echo "<th class=\"data\">{$lang['strdefault']}</th>";
-			// Show partition key column if partitioning is enabled
-			if ($pg->major_version >= 10 && isset($_REQUEST['is_partitioned']) && $_REQUEST['is_partitioned']) {
-				echo "<th class=\"data\">{$lang['strpartitionkey']}</th>";
-			}
-			echo "<th class=\"data\">{$lang['strcomment']}</th></tr>\n";
-
-			for ($i = 0; $i < $_REQUEST['fields']; $i++) {
-				if (!isset($_REQUEST['field'][$i]))
-					$_REQUEST['field'][$i] = '';
-				if (!isset($_REQUEST['length'][$i]))
-					$_REQUEST['length'][$i] = '';
-				if (!isset($_REQUEST['default'][$i]))
-					$_REQUEST['default'][$i] = '';
-				if (!isset($_REQUEST['colcomment'][$i]))
-					$_REQUEST['colcomment'][$i] = '';
-
-				echo "\t<tr>\n\t\t<td>", $i + 1, ".&nbsp;</td>\n";
-				echo "\t\t<td><input name=\"field[{$i}]\" size=\"16\" maxlength=\"{$pg->_maxNameLen}\" value=\"",
-					html_esc($_REQUEST['field'][$i]), "\" /></td>\n";
-				echo "\t\t<td>\n\t\t\t<select name=\"type[{$i}]\" id=\"types{$i}\" onchange=\"checkLengths(this.options[this.selectedIndex].value,{$i});\">\n";
-				// Output any "magic" types
-				foreach ($pg->extraTypes as $v) {
-					$types_for_js[strtolower($v)] = 1;
-					echo "\t\t\t\t<option value=\"", html_esc($v), "\"", (isset($_REQUEST['type'][$i]) && $v == $_REQUEST['type'][$i]) ? ' selected="selected"' : '', ">",
-						$misc->formatVal($v), "</option>\n";
-				}
-				$types->moveFirst();
-				while (!$types->EOF) {
-					$typname = $types->fields['typname'];
-					$types_for_js[$typname] = 1;
-					echo "\t\t\t\t<option value=\"", html_esc($typname), "\"", (isset($_REQUEST['type'][$i]) && $typname == $_REQUEST['type'][$i]) ? ' selected="selected"' : '', ">",
-						$misc->formatVal($typname), "</option>\n";
-					$types->moveNext();
-				}
-				echo "\t\t\t</select>\n\t\t\n";
-				if ($i == 0) { // only define js types array once
-					$predefined_size_types = array_intersect($pg->predefinedSizeTypes, array_keys($types_for_js));
-					$escaped_predef_types = []; // the JS escaped array elements
-					foreach ($predefined_size_types as $value) {
-						$escaped_predef_types[] = "'{$value}'";
-					}
-					echo "<script type=\"text/javascript\">predefined_lengths = new Array(" . implode(",", $escaped_predef_types) . ");</script>\n\t</td>";
-				}
-
-				// Output array type selector
-				echo "\t\t<td>\n\t\t\t<select name=\"array[{$i}]\">\n";
-				echo "\t\t\t\t<option value=\"\"", (isset($_REQUEST['array'][$i]) && $_REQUEST['array'][$i] == '') ? ' selected="selected"' : '', "></option>\n";
-				echo "\t\t\t\t<option value=\"[]\"", (isset($_REQUEST['array'][$i]) && $_REQUEST['array'][$i] == '[]') ? ' selected="selected"' : '', ">[ ]</option>\n";
-				echo "\t\t\t</select>\n\t\t</td>\n";
-
-				echo "\t\t<td><input name=\"length[{$i}]\" id=\"lengths{$i}\" size=\"10\" value=\"",
-					html_esc($_REQUEST['length'][$i]), "\" /></td>\n";
-				echo "\t\t<td><input type=\"checkbox\" name=\"notnull[{$i}]\"", (isset($_REQUEST['notnull'][$i])) ? ' checked="checked"' : '', " /></td>\n";
-				echo "\t\t<td style=\"text-align: center\"><input type=\"checkbox\" name=\"uniquekey[{$i}]\""
-					. (isset($_REQUEST['uniquekey'][$i]) ? ' checked="checked"' : '') . " /></td>\n";
-				echo "\t\t<td style=\"text-align: center\"><input type=\"checkbox\" name=\"primarykey[{$i}]\" "
-					. (isset($_REQUEST['primarykey'][$i]) ? ' checked="checked"' : '')
-					. " /></td>\n";
-				echo "\t\t<td><input name=\"default[{$i}]\" size=\"20\" value=\"",
-					html_esc($_REQUEST['default'][$i]), "\" /></td>\n";			// Partition key checkbox (PG10+)
-				if ($pg->major_version >= 10 && isset($_REQUEST['is_partitioned']) && $_REQUEST['is_partitioned']) {
-					echo "\t\t<td style=\"text-align: center\"><input type=\"checkbox\" name=\"partitionkey[{$i}]\"";
-					if (isset($_REQUEST['partitionkey'][$i]))
-						echo ' checked="checked"';
-					echo " /></td>\n";
-				}
-				echo "\t\t<td><input name=\"colcomment[{$i}]\" size=\"40\" value=\"",
-					html_esc($_REQUEST['colcomment'][$i]), "\" />
-						<script type=\"text/javascript\">checkLengths(document.getElementById('types{$i}').value,{$i});</script>
-						</td>\n\t</tr>\n";
-			}
-			echo "</table>\n";
-			echo "<p><input type=\"hidden\" name=\"action\" value=\"create\" />\n";
-			echo "<input type=\"hidden\" name=\"stage\" value=\"3\" />\n";
-			echo $misc->form;
-			echo "<input type=\"hidden\" name=\"name\" value=\"", html_esc($_REQUEST['name']), "\" />\n";
-			echo "<input type=\"hidden\" name=\"fields\" value=\"", html_esc($_REQUEST['fields']), "\" />\n";
-			if (isset($_REQUEST['withoutoids'])) {
-				echo "<input type=\"hidden\" name=\"withoutoids\" value=\"true\" />\n";
-			}
-			echo "<input type=\"hidden\" name=\"tblcomment\" value=\"", html_esc($_REQUEST['tblcomment']), "\" />\n";
-			if (isset($_REQUEST['spcname'])) {
-				echo "<input type=\"hidden\" name=\"spcname\" value=\"", html_esc($_REQUEST['spcname']), "\" />\n";
-			}
-			// Pass partition settings to stage 3
-			if ($pg->major_version >= 10) {
-				if (isset($_REQUEST['is_partitioned']) && $_REQUEST['is_partitioned']) {
-					echo "<input type=\"hidden\" name=\"is_partitioned\" value=\"1\" />\n";
-					if (isset($_REQUEST['partition_strategy'])) {
-						echo "<input type=\"hidden\" name=\"partition_strategy\" value=\"", html_esc($_REQUEST['partition_strategy']), "\" />\n";
-					}
-				}
-			}
-			echo "<input type=\"submit\" value=\"{$lang['strcreate']}\" />\n";
-			echo "<input type=\"submit\" name=\"cancel\" value=\"{$lang['strcancel']}\" /></p>\n";
-			echo "</form>\n";
-
-			break;
-		case 3:
-			if (!isset($_REQUEST['notnull']))
-				$_REQUEST['notnull'] = [];
-			if (!isset($_REQUEST['uniquekey']))
-				$_REQUEST['uniquekey'] = [];
-			if (!isset($_REQUEST['primarykey']))
-				$_REQUEST['primarykey'] = [];
-			if (!isset($_REQUEST['length']))
-				$_REQUEST['length'] = [];
-			// Default tablespace to null if it isn't set
-			if (!isset($_REQUEST['spcname']))
-				$_REQUEST['spcname'] = null;
-
-			// Partition settings
-			$partitionStrategy = null;
-			$partitionKeys = [];
-			if ($pg->major_version >= 10 && isset($_REQUEST['is_partitioned']) && $_REQUEST['is_partitioned']) {
-				if (empty($_REQUEST['partition_strategy'])) {
-					$_REQUEST['stage'] = 1;
-					doCreate($lang['strpartitionstrategyrequired'] ?? 'Partition strategy is required');
-					return;
-				}
-				$partitionStrategy = $_REQUEST['partition_strategy'];
-
-				// Collect partition key columns
-				if (isset($_REQUEST['partitionkey'])) {
-					foreach ($_REQUEST['partitionkey'] as $idx => $val) {
-						if (!empty($_REQUEST['field'][$idx])) {
-							$partitionKeys[] = $_REQUEST['field'][$idx];
-						}
+			// Collect partition key columns
+			if (is_array($_REQUEST['partitionkey'] ?? null)) {
+				foreach ($_REQUEST['partitionkey'] as $idx => $val) {
+					if (!empty($_REQUEST['field'][$idx])) {
+						$partitionKeys[] = $_REQUEST['field'][$idx];
 					}
 				}
-
-				if (empty($partitionKeys)) {
-					$_REQUEST['stage'] = 2;
-					doCreate($lang['strpartitionkeyrequired'] ?? 'At least one partition key column is required');
-					return;
-				}
 			}
 
-			// Check inputs
-			$fields = trim($_REQUEST['fields']);
-			if (trim($_REQUEST['name']) == '') {
-				$_REQUEST['stage'] = 1;
-				doCreate($lang['strtableneedsname']);
-				return;
-			} elseif ($fields == '' || !is_numeric($fields) || $fields != (int) $fields || $fields <= 0) {
-				$_REQUEST['stage'] = 1;
-				doCreate($lang['strtableneedscols']);
-				return;
-			}
-
-			$status = $tableActions->createTable(
-				$_REQUEST['name'],
-				$_REQUEST['fields'],
-				$_REQUEST['field'],
-				$_REQUEST['type'],
-				$_REQUEST['array'],
-				$_REQUEST['length'],
-				$_REQUEST['notnull'],
-				$_REQUEST['default'],
-				isset($_REQUEST['withoutoids']),
-				$_REQUEST['colcomment'],
-				$_REQUEST['tblcomment'],
-				$_REQUEST['spcname'],
-				$_REQUEST['uniquekey'],
-				$_REQUEST['primarykey'],
-				$partitionStrategy,
-				$partitionKeys
-			);
-
-			if ($status == 0) {
-				AppContainer::setShouldReloadTree(true);
-				doDefault($lang['strtablecreated']);
-			} elseif ($status == -1) {
+			if (empty($partitionKeys)) {
 				$_REQUEST['stage'] = 2;
-				doCreate($lang['strtableneedsfield']);
-				return;
-			} else {
-				$_REQUEST['stage'] = 2;
-				doCreate($lang['strtablecreatedbad']);
+				doCreate($lang['strpartitionkeyrequired']);
 				return;
 			}
-			break;
-		default:
-			echo "<p>{$lang['strinvalidparam']}</p>\n";
+		}
+
+		// Check inputs
+		if (trim($_REQUEST['name']) == '') {
+			$_REQUEST['stage'] = 1;
+			doCreate($lang['strtableneedsname']);
+			return;
+		}
+		$num_columns = (int) trim($_REQUEST['num_columns'] ?? '');
+		if ($num_columns <= 0) {
+			$_REQUEST['stage'] = 1;
+			doCreate($lang['strtableneedscols']);
+			return;
+		}
+
+		// Build arrays for createTable from valid columns
+		$fields = [];
+		$types = [];
+		$arrays = [];
+		$lengths = [];
+		$notnulls = [];
+		$defaults = [];
+		$colcomments = [];
+		$uniquekeys = [];
+		$primarykeys = [];
+
+		for ($i = 0; $i < $num_columns; $i++) {
+			// Only include columns with non-empty field names
+			$fieldName = trim($_REQUEST['field'][$i] ?? '');
+			if ($fieldName === '') {
+				continue;
+			}
+			// Process default value from default_preset
+			$defaultValue = $_REQUEST['default'][$i] ?? '';
+			$defaultPreset = $_REQUEST['default_preset'][$i] ?? '';
+			if ($defaultPreset !== '' && $defaultPreset !== 'custom') {
+				$defaultValue = $defaultPreset;
+			}
+
+			$fields[] = $fieldName;
+			$types[] = $_REQUEST['type'][$i] ?? '';
+			$arrays[] = $_REQUEST['array'][$i] ?? '';
+			$lengths[] = $_REQUEST['length'][$i] ?? '';
+			$notnulls[] = $_REQUEST['notnull'][$i] ?? null;
+			$defaults[] = $defaultValue;
+			$colcomments[] = $_REQUEST['colcomment'][$i] ?? '';
+			$uniquekeys[] = $_REQUEST['uniquekey'][$i] ?? null;
+			$primarykeys[] = $_REQUEST['primarykey'][$i] ?? null;
+		}
+
+		// Check if at least one valid column exists
+		if (empty($fields)) {
+			$_REQUEST['stage'] = 2;
+			doCreate($lang['strtableneedsfield']);
+			return;
+		}
+
+		$status = $tableActions->createTable(
+			$_REQUEST['name'] ?? '',
+			count($fields),
+			$fields,
+			$types,
+			$arrays,
+			$lengths,
+			$notnulls,
+			$defaults,
+			isset($_REQUEST['withoutoids']),
+			$colcomments,
+			$_REQUEST['tblcomment'] ?? '',
+			$_REQUEST['spcname'] ?? '',
+			$uniquekeys,
+			$primarykeys,
+			$partitionStrategy,
+			$partitionKeys
+		);
+
+		if ($status == 0) {
+			AppContainer::setShouldReloadTree(true);
+			doDefault($lang['strtablecreated']);
+		} elseif ($status == -1) {
+			$_REQUEST['stage'] = 2;
+			doCreate($lang['strtablecreatedbad']);
+			return;
+		}
+
+	} else {
+		echo "<p>{$lang['strinvalidparam']}</p>\n";
 	}
 }
 

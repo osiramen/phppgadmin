@@ -80,6 +80,14 @@ input[type="reset"] {
 	padding: 3px 5px;
 }
 
+button:disabled,
+.ui-btn:disabled,
+input[type="button"]:disabled,
+input[type="submit"]:disabled,
+input[type="reset"]:disabled {
+	pointer-events: none;
+}
+
 button:hover,
 .ui-btn:hover,
 a.pagenav:hover,
@@ -778,21 +786,6 @@ label .icon {
 	border-width: 1pt;
 }
 
-/*
-.query-box {
-	background-color: #f7f4e8;
-	border: 1pt solid #dccfb7;
-	border-radius: 5px;
-	padding: 0.5em;
+.badge {
+	text-shadow: none;
 }
-
-.query-box pre {
-	background-color: #fffdf4 !important;
-	border-radius: 5px;
-}
-
-.query-box .query-stats {
-	color: #968245;
-	font-style: italic;
-}
-*/

@@ -33,7 +33,10 @@ class ColumnFormRenderer
             '' => '',
             'NULL' => 'NULL',
             'CURRENT_TIMESTAMP' => 'CURRENT_TIMESTAMP',
+            'CURRENT_TIME' => 'CURRENT_TIME',
+            'CURRENT_DATE' => 'CURRENT_DATE',
             'gen_random_uuid()' => 'gen_random_uuid()',
+            'uuid_generate_v4()' => 'uuid_generate_v4()',
             "'{}'::jsonb" => "'{}'::jsonb",
             'custom' => $this->lang['strcustom'] ?? 'Custom:',
         ];
@@ -65,8 +68,12 @@ class ColumnFormRenderer
      *                       'attname', 'base_type', 'length', 'attnotnull', 'adsrc', 'comment', 'default_preset'
      *                       For new columns, use empty strings/nulls
      * @param array $postData Optional POST data to repopulate form (used after validation errors)
+     * @param array $options Optional rendering options:
+     *                       'showUniqueKey' => bool (default: false)
+     *                       'showPrimaryKey' => bool (default: false)
+     *                       'showPartitionKey' => bool (default: false)
      */
-    public function renderTable($columns, $postData = null)
+    public function renderTable($columns, $postData = null, $options = [])
     {
         ?>
         <table id="columnsTable">
@@ -75,11 +82,20 @@ class ColumnFormRenderer
                 <th class="data required" colspan="2"><?= $this->lang['strtype'] ?></th>
                 <th class="data"><?= $this->lang['strlength'] ?></th>
                 <th class="data text-center"><?= $this->lang['strnotnull'] ?></th>
+                <?php if ($options['showUniqueKey'] ?? false): ?>
+                    <th class="data text-center"><?= $this->lang['struniquekey'] ?></th>
+                <?php endif; ?>
+                <?php if ($options['showPrimaryKey'] ?? false): ?>
+                    <th class="data text-center"><?= $this->lang['strprimarykey'] ?></th>
+                <?php endif; ?>
                 <th class="data"><?= $this->lang['strdefault'] ?></th>
+                <?php if ($options['showPartitionKey'] ?? false): ?>
+                    <th class="data text-center"><?= $this->lang['strpartitionkey'] ?></th>
+                <?php endif; ?>
                 <th class="data"><?= $this->lang['strcomment'] ?></th>
             </tr>
             <?php
-            $this->renderRows($columns, $postData);
+            $this->renderRows($columns, $postData, $options);
             ?>
         </table>
         <?php
@@ -89,11 +105,14 @@ class ColumnFormRenderer
      * Render table rows for column form
      * @param array $columns Array of column data. Each element should be an associative array with keys:
      *                       'attname', 'base_type', 'length', 'attnotnull', 'adsrc', 'comment', 'default_preset'
+     *                       Optional keys: 'uniquekey', 'primarykey', 'partitionkey'
      *                       For new columns, use empty strings/nulls
      * @param array $postData Optional POST data to repopulate form (used after validation errors)
+     * @param array $options Optional rendering options (showUniqueKey, showPrimaryKey, showPartitionKey)
      */
-    public function renderRows($columns, $postData = null)
+    public function renderRows($columns, $postData = null, $options = [])
     {
+        // Default options
         $allTypes = $this->getAllTypes();
         $columnDefaults = $this->getColumnDefaults();
         $numColumns = count($columns);
@@ -114,6 +133,9 @@ class ColumnFormRenderer
                 $default_preset = $postData['default_preset'][$i] ?? '';
                 $default = $postData['default'][$i] ?? '';
                 $comment = $postData['comment'][$i] ?? '';
+                $uniquekey = isset($postData['uniquekey'][$i]);
+                $primarykey = isset($postData['primarykey'][$i]);
+                $partitionkey = isset($postData['partitionkey'][$i]);
             } else {
                 $field = $col['attname'] ?? '';
                 $type = $col['base_type'] ?? '';
@@ -128,6 +150,9 @@ class ColumnFormRenderer
                 $notnull = isset($col['attnotnull']) && $col['attnotnull'];
                 $default = $col['adsrc'] ?? '';
                 $comment = $col['comment'] ?? '';
+                $uniquekey = isset($col['uniquekey']) && $col['uniquekey'];
+                $primarykey = isset($col['primarykey']) && $col['primarykey'];
+                $partitionkey = isset($col['partitionkey']) && $col['partitionkey'];
 
                 // Determine default preset
                 if (isset($col['default_preset'])) {
@@ -179,6 +204,20 @@ class ColumnFormRenderer
                             echo ' checked="checked"'; ?> />
                 </td>
 
+                <?php if ($options['showUniqueKey'] ?? false): ?>
+                    <td class="text-center">
+                        <input type="checkbox" name="uniquekey[<?= $i ?>]" <?php if ($uniquekey)
+                              echo ' checked="checked"'; ?> />
+                    </td>
+                <?php endif; ?>
+
+                <?php if ($options['showPrimaryKey'] ?? false): ?>
+                    <td class="text-center">
+                        <input type="checkbox" name="primarykey[<?= $i ?>]" <?php if ($primarykey)
+                              echo ' checked="checked"'; ?> />
+                    </td>
+                <?php endif; ?>
+
                 <td>
                     <select name="default_preset[<?= $i ?>]" id="default_preset<?= $i ?>"
                         onchange="handleDefaultPresetChange(<?= $i ?>);" style="margin-bottom: 2px;">
@@ -192,6 +231,13 @@ class ColumnFormRenderer
                     <input name="default[<?= $i ?>]" id="default<?= $i ?>" size="7" value="<?= html_esc($default) ?>"
                         style="display: <?= $showCustom ? 'inline' : 'none' ?>;" />
                 </td>
+
+                <?php if ($options['showPartitionKey'] ?? false): ?>
+                    <td class="text-center">
+                        <input type="checkbox" name="partitionkey[<?= $i ?>]" <?php if ($partitionkey)
+                              echo ' checked="checked"'; ?> />
+                    </td>
+                <?php endif; ?>
 
                 <td>
                     <input name="comment[<?= $i ?>]" size="40" value="<?= html_esc($comment) ?>" />

@@ -741,6 +741,8 @@ class RowBrowserRenderer extends AppContext
             return;
         }
 
+        $isCatalogSchema = $misc->isCatalogSchema();
+
         $misc->printTrail($subject ?? 'database');
         $misc->printTabs($subject, 'browse');
 
@@ -818,7 +820,6 @@ class RowBrowserRenderer extends AppContext
                 $lang
             );
 
-            $isCatalogSchema = $misc->isCatalogSchema();
             if ($isCatalogSchema) {
                 // Disable edit/delete buttons in catalog schema
                 $colspan = 0;

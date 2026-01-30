@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 /**
  * English language file for phpPgAdmin.  Use this as a basis
@@ -1042,6 +1042,10 @@ $lang['strpartitionedtable'] = 'Partitioned Table';
 $lang['strcreatepartition'] = 'Create Partition';
 $lang['strcreatesubpartition'] = 'Create Sub-Partition';
 $lang['strattachpartition'] = 'Attach Partition';
+$lang['strattachpartitiondesc'] = 'Attach an existing table as a partition of this table.';
+$lang['strpartitionattached'] = 'Partition attached.';
+$lang['strpartitionattachedbad'] = 'Partition attach failed!';
+$lang['strselecttable'] = 'Select a table';
 $lang['strdetachpartition'] = 'Detach Partition';
 $lang['strdetach'] = 'Detach';
 $lang['strpartitionstrategy'] = 'Partition Strategy';
@@ -1117,15 +1121,20 @@ $lang['strpartitionpruningexcellent'] = 'Excellent: Only %d of %d partitions acc
 $lang['strpartitionpruninggood'] = 'Good: %d of %d partitions accessed';
 $lang['strpartitionpruningpoor'] = 'Poor: %d of %d partitions accessed';
 $lang['strpartitionpruningminimal'] = 'Minimal: %d of %d partitions accessed';
-$lang['strpartitiontemplate'] = 'Bulk Create Partitions';
-$lang['strpartitiontemplatedesc'] = 'Create multiple partitions at once using a date-based template. Useful for time-series data.';
-$lang['strpartitiontemplatetype'] = 'Template Type';
-$lang['strpartitiontemplatemonthly'] = 'Monthly (one partition per month)';
-$lang['strpartitiontemplatedaily'] = 'Daily (one partition per day)';
-$lang['strpartitiontemplateyearly'] = 'Yearly (one partition per year)';
-$lang['strpartitiontemplatecustom'] = 'Custom interval';
-$lang['strpartitionnamepattern'] = 'Name Pattern';
-$lang['strpartitionnamepatternhint'] = 'Use {{year}}, {{month}}, {{day}} as placeholders';
+$lang['strbulkcreatepartitions'] = 'Bulk Create Partitions';
+$lang['strbulkcreatepartitionsdesc'] = 'Create multiple partitions at once using a date-based template. Useful for time-series data.';
+$lang['strbulkcreatetemplatetype'] = 'Template Type';
+$lang['strbulkcreatetemplatemonthly'] = 'Monthly (one partition per month)';
+$lang['strbulkcreatetemplatedaily'] = 'Daily (one partition per day)';
+$lang['strbulkcreatetemplateyearly'] = 'Yearly (one partition per year)';
+$lang['strbulkcreatetemplatecustom'] = 'Custom interval';
+$lang['strcustominterval'] = 'Custom Interval';
+$lang['strdays'] = 'Day(s)';
+$lang['strweeks'] = 'Week(s)';
+$lang['strmonths'] = 'Month(s)';
+$lang['stryears'] = 'Year(s)';
+$lang['strbulkcreatenamepattern'] = 'Name Pattern';
+$lang['strbulkcreatenamepatternhint'] = 'Use {year}, {month}, {day}, {week} as placeholders';
 $lang['strstartdate'] = 'Start Date';
 $lang['strenddate'] = 'End Date';
 $lang['strpartitionswillbecreated'] = 'Partitions that will be created';
@@ -1161,3 +1170,7 @@ $lang['stranalyzebad'] = 'Partitionings analyze failed';
 $lang['strpreview'] = 'Preview';
 $lang['strexample'] = 'Example';
 $lang['strtotal'] = 'Total';
+$lang['strattach'] = 'Attach';
+$lang['strtoexcluded'] = 'TO is excluded';
+$lang['strresults'] = 'Results';
+$lang['strchoose'] = 'Choose';

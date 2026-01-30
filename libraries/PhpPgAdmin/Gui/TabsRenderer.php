@@ -18,21 +18,8 @@ class TabsRenderer extends AppContext
     public function printTabs($tabs, $activeTab): void
     {
         if (is_string($tabs)) {
-            $isTable = ($tabs === 'table');
             $_SESSION['webdbLastTab'][$tabs] = $activeTab;
             $tabs = $this->getNavTabs($tabs);
-            if ($isTable && !empty($_REQUEST['table'])) {
-                $partitionActions = new PartitionActions(
-                    $this->postgres()
-                );
-                $isPartitioned = $partitionActions->isPartitionedTable(
-                    $_REQUEST['table']
-                );
-                if (!$isPartitioned) {
-                    // Remove 'Partitions' tab for non-partitioned tables
-                    unset($tabs['partitions']);
-                }
-            }
         }
 
         if (count($tabs) > 0) {
@@ -402,7 +389,8 @@ class TabsRenderer extends AppContext
                             'table' => field('table'),
                         ],
                         'help' => 'pg.sql.insert',
-                        'icon' => 'Add'
+                        'icon' => 'Add',
+                        'tree' => false,
                     ],
                     'indexes' => [
                         'title' => $lang['strindexes'],
@@ -493,6 +481,17 @@ class TabsRenderer extends AppContext
                         $tabs['admin'],
                         $tabs['import']
                     );
+                } elseif (!empty($_REQUEST['table'])) {
+                    $partitionActions = new PartitionActions(
+                        $this->postgres()
+                    );
+                    $isPartitioned = $partitionActions->isPartitionedTable(
+                        $_REQUEST['table']
+                    );
+                    if (!$isPartitioned) {
+                        // Remove 'Partitions' tab for non-partitioned tables
+                        unset($tabs['partitions']);
+                    }
                 }
                 break;
 

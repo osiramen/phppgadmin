@@ -638,6 +638,7 @@
 	window.createSqlEditor = createSqlEditor;
 	window.createSqlViewer = createSqlViewer;
 	window.createSqlEditors = createSqlEditors;
+	window.createSqlViewers = createSqlEditors;
 	window.createDateAndTimePickers = createDateAndTimePickers;
 
 	hljs.registerLanguage("pgsql", function (hljs) {

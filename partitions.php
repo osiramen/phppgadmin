@@ -14,9 +14,11 @@ use PhpPgAdmin\Database\Actions\TableActions;
 include_once('./libraries/bootstrap.php');
 
 /**
- * Show form to create a new partition
+ * Show form to create a new partition or attach an existing table
+ * @param string $msg Message to display
+ * @param bool $is_attach True for attach mode, false for create mode
  */
-function doCreate($msg = '')
+function doCreateOrAttach($msg = '', $is_attach = false)
 {
     $pg = AppContainer::getPostgres();
     $misc = AppContainer::getMisc();
@@ -24,7 +26,14 @@ function doCreate($msg = '')
     $partitionActions = new PartitionActions($pg);
 
     $misc->printTrail('table');
-    $misc->printTitle($lang['strcreatepartition'], 'pg.partition.create');
+
+    if ($is_attach) {
+        $misc->printTitle($lang['strattachpartition'], 'pg.partition.attach');
+        echo "<p>{$lang['strattachpartitiondesc']}</p>\n";
+    } else {
+        $misc->printTitle($lang['strcreatepartition'], 'pg.partition.create');
+    }
+
     $misc->printMsg($msg);
 
     // Get partition info
@@ -45,6 +54,12 @@ function doCreate($msg = '')
     // Map strategy code to name
     $strategy_name = PartitionActions::PARTITION_STRATEGY_MAP[$strategy] ?? $strategy;
 
+    // Get list of tables for attach mode
+    if ($is_attach) {
+        $tableActions = new TableActions($pg);
+        $tables = $tableActions->getTables();
+    }
+
     ?>
     <form action="partitions.php" method="post">
         <table>
@@ -55,33 +70,54 @@ function doCreate($msg = '')
                     (<?= htmlspecialchars(implode(', ', $key_columns)); ?>)
                 </td>
             </tr>
-            <tr>
-                <th class="data left required"><?= $lang['strname']; ?></th>
-                <td class="data"><input name="partition_name" size="32" maxlength="<?= $pg->_maxNameLen; ?>" /></td>
-            </tr>
+            <?php if ($is_attach): ?>
+                <tr>
+                    <th class="data left required"><?= $lang['strtable']; ?></th>
+                    <td class="data">
+                        <select name="attach_table">
+                            <option value=""><?= $lang['strselecttable']; ?></option>
+                            <?php
+                            if (is_object($tables)) {
+                                while (!$tables->EOF) {
+                                    // Only show regular tables, not partitions
+                                    if (!$partitionActions->isPartition($tables->fields['relname'])) {
+                                        echo '<option value="', htmlspecialchars($tables->fields['relname']), '">',
+                                            htmlspecialchars($tables->fields['relname']), '</option>';
+                                    }
+                                    $tables->moveNext();
+                                }
+                            }
+                            ?>
+                        </select>
+                    </td>
+                </tr>
+            <?php else: ?>
+                <tr>
+                    <th class="data left required"><?= $lang['strname']; ?></th>
+                    <td class="data"><input name="partition_name" size="32" maxlength="<?= $pg->_maxNameLen; ?>" /></td>
+                </tr>
+            <?php endif; ?>
             <?php if ($strategy == 'r'): /* RANGE */ ?>
                 <tr>
                     <th class="data left required"><?= $lang['strpartitionfrom']; ?></th>
-                    <td class="data"><input name="from_value" size="32" placeholder="'2024-01-01'" /></td>
+                    <td class="data"><input name="from_value" size="32" placeholder="2024-01-01" /></td>
                 </tr>
                 <tr>
                     <th class="data left required"><?= $lang['strpartitionto']; ?></th>
-                    <td class="data"><input name="to_value" size="32" placeholder="'2024-02-01'" /></td>
-                </tr>
-                <tr>
-                    <td colspan="2" class="data">
-                        <small><?= $lang['strexample']; ?>: FROM ('2024-01-01') TO ('2024-02-01')</small>
+                    <td class="data">
+                        <input name="to_value" size="32" placeholder="2024-02-01" /><br>
+                        <small class="form-text">
+                            <?= $lang['strexample']; ?>: FROM ('2024-01-01') TO ('2024-02-01')
+                        </small>
                     </td>
                 </tr>
             <?php elseif ($strategy == 'l'): /* LIST */ ?>
                 <tr>
                     <th class="data left required"><?= $lang['strpartitionvalues']; ?></th>
-                    <td class="data"><textarea name="list_values" rows="3" cols="32"
-                            placeholder="'USA','Canada','Mexico'"></textarea></td>
-                </tr>
-                <tr>
-                    <td colspan="2" class="data">
-                        <small><?= $lang['example']; ?>: IN ('USA', 'Canada', 'Mexico')</small>
+                    <td class="data">
+                        <textarea name="list_values" rows="3" cols="32" placeholder="USA, Canada, Mexico"></textarea><br>
+                        <small class="form-text"><?= $lang['strexample']; ?>: IN (USA, Canada, Mexico)
+                        </small>
                     </td>
                 </tr>
             <?php elseif ($strategy == 'h'): /* HASH */ ?>
@@ -91,11 +127,10 @@ function doCreate($msg = '')
                 </tr>
                 <tr>
                     <th class="data left required"><?= $lang['strpartitionremainder']; ?></th>
-                    <td class="data"><input name="remainder" type="number" min="0" size="10" /></td>
-                </tr>
-                <tr>
-                    <td colspan="2" class="data">
-                        <small><?= $lang['example']; ?>: MODULUS 4, REMAINDER 0</small>
+                    <td class="data">
+                        <input name="remainder" type="number" min="0" size="10" /><br>
+                        <small class="form-text"><?= $lang['strexample']; ?>: MODULUS 4, REMAINDER 0
+                        </small>
                     </td>
                 </tr>
             <?php endif ?>
@@ -105,7 +140,7 @@ function doCreate($msg = '')
             if ($pg->major_version >= 11) {
                 ?>
                 <tr>
-                    <th class="data left">&nbsp;</th>
+                    <th class="data left"><?= $lang['strdefault'] ?></th>
                     <td class="data"><label><input type="checkbox" name="is_default" id="is_default" />
                             <?= $lang['strdefaultpartition']; ?></label></td>
                 </tr>
@@ -113,16 +148,32 @@ function doCreate($msg = '')
             }
             ?>
         </table>
-        <input type="hidden" name="action" value="save_create" />
+        <input type="hidden" name="action" value="<?= $is_attach ? 'save_attach' : 'save_create'; ?>" />
         <input type="hidden" name="strategy" value="<?= htmlspecialchars($strategy); ?>" />
         <?= $misc->form; ?>
         <input type="hidden" name="table" value="<?= html_esc($_REQUEST['table']); ?>" />
         <p>
-            <input type="submit" name="save" value="<?= $lang['strcreate']; ?>" />
+            <input type="submit" name="save" value="<?= $is_attach ? $lang['strattach'] : $lang['strcreate']; ?>" />
             <input type="submit" name="cancel" value="<?= $lang['strcancel']; ?>" />
         </p>
     </form>
     <?php
+}
+
+/**
+ * Show form to create a new partition
+ */
+function doCreate($msg = '')
+{
+    doCreateOrAttach($msg, false);
+}
+
+/**
+ * Show form to attach an existing table as a partition
+ */
+function doAttach($msg = '')
+{
+    doCreateOrAttach($msg, true);
 }
 
 function doSaveCreate()
@@ -174,6 +225,63 @@ function doSaveCreate()
         doDefault($lang['strpartitioncreated']);
     } else {
         doCreate($lang['strpartitioncreatedbad']);
+    }
+}
+
+function doSaveAttach()
+{
+    $pg = AppContainer::getPostgres();
+    $misc = AppContainer::getMisc();
+    $lang = AppContainer::getLang();
+    $partitionActions = new PartitionActions($pg);
+
+    if (empty($_POST['attach_table'])) {
+        doAttach($lang['strselecttable']);
+        return;
+    }
+
+    // Prepare partition values based on strategy
+    $values = [];
+    $isDefault = isset($_POST['is_default']) && $_POST['is_default'];
+
+    if (!$isDefault) {
+        switch ($_POST['strategy']) {
+            case 'r': // RANGE
+                $values = [
+                    'from' => $_POST['from_value'],
+                    'to' => $_POST['to_value']
+                ];
+                break;
+
+            case 'l': // LIST
+                $values = [
+                    'values' => $_POST['list_values']
+                ];
+                break;
+
+            case 'h': // HASH
+                $values = [
+                    'modulus' => $_POST['modulus'],
+                    'remainder' => $_POST['remainder']
+                ];
+                break;
+        }
+    }
+
+    // Attach the partition
+    $status = $partitionActions->attachPartition(
+        $_REQUEST['table'],
+        $_POST['attach_table'],
+        $_POST['strategy'],
+        $values,
+        $isDefault
+    );
+
+    if ($status == 0) {
+        AppContainer::setShouldReloadTree(true);
+        doDefault($lang['strpartitionattached']);
+    } else {
+        doAttach($lang['strpartitionattachedbad']);
     }
 }
 
@@ -276,6 +384,23 @@ function doTestPruning($msg = '')
     $misc->printTitle($lang['strtestquerypruning'], 'pg.partition');
     $misc->printMsg($msg);
 
+    $partInfo = $partitionActions->getPartitionInfo($_REQUEST['table']);
+
+    if (!is_object($partInfo) || $partInfo->recordCount() == 0) {
+        echo "<p>{$lang['strinvalidparam']}</p>\n";
+        return;
+    }
+
+    $strategy = $partInfo->fields['partstrat'];
+    $partition_keys = $partInfo->fields['partition_keys'];
+
+    // Convert PostgreSQL array format to PHP array
+    $partition_keys = trim($partition_keys, '{}');
+    $key_columns = explode(',', $partition_keys);
+
+    // Map strategy code to name
+    $strategy_name = PartitionActions::PARTITION_STRATEGY_MAP[$strategy] ?? $strategy;
+
     // Get partition count
     $partitions = $partitionActions->getPartitions($_REQUEST['table']);
     $partition_count = 0;
@@ -296,16 +421,27 @@ function doTestPruning($msg = '')
     <form action="partitions.php" method="post">
         <table>
             <tr>
-                <th class="data left required"><?= $lang['strsql']; ?></th>
+                <th class="data left"><?= $lang['strpartitionedby']; ?>
+                </th>
                 <td class="data">
+                    <strong>
+                        <?= htmlspecialchars($strategy_name); ?>
+                    </strong>
+                    (<?= htmlspecialchars(implode(', ', $key_columns)); ?>)
+                </td>
+            </tr>
+            <tr>
+                <th class="data left required"><?= $lang['strsql']; ?></th>
+                <td class="data" style="min-width: 500px;">
                     <textarea name="query" rows="8" cols="80"
-                        style="font-family: monospace;"><?= htmlspecialchars($_POST['query']); ?></textarea>
+                        class="sql-editor frame resizable medium"><?= htmlspecialchars($_POST['query']); ?></textarea>
                 </td>
             </tr>
         </table>
 
         <input type="hidden" name="action" value="test_pruning_execute" />
         <?= $misc->form; ?>
+        <input type="hidden" name="table" value="<?= htmlspecialchars($_REQUEST['table']); ?>" />
         <p>
             <input type="submit" name="execute" value="<?= $lang['strtest']; ?>" />
             <input type="submit" name="cancel" value="<?= $lang['strback']; ?>" />
@@ -398,13 +534,13 @@ function doTestPruning($msg = '')
                 $message = sprintf($lang['strpartitionpruningminimal'], $accessed_count, $partition_count);
             }
 
-            echo "<p class=\"badge badge-{$badge}\">{$message}</p>\n";
+            echo "<div class=\"my-2 badge bg-{$badge}\">{$message}</div>\n";
 
             if ($accessed_count > 0) {
                 echo "<h4>{$lang['strpartitionsaccessed']}:</h4>\n";
                 echo "<ul>\n";
                 foreach ($accessed_partitions as $partition) {
-                    echo "<li>", htmlspecialchars($partition), "</li>\n";
+                    echo "<li>", $misc->getIcon('Partition'), ' ', htmlspecialchars($partition), "</li>\n";
                 }
                 echo "</ul>\n";
             }
@@ -413,7 +549,7 @@ function doTestPruning($msg = '')
         // Show full EXPLAIN output
         echo "<details>\n";
         echo "<summary>{$lang['strfullexplain']}</summary>\n";
-        echo "<pre>", htmlspecialchars(json_encode($plan, JSON_PRETTY_PRINT)), "</pre>\n";
+        echo "<pre class=\"sql-viewer\" data-language=\"json\">", htmlspecialchars(json_encode($plan, JSON_PRETTY_PRINT)), "</pre>\n";
         echo "</details>\n";
 
         echo "</div>\n";
@@ -433,7 +569,7 @@ function doBulkCreate($msg = '')
     $partitionActions = new PartitionActions($pg);
 
     $misc->printTrail('table');
-    $misc->printTitle($lang['strpartitiontemplate'], 'pg.partition.create');
+    $misc->printTitle($lang['strbulkcreatepartitions'], 'pg.partition.create');
     $misc->printMsg($msg);
 
     // Get partition info
@@ -454,27 +590,40 @@ function doBulkCreate($msg = '')
     }
 
     ?>
-    <p><?= $lang['strpartitiontemplatedesc']; ?></p>
+    <p><?= $lang['strbulkcreatepartitionsdesc']; ?></p>
 
-    <form action="partitions.php" method="post">
+    <form action="partitions.php" method="post" onchange="this.save.disabled=true">
         <table>
             <tr>
-                <th class="data left required"><?= $lang['strpartitiontemplatetype']; ?></th>
+                <th class="data left required"><?= $lang['strbulkcreatetemplatetype']; ?></th>
                 <td class="data">
                     <select name="template_type" id="template_type" onchange="updateTemplateForm()">
-                        <option value="monthly"><?= $lang['strpartitiontemplatemonthly']; ?></option>
-                        <option value="daily"><?= $lang['strpartitiontemplatedaily']; ?></option>
-                        <option value="yearly"><?= $lang['strpartitiontemplateyearly']; ?></option>
-                        <option value="custom"><?= $lang['strpartitiontemplatecustom']; ?></option>
+                        <option value="monthly"><?= $lang['strbulkcreatetemplatemonthly']; ?></option>
+                        <option value="daily"><?= $lang['strbulkcreatetemplatedaily']; ?></option>
+                        <option value="yearly"><?= $lang['strbulkcreatetemplateyearly']; ?></option>
+                        <option value="custom"><?= $lang['strbulkcreatetemplatecustom']; ?></option>
+                    </select>
+                </td>
+            </tr>
+            <tr id="custom_interval_row" style="display: none;">
+                <th class="data left required"><?= $lang['strcustominterval']; ?></th>
+                <td class="data flex-row">
+                    <input type="number" name="custom_value" id="custom_value" min="1" value="1" size="5" class="mr-1" />
+                    <select name="custom_unit" id="custom_unit">
+                        <option value="days"><?= $lang['strdays']; ?></option>
+                        <option value="weeks"><?= $lang['strweeks']; ?></option>
+                        <option value="months" selected><?= $lang['strmonths']; ?></option>
+                        <option value="years"><?= $lang['stryears']; ?></option>
                     </select>
                 </td>
             </tr>
             <tr>
-                <th class="data left required"><?= $lang['strpartitionnamepattern']; ?></th>
+                <th class="data left required"><?= $lang['strbulkcreatenamepattern']; ?></th>
                 <td class="data">
-                    <input name="name_pattern" size="40" value="<?= $_REQUEST['table']; ?>_{{year}}_{{month}}"
-                        placeholder="<?= $_REQUEST['table']; ?>_{{year}}_{{month}}" />
-                    <br /><small><?= $lang['strpartitionnamepatternhint']; ?></small>
+                    <input name="name_pattern" size="40" value="<?= $_REQUEST['table']; ?>_{year}_{month}"
+                        placeholder="<?= $_REQUEST['table']; ?>_{year}_{month}" />
+                    <br /><small class="form-text"><?= $lang['strbulkcreatenamepatternhint']; ?>
+                        <!--({year}, {month}, {day}, {week})--></small>
                 </td>
             </tr>
             <tr>
@@ -486,53 +635,99 @@ function doBulkCreate($msg = '')
                 <td class="data"><input name="end_date" type="date"
                         value="<?= date('Y-m-t', strtotime('+11 months')); ?>" /></td>
             </tr>
-            <tr>
-                <td colspan="2" class="data">
-                    <button type="button" onclick="previewPartitions()"><?= $lang['strpreview']; ?></button>
-                    <div id="preview_area" style="margin-top: 10px; max-height: 300px; overflow-y: auto; display: none;">
-                    </div>
-                </td>
-            </tr>
         </table>
 
         <input type="hidden" name="action" value="save_bulk_create" />
         <?= $misc->form; ?>
         <input type="hidden" name="table" value="<?= htmlspecialchars($_REQUEST['table']); ?>" />
         <p>
-            <input type="submit" name="save" value="<?= $lang['strcreateall']; ?>" />
+            <button type="button" onclick="previewPartitions(this.form)"><?= $lang['strpreview']; ?>
+            </button>
+            <input type="submit" name="save" value="<?= $lang['strcreateall']; ?>" disabled />
             <input type="submit" name="cancel" value="<?= $lang['strcancel']; ?>" />
         </p>
+
+        <div id="preview_area" class="mt-3" style="display: none;">
+        </div>
     </form>
 
     <script>
-        function previewPartitions() {
+        function getISOWeek(date) {
+            var target = new Date(date.valueOf());
+            var dayNr = (date.getDay() + 6) % 7;
+            target.setDate(target.getDate() - dayNr + 3);
+            var firstThursday = target.valueOf();
+            target.setMonth(0, 1);
+            if (target.getDay() !== 4) {
+                target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+            }
+            return 1 + Math.ceil((firstThursday - target) / 604800000);
+        }
+
+        function updateTemplateForm() {
+            var type = document.getElementById('template_type').value;
+            var customRow = document.getElementById('custom_interval_row');
+            customRow.style.display = (type === 'custom') ? '' : 'none';
+        }
+
+        function previewPartitions(form) {
+            form.save.disabled = false;
             var type = document.getElementById('template_type').value;
             var pattern = document.querySelector('input[name="name_pattern"]').value;
             var start = new Date(document.querySelector('input[name="start_date"]').value);
             var end = new Date(document.querySelector('input[name="end_date"]').value);
             var preview = document.getElementById('preview_area');
-            var html = '<strong><?= $lang['strpartitionswillbecreated'] ?>:</strong><ul>';
+            var html = '<strong><?= $lang['strpartitionswillbecreated'] ?>:</strong> (<?= $lang['strtoexcluded'] ?>)\n';
+            html += '<ul class="my-2">';
             var current = new Date(start);
             var count = 0;
-            var maxPreview = 50;
-            while (current <= end && count < maxPreview) {
-                var name = pattern.replace('{{year}}', current.getFullYear())
-                    .replace('{{month}}', String(current.getMonth() + 1).padStart(2, '0'))
-                    .replace('{{day}}', String(current.getDate()).padStart(2, '0'));
+
+            while (current <= end) {
+                // Calculate ISO week number
+                var weekNum = getISOWeek(current);
+                var name = pattern
+                    .replace('{year}', current.getFullYear())
+                    .replace('{month}', String(current.getMonth() + 1).padStart(2, '0'))
+                    .replace('{day}', String(current.getDate()).padStart(2, '0'))
+                    .replace('{week}', String(weekNum).padStart(2, '0'));
                 var from = current.toISOString().split('T')[0];
                 var next = new Date(current);
-                if (type === 'monthly') next.setMonth(next.getMonth() + 1);
-                else if (type === 'daily') next.setDate(next.getDate() + 1);
-                else if (type === 'yearly') next.setFullYear(next.getFullYear() + 1);
+
+                if (type === 'monthly') {
+                    // Fix month overflow by using UTC with day=1
+                    next = new Date(Date.UTC(next.getFullYear(), next.getMonth() + 1, 1));
+                } else if (type === 'daily') {
+                    next.setDate(next.getDate() + 1);
+                } else if (type === 'yearly') {
+                    next = new Date(Date.UTC(next.getFullYear() + 1, next.getMonth(), 1));
+                } else if (type === 'custom') {
+                    var customValue = parseInt(document.getElementById('custom_value').value) || 1;
+                    var customUnit = document.getElementById('custom_unit').value;
+
+                    if (customUnit === 'days') {
+                        next.setDate(next.getDate() + customValue);
+                    } else if (customUnit === 'weeks') {
+                        next.setDate(next.getDate() + (customValue * 7));
+                    } else if (customUnit === 'months') {
+                        // Fix month overflow by using UTC with day=1
+                        next = new Date(Date.UTC(next.getFullYear(), next.getMonth() + customValue, 1));
+                    } else if (customUnit === 'years') {
+                        next = new Date(Date.UTC(next.getFullYear() + customValue, next.getMonth(), 1));
+                    }
+                }
+
+                var icon = <?= json_encode($misc->getIcon('Partition')); ?>;
+
                 var to = next.toISOString().split('T')[0];
-                html += '<li>' + name + ' <small>FROM (' + from + ') TO (' + to + ')</small></li>';
+                html += '<li>' + icon + ' ' + name + ': <span class="sql-viewer">VALUES FROM (\'' + from + '\') TO (\'' + to + '\')</span></li>';
                 current = next;
                 count++;
             }
-            if (current <= end) html += '<li><em>... and ' + Math.ceil((end - current) / (1000 * 60 * 60 * 24 * 30)) + ' more</em></li>';
+
             html += '</ul><p><strong><?= $lang['strtotal'] ?>:</strong> ' + count + ' <?= $lang['strpartitions'] ?></p>';
             preview.innerHTML = html;
             preview.style.display = 'block';
+            createSqlViewers(preview);
         }
     </script>
     <?php
@@ -556,6 +751,16 @@ function doSaveBulkCreate()
     $start_date = new DateTime($_POST['start_date']);
     $end_date = new DateTime($_POST['end_date']);
 
+    // Get custom interval parameters if custom type
+    $custom_value = 1;
+    $custom_unit = 'months';
+    if ($template_type === 'custom') {
+        $custom_value = isset($_POST['custom_value']) ? (int) $_POST['custom_value'] : 1;
+        $custom_unit = isset($_POST['custom_unit']) ? $_POST['custom_unit'] : 'months';
+        if ($custom_value < 1)
+            $custom_value = 1;
+    }
+
     $f_schema = $pg->_schema;
     $pg->fieldClean($f_schema);
     $pg->fieldClean($_REQUEST['table']);
@@ -568,8 +773,13 @@ function doSaveBulkCreate()
     while ($current <= $end_date) {
         // Generate partition name
         $name = str_replace(
-            ['{{year}}', '{{month}}', '{{day}}'],
-            [$current->format('Y'), $current->format('m'), $current->format('d')],
+            ['{year}', '{month}', '{day}', '{week}'],
+            [
+                $current->format('Y'),
+                $current->format('m'),
+                $current->format('d'),
+                $current->format('W')
+            ],
             $name_pattern
         );
 
@@ -589,16 +799,35 @@ function doSaveBulkCreate()
             case 'yearly':
                 $next->modify('+1 year');
                 break;
+            case 'custom':
+                switch ($custom_unit) {
+                    case 'days':
+                        $next->modify("+{$custom_value} days");
+                        break;
+                    case 'weeks':
+                        $next->modify("+{$custom_value} weeks");
+                        break;
+                    case 'months':
+                        $next->modify("+{$custom_value} months");
+                        break;
+                    case 'years':
+                        $next->modify("+{$custom_value} years");
+                        break;
+                }
+                break;
         }
 
         $to = $next->format('Y-m-d');
+
+        //var_dump("Creating partition {$name} FROM ('{$from}') TO ('{$to}')");
+        //$status = 0;
 
         // Create partition
         $status = $partitionActions->createPartition(
             $_REQUEST['table'],
             $name,
             'r',
-            ['from' => "'{$from}'", 'to' => "'{$to}'"],
+            ['from' => $from, 'to' => $to],
             false
         );
 
@@ -638,7 +867,7 @@ function doDefault($msg = '')
 
     $misc->printTrail('table');
     $misc->printTabs('table', 'partitions');
-    $misc->printTitle($lang['strpartitions'], 'pg.partition');
+    //$misc->printTitle($lang['strpartitions'], 'pg.partition');
     $misc->printMsg($msg);
 
     if ($pg->major_version < 10) {
@@ -646,28 +875,62 @@ function doDefault($msg = '')
         return;
     }
 
+    $partInfo = $partitionActions->getPartitionInfo($_REQUEST['table']);
+
+    if (!is_object($partInfo) || $partInfo->recordCount() == 0) {
+        echo "<p>{$lang['strinvalidparam']}</p>\n";
+        return;
+    }
+
+    $strategy = $partInfo->fields['partstrat'];
+    $partition_keys = $partInfo->fields['partition_keys'];
+
+    // Convert PostgreSQL array format to PHP array
+    $partition_keys = trim($partition_keys, '{}');
+    $key_columns = explode(',', $partition_keys);
+
+    // Map strategy code to name
+    $strategy_name = PartitionActions::PARTITION_STRATEGY_MAP[$strategy] ?? $strategy;
+
     // Get partition pruning status
     $pruning = $partitionActions->getPartitionPruningEnabled();
     $pruning_badge = $pruning['enabled']
-        ? "<span class=\"badge badge-success\">{$lang['strpartitionpruningenabled']}</span>"
-        : "<span class=\"badge badge-warning\">{$lang['strpartitionpruningdisabled']}</span>";
+        ? "<span class=\"badge bg-success\">{$lang['strpartitionpruningenabled']}</span>"
+        : "<span class=\"badge bg-warning\">{$lang['strpartitionpruningdisabled']}</span>";
 
     // Get total rows
     $total_rows = $partitionActions->getTotalPartitionRows($_REQUEST['table']);
 
     ?>
     <div class="partition-summary">
-        <p><strong><?= $lang['strpartitionpruning']; ?>:</strong> <?= $pruning_badge; ?>
-            (<?= $pruning['setting']; ?>)</p>
-        <p><strong><?= $lang['strtotalpartitionrows']; ?>:</strong> <?= number_format($total_rows); ?></p>
-        <p>
+        <div class="flex-row my-3">
+            <div class="me-2 ms-auto">
+                <strong><?= $lang['strpartitionpruning']; ?>:</strong>
+                <?= $pruning_badge; ?>
+                (<?= $pruning['setting']; ?>)
+            </div>
+            <div class="mx-2">
+                <strong>
+                    <?= $lang['strpartitionedby'] ?>:
+                </strong>
+                <?= htmlspecialchars($strategy_name); ?>
+                (<?= htmlspecialchars(implode(', ', $key_columns)); ?>)
+            </div>
+            <div class="ms-2 me-auto">
+                <strong><?= $lang['strtotalpartitionrows']; ?>:</strong>
+                <?= number_format($total_rows); ?>
+            </div>
+        </div>
+        <!--
+        <div class="my-3 text-center">
             <a href="partitions.php?action=analyze_all&amp;<?= $misc->href; ?>&amp;table=<?= urlencode($_REQUEST['table']); ?>"
-                class="btn"><?= $lang['stranalyzeallpartitions']; ?></a>
+                class="ui-btn"><?= $lang['stranalyzeallpartitions']; ?></a>
             <a href="partitions.php?action=test_pruning&amp;<?= $misc->href; ?>&amp;table=<?= urlencode($_REQUEST['table']); ?>"
-                class="btn"><?= $lang['strtestquerypruning']; ?></a>
+                class="ui-btn"><?= $lang['strtestquerypruning']; ?></a>
             <a href="partitions.php?action=bulk_create&amp;<?= $misc->href; ?>&amp;table=<?= urlencode($_REQUEST['table']); ?>"
-                class="btn"><?= $lang['strpartitiontemplate']; ?></a>
-        </p>
+                class="ui-btn"><?= $lang['strbulkcreatepartitions']; ?></a>
+        </div>
+        -->
     </div>
     <?php
 
@@ -708,7 +971,7 @@ function doDefault($msg = '')
 
         // Format bounds field with badge for default partition
         if ($is_default) {
-            $rowdata->fields['+bounds'] = "<span class=\"badge badge-default\">{$lang['strdefaultpartition']}</span>";
+            $rowdata->fields['+bounds'] = $lang['strdefaultpartition'];
         } else {
             $rowdata->fields['+bounds'] = $rowdata->fields['partition_bound'];
         }
@@ -832,7 +1095,7 @@ function doDefault($msg = '')
 
     // Navigation links
     $navlinks = [
-        'createpartition' => [
+        'create_partition' => [
             'attr' => [
                 'href' => [
                     'url' => 'partitions.php',
@@ -848,7 +1111,23 @@ function doDefault($msg = '')
             'icon' => $misc->icon('CreatePartition'),
             'content' => $lang['strcreatepartition']
         ],
-        'attachpartition' => [
+        'bulk_create' => [
+            'attr' => [
+                'href' => [
+                    'url' => 'partitions.php',
+                    'urlvars' => [
+                        'action' => 'bulk_create',
+                        'server' => $_REQUEST['server'],
+                        'database' => $_REQUEST['database'],
+                        'schema' => $_REQUEST['schema'],
+                        'table' => $_REQUEST['table']
+                    ]
+                ]
+            ],
+            'icon' => $misc->icon('BulkCreatePartitions'),
+            'content' => $lang['strbulkcreatepartitions']
+        ],
+        'attach_partition' => [
             'attr' => [
                 'href' => [
                     'url' => 'partitions.php',
@@ -863,8 +1142,45 @@ function doDefault($msg = '')
             ],
             'icon' => $misc->icon('AttachPartition'),
             'content' => $lang['strattachpartition']
-        ]
+        ],
+        'analyze' => [
+            'attr' => [
+                'href' => [
+                    'url' => 'partitions.php',
+                    'urlvars' => [
+                        'action' => 'analyze_all',
+                        'server' => $_REQUEST['server'],
+                        'database' => $_REQUEST['database'],
+                        'schema' => $_REQUEST['schema'],
+                        'table' => $_REQUEST['table']
+                    ]
+                ]
+            ],
+            'icon' => $misc->icon('Analyze'),
+            'content' => $lang['stranalyzeallpartitions']
+        ],
+        'test_pruning' => [
+            'attr' => [
+                'href' => [
+                    'url' => 'partitions.php',
+                    'urlvars' => [
+                        'action' => 'test_pruning',
+                        'server' => $_REQUEST['server'],
+                        'database' => $_REQUEST['database'],
+                        'schema' => $_REQUEST['schema'],
+                        'table' => $_REQUEST['table']
+                    ]
+                ]
+            ],
+            'icon' => $misc->icon('Histories'),
+            'content' => $lang['strtestquerypruning']
+        ],
     ];
+
+    if ($strategy !== 'r') {
+        // Remove bulk create link for non-range partitioned tables
+        unset($navlinks['bulk_create']);
+    }
 
     $misc->printNavLinks($navlinks, 'partitions-partitions', get_defined_vars());
 }
@@ -990,6 +1306,16 @@ switch ($action) {
             doDefault();
         } else {
             doSaveCreate();
+        }
+        break;
+    case 'attach':
+        doAttach();
+        break;
+    case 'save_attach':
+        if (isset($_POST['cancel'])) {
+            doDefault();
+        } else {
+            doSaveAttach();
         }
         break;
     case 'confirm_detach':

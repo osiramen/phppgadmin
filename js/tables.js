@@ -57,7 +57,7 @@ function addColumnRow() {
 			if (nameMatch) {
 				input.setAttribute(
 					"name",
-					nameMatch[1] + "[" + newRowIndex + "]"
+					nameMatch[1] + "[" + newRowIndex + "]",
 				);
 			}
 		}
@@ -70,12 +70,14 @@ function addColumnRow() {
 			}
 		}
 
-		// Clear values
-		if (input.type === "checkbox") {
+		// Clear values (but preserve hidden fields like 'action', 'stage', etc)
+		if (input.type === "hidden" && (!name || !name.match(/\[\d+\]$/))) {
+			// Don't clear form-level hidden fields
+		} else if (input.type === "checkbox") {
 			input.checked = false;
 		} else if (input.tagName === "SELECT") {
 			input.selectedIndex = 0;
-		} else {
+		} else if (input.type !== "hidden") {
 			input.value = "";
 		}
 
@@ -83,7 +85,7 @@ function addColumnRow() {
 		if (input.tagName === "SELECT" && name && name.match(/^type\[/)) {
 			input.setAttribute(
 				"onchange",
-				"checkLengths(this.value, " + newRowIndex + ");"
+				"checkLengths(this.value, " + newRowIndex + ");",
 			);
 		}
 
@@ -95,7 +97,7 @@ function addColumnRow() {
 		) {
 			input.setAttribute(
 				"onchange",
-				"handleDefaultPresetChange(" + newRowIndex + ");"
+				"handleDefaultPresetChange(" + newRowIndex + ");",
 			);
 		}
 	}
@@ -105,6 +107,12 @@ function addColumnRow() {
 
 	// Update the hidden num_columns field
 	numColumnsInput.value = newRowIndex + 1;
+
+	// Update stage to 2 to stay on current form when submitting with new row
+	var stageInput = document.querySelector("input[name='stage']");
+	if (stageInput && stageInput.value == "3") {
+		stageInput.value = "2";
+	}
 
 	// Initialize the new row's length checking
 	var typeSelect = newRow.querySelector("select[name^='type']");

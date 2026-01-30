@@ -47,7 +47,7 @@ abstract class PgBase extends AppContext
 
 	/**
 	 * Cleans (escapes) a string
-	 * @param string $str The string to clean, by reference
+	 * @param string|null $str The string to clean, by reference
 	 * @return string The cleaned string
 	 */
 	function clean(&$str)
@@ -61,7 +61,7 @@ abstract class PgBase extends AppContext
 
 	/**
 	 * Cleans (escapes) an object name (eg. table, field)
-	 * @param string $str The string to clean, by reference
+	 * @param string|null $str The string to clean, by reference
 	 * @return string The cleaned string
 	 */
 	function fieldClean(&$str)
@@ -100,6 +100,30 @@ abstract class PgBase extends AppContext
 			$arr[$k] = pg_escape_string($this->conn->_connectionID, $v);
 		}
 		return $arr;
+	}
+
+	/**
+	 * Cleans (escapes) a string
+	 * @param string|null $str The string to clean, by value
+	 * @return string The cleaned string
+	 */
+	function cleanVal($str)
+	{
+		if ($str === null)
+			return null;
+		$str = str_replace("\r\n", "\n", $str);
+		return pg_escape_string($this->conn->_connectionID, $str);
+	}
+	/**
+	 * Cleans (escapes) an object name (eg. table, field)
+	 * @param string|null $str The string to clean, by value
+	 * @return string The cleaned string
+	 */
+	function cleanField($str)
+	{
+		if ($str === null)
+			return null;
+		return str_replace('"', '""', $str);
 	}
 
 	/**

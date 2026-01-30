@@ -69,8 +69,7 @@ class ConstraintActions extends ActionsBase
 
         $partition_fields = '';
         if ($this->connection->major_version >= 10) {
-            $partition_fields = ', c.conislocal,
-                c.coninhcount';
+            $partition_fields = ', c.conislocal, c.coninhcount';
         }
 
         $sql =
@@ -87,7 +86,7 @@ class ConstraintActions extends ActionsBase
 
                 -- Referenced table schema and name (for FK)
                 ns2.nspname AS f_schema,
-                r2.relname AS f_table,
+                r2.relname AS f_table
 
                 -- Partition-related fields (PG 10+)
                 {$partition_fields}

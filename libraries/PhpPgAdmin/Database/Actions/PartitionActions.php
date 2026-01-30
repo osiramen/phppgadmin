@@ -399,18 +399,90 @@ class PartitionActions extends ActionsBase
                 case 'r': // RANGE
                     $this->connection->clean($values['from']);
                     $this->connection->clean($values['to']);
-                    $sql .= " FOR VALUES FROM ({$values['from']}) TO ({$values['to']})";
+                    $sql .= " FOR VALUES FROM ('{$values['from']}') TO ('{$values['to']}')";
                     break;
 
                 case 'l': // LIST
-                    $this->connection->clean($values['values']);
-                    $sql .= " FOR VALUES IN ({$values['values']})";
+                    $values = explode(',', $values['values']);
+                    $escapedValues = [];
+                    foreach ($values as $val) {
+                        $escapedValues[] = $this->connection->escapeLiteral(
+                            trim($val)
+                        );
+                    }
+                    $valuesList = implode(', ', $escapedValues);
+                    $sql .= " FOR VALUES IN ({$valuesList})";
                     break;
 
                 case 'h': // HASH
                     $this->connection->clean($values['modulus']);
                     $this->connection->clean($values['remainder']);
-                    $sql .= " FOR VALUES WITH (MODULUS {$values['modulus']}, REMAINDER {$values['remainder']})";
+                    $sql .= " FOR VALUES WITH (MODULUS '{$values['modulus']}', REMAINDER '{$values['remainder']}')";
+                    break;
+
+                default:
+                    return -1;
+            }
+        }
+
+        return $this->connection->execute($sql);
+    }
+
+    /**
+     * Attaches an existing table as a partition to a partitioned table.
+     * @param string $parentTable The parent partitioned table name
+     * @param string $partitionTable The existing table to attach as partition
+     * @param string $strategy Partition strategy ('r' for RANGE, 'l' for LIST, 'h' for HASH)
+     * @param array $values Partition values (same format as createPartition)
+     * @param bool $isDefault Whether this is a default partition (PG11+)
+     * @return int 0 on success, -1 on error
+     */
+    public function attachPartition($parentTable, $partitionTable, $strategy, $values = [], $isDefault = false)
+    {
+        if ($this->connection->major_version < 10) {
+            return -1;
+        }
+
+        // Check for default partition support
+        if ($isDefault && $this->connection->major_version < 11) {
+            return -1;
+        }
+
+        $f_schema = $this->connection->_schema;
+        $this->connection->fieldClean($f_schema);
+        $this->connection->fieldClean($parentTable);
+        $this->connection->fieldClean($partitionTable);
+
+        $sql = "ALTER TABLE \"{$f_schema}\".\"{$parentTable}\" ATTACH PARTITION \"{$f_schema}\".\"{$partitionTable}\"";
+
+        // Check for default partition
+        if ($isDefault) {
+            $sql .= " DEFAULT";
+        } else {
+            // Add FOR VALUES clause based on strategy
+            switch ($strategy) {
+                case 'r': // RANGE
+                    $this->connection->clean($values['from']);
+                    $this->connection->clean($values['to']);
+                    $sql .= " FOR VALUES FROM ('{$values['from']}') TO ('{$values['to']}')";
+                    break;
+
+                case 'l': // LIST
+                    $values = explode(',', $values['values']);
+                    $escapedValues = [];
+                    foreach ($values as $val) {
+                        $escapedValues[] = $this->connection->escapeLiteral(
+                            trim($val)
+                        );
+                    }
+                    $valuesList = implode(', ', $escapedValues);
+                    $sql .= " FOR VALUES IN ({$valuesList})";
+                    break;
+
+                case 'h': // HASH
+                    $this->connection->clean($values['modulus']);
+                    $this->connection->clean($values['remainder']);
+                    $sql .= " FOR VALUES WITH (MODULUS '{$values['modulus']}', REMAINDER '{$values['remainder']}')";
                     break;
 
                 default:

@@ -734,6 +734,7 @@ class Misc extends AppContext
 	}
 
 	/**
+	 * Get the path to an icon
 	 * @param string|string[]|null $icon
 	 * @return string
 	 */
@@ -743,7 +744,8 @@ class Misc extends AppContext
 		static $cache = null;
 		if (!isset($cache)) {
 			$hasSessionCache = isset($_SESSION['iconCacheData']) &&
-				($_SESSION['iconCacheVersion'] ?? '') === AppContainer::getAppVersion();
+				($_SESSION['iconCacheVersion'] ?? '') === AppContainer::getAppVersion() &&
+				!isset($_REQUEST['reload_icons']);
 			if ($hasSessionCache) {
 				$cache = $_SESSION['iconCacheData'];
 			} else {
@@ -766,7 +768,14 @@ class Misc extends AppContext
 		}
 	}
 
-	public function printIcon($icon, $alt = '', $class = '')
+	/**
+	 * Get the HTML for an icon
+	 * @param string|string[]|null $icon
+	 * @param string $alt Alternate text for the icon
+	 * @param string $class CSS class for the icon
+	 * @return string|null The HTML img tag, or null if the icon was not found
+	 */
+	public function getIcon($icon, $alt = '', $class = '')
 	{
 		$iconPath = $this->icon($icon);
 		if (!$iconPath) {
@@ -774,7 +783,18 @@ class Misc extends AppContext
 		}
 		$altAttr = $alt ? ' alt="' . htmlspecialchars($alt) . '"' : '';
 		$classAttr = $class ? ' class="' . htmlspecialchars($class) . '"' : '';
-		echo '<img src="', htmlspecialchars($iconPath), '"', $altAttr, $classAttr, ' />';
+		return '<img src="' . htmlspecialchars($iconPath) . '"' . $altAttr . $classAttr . ' />';
+	}
+
+	/**
+	 * Print an icon
+	 * @param string|string[]|null $icon
+	 * @param string $alt Alternate text for the icon
+	 * @param string $class CSS class for the icon
+	 */
+	public function printIcon($icon, $alt = '', $class = '')
+	{
+		echo $this->getIcon($icon, $alt, $class);
 	}
 
 	/**

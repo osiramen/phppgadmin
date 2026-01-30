@@ -329,7 +329,7 @@ function doDefault($msg = '')
 		'index' => [
 			'title' => $lang['strname'],
 			'field' => field('indname'),
-			//'class' => 'emphasize',
+			'class' => 'nowrap',
 			'icon' => $misc->icon('Index'),
 		],
 		'definition' => [

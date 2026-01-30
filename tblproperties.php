@@ -1235,11 +1235,7 @@ switch ($action) {
 		doExport();
 		break;
 	case 'add_column':
-		if (isset($_POST['cancel'])) {
-			doDefault();
-		} else {
-			doAddColumn();
-		}
+		doAddColumn();
 		break;
 	case 'save_add_column':
 		if (isset($_POST['add'])) {
