@@ -67,6 +67,12 @@ class ConstraintActions extends ActionsBase
         $this->connection->clean($c_schema);
         $this->connection->clean($table);
 
+        $partition_fields = '';
+        if ($this->connection->major_version >= 10) {
+            $partition_fields = ', c.conislocal,
+                c.coninhcount';
+        }
+
         $sql =
             "SELECT
                 c.conname,
@@ -81,7 +87,10 @@ class ConstraintActions extends ActionsBase
 
                 -- Referenced table schema and name (for FK)
                 ns2.nspname AS f_schema,
-                r2.relname AS f_table
+                r2.relname AS f_table,
+
+                -- Partition-related fields (PG 10+)
+                {$partition_fields}
 
             FROM pg_catalog.pg_constraint c
             JOIN pg_catalog.pg_class r
@@ -108,7 +117,7 @@ class ConstraintActions extends ActionsBase
             AND n.nspname = '{$c_schema}'
 
             GROUP BY
-                c.oid, c.conname, c.contype, i.indisclustered, ns2.nspname, r2.relname
+                c.oid, c.conname, c.contype, i.indisclustered, ns2.nspname, r2.relname {$partition_fields}
 
             ORDER BY c.conname
         ";

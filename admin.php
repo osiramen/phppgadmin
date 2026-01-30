@@ -32,7 +32,7 @@ function doCluster($type, $confirm = false)
 			<form action="<?= htmlspecialchars($script, ENT_QUOTES, 'UTF-8') ?>" method="post">
 				<?php foreach ($_REQUEST['ma'] as $v) {
 					$a = unserialize(htmlspecialchars_decode($v, ENT_QUOTES)); ?>
-					<p><?= sprintf($lang['strconfclustertable'], $misc->printVal($a['table'])) ?></p>
+					<p><?= sprintf($lang['strconfclustertable'], $misc->formatVal($a['table'])) ?></p>
 					<input type="hidden" name="table[]" value="<?= html_esc($a['table']) ?>" />
 				<?php } ?>
 				<input type="hidden" name="action" value="cluster" />
@@ -48,10 +48,10 @@ function doCluster($type, $confirm = false)
 			?>
 			<form action="<?= htmlspecialchars($script, ENT_QUOTES, 'UTF-8') ?>" method="post">
 				<?php if ($type == 'table') { ?>
-					<p><?= sprintf($lang['strconfclustertable'], $misc->printVal($_REQUEST['object'])) ?></p>
+					<p><?= sprintf($lang['strconfclustertable'], $misc->formatVal($_REQUEST['object'])) ?></p>
 					<input type="hidden" name="table" value="<?= html_esc($_REQUEST['object']) ?>" />
 				<?php } else { ?>
-					<p><?= sprintf($lang['strconfclusterdatabase'], $misc->printVal($_REQUEST['object'])) ?></p>
+					<p><?= sprintf($lang['strconfclusterdatabase'], $misc->formatVal($_REQUEST['object'])) ?></p>
 					<input type="hidden" name="table" value="" />
 				<?php } ?>
 				<input type="hidden" name="action" value="cluster" />
@@ -119,7 +119,7 @@ function doReindex($type, $confirm = false)
 			<form action="<?= htmlspecialchars($script, ENT_QUOTES, 'UTF-8') ?>" method="post">
 				<?php foreach ($_REQUEST['ma'] as $v) {
 					$a = unserialize(htmlspecialchars_decode($v, ENT_QUOTES)); ?>
-					<p><?= sprintf($lang['strconfreindextable'], $misc->printVal($a['table'])) ?></p>
+					<p><?= sprintf($lang['strconfreindextable'], $misc->formatVal($a['table'])) ?></p>
 					<input type="hidden" name="table[]" value="<?= html_esc($a['table']) ?>" />
 				<?php } ?>
 				<input type="hidden" name="action" value="reindex" />
@@ -135,10 +135,10 @@ function doReindex($type, $confirm = false)
 			?>
 			<form action="<?= htmlspecialchars($script, ENT_QUOTES, 'UTF-8') ?>" method="post">
 				<?php if ($type == 'table') { ?>
-					<p><?= sprintf($lang['strconfreindextable'], $misc->printVal($_REQUEST['object'])) ?></p>
+					<p><?= sprintf($lang['strconfreindextable'], $misc->formatVal($_REQUEST['object'])) ?></p>
 					<input type="hidden" name="table" value="<?= html_esc($_REQUEST['object']) ?>" />
 				<?php } else { ?>
-					<p><?= sprintf($lang['strconfreindexdatabase'], $misc->printVal($_REQUEST['object'])) ?></p>
+					<p><?= sprintf($lang['strconfreindexdatabase'], $misc->formatVal($_REQUEST['object'])) ?></p>
 					<input type="hidden" name="table" value="" />
 				<?php } ?>
 				<input type="hidden" name="action" value="reindex" />
@@ -206,7 +206,7 @@ function doAnalyze($type, $confirm = false)
 			<form action="<?= htmlspecialchars($script, ENT_QUOTES, 'UTF-8') ?>" method="post">
 				<?php foreach ($_REQUEST['ma'] as $v) {
 					$a = unserialize(htmlspecialchars_decode($v, ENT_QUOTES)); ?>
-					<p><?= sprintf($lang['strconfanalyzetable'], $misc->printVal($a['table'])) ?></p>
+					<p><?= sprintf($lang['strconfanalyzetable'], $misc->formatVal($a['table'])) ?></p>
 					<input type="hidden" name="table[]" value="<?= html_esc($a['table']) ?>" />
 				<?php } ?>
 				<input type="hidden" name="action" value="analyze" />
@@ -222,10 +222,10 @@ function doAnalyze($type, $confirm = false)
 			?>
 			<form action="<?= htmlspecialchars($script, ENT_QUOTES, 'UTF-8') ?>" method="post">
 				<?php if ($type == 'table') { ?>
-					<p><?= sprintf($lang['strconfanalyzetable'], $misc->printVal($_REQUEST['object'])) ?></p>
+					<p><?= sprintf($lang['strconfanalyzetable'], $misc->formatVal($_REQUEST['object'])) ?></p>
 					<input type="hidden" name="table" value="<?= html_esc($_REQUEST['object']) ?>" />
 				<?php } else { ?>
-					<p><?= sprintf($lang['strconfanalyzedatabase'], $misc->printVal($_REQUEST['object'])) ?></p>
+					<p><?= sprintf($lang['strconfanalyzedatabase'], $misc->formatVal($_REQUEST['object'])) ?></p>
 					<input type="hidden" name="table" value="" />
 				<?php } ?>
 				<input type="hidden" name="action" value="analyze" />
@@ -285,7 +285,7 @@ function doVacuum($type, $confirm = false)
 			<form action="<?= htmlspecialchars($script, ENT_QUOTES, 'UTF-8') ?>" method="post">
 				<?php foreach ($_REQUEST['ma'] as $v) {
 					$a = unserialize(htmlspecialchars_decode($v, ENT_QUOTES)); ?>
-					<p><?= sprintf($lang['strconfvacuumtable'], $misc->printVal($a['table'])) ?></p>
+					<p><?= sprintf($lang['strconfvacuumtable'], $misc->formatVal($a['table'])) ?></p>
 					<input type="hidden" name="table[]" value="<?= html_esc($a['table']) ?>" />
 				<?php } ?>
 				<input type="hidden" name="action" value="vacuum" />
@@ -307,10 +307,10 @@ function doVacuum($type, $confirm = false)
 			?>
 			<form action="<?= htmlspecialchars($script, ENT_QUOTES, 'UTF-8') ?>" method="post">
 				<?php if ($type == 'table') { ?>
-					<p><?= sprintf($lang['strconfvacuumtable'], $misc->printVal($_REQUEST['object'])) ?></p>
+					<p><?= sprintf($lang['strconfvacuumtable'], $misc->formatVal($_REQUEST['object'])) ?></p>
 					<input type="hidden" name="table" value="<?= html_esc($_REQUEST['object']) ?>" />
 				<?php } else { ?>
-					<p><?= sprintf($lang['strconfvacuumdatabase'], $misc->printVal($_REQUEST['object'])) ?></p>
+					<p><?= sprintf($lang['strconfvacuumdatabase'], $misc->formatVal($_REQUEST['object'])) ?></p>
 					<input type="hidden" name="table" value="" />
 				<?php } ?>
 				<input type="hidden" name="action" value="vacuum" />
@@ -382,8 +382,8 @@ function doEditAutovacuum($type, $confirm, $msg = '')
 
 	if ($confirm) {
 		$misc->printTrail($type);
-		$misc->printTitle(sprintf($lang['streditvacuumtable'], $misc->printVal($_REQUEST['table'])));
-		$misc->printMsg(sprintf($msg, $misc->printVal($_REQUEST['table'])));
+		$misc->printTitle(sprintf($lang['streditvacuumtable'], $misc->formatVal($_REQUEST['table'])));
+		$misc->printMsg(sprintf($msg, $misc->formatVal($_REQUEST['table'])));
 
 		if (empty($_REQUEST['table'])) {
 			doAdmin($type, $lang['strspecifyeditvacuumtable']);
@@ -557,9 +557,9 @@ function doDropAutovacuum($type, $confirm)
 		$status = $adminActions->dropAutovacuum($_POST['table']);
 
 		if ($status == 0) {
-			doAdmin($type, sprintf($lang['strvacuumtablereset'], $misc->printVal($_POST['table'])));
+			doAdmin($type, sprintf($lang['strvacuumtablereset'], $misc->formatVal($_POST['table'])));
 		} else
-			doAdmin($type, sprintf($lang['strdelvacuumtablefail'], $misc->printVal($_POST['table'])));
+			doAdmin($type, sprintf($lang['strdelvacuumtablefail'], $misc->formatVal($_POST['table'])));
 	}
 }
 

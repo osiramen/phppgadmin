@@ -121,11 +121,11 @@ function doDefinition($msg = '')
 	if ($vdata->recordCount() > 0) {
 		// Show comment if any
 		if ($vdata->fields['relcomment'] !== null)
-			echo "<p class=\"comment\">", $misc->printVal($vdata->fields['relcomment']), "</p>\n";
+			echo "<p class=\"comment\">", $misc->formatVal($vdata->fields['relcomment']), "</p>\n";
 
 		echo "<table style=\"width: 100%\">\n";
 		echo "<tr><th class=\"data\">{$lang['strdefinition']}</th></tr>\n";
-		echo "<tr><td class=\"data1\"><pre class=\"sql-viewer\">", $misc->printVal($vdata->fields['vwdefinition']), "</pre></td></tr>\n";
+		echo "<tr><td class=\"data1\"><pre class=\"sql-viewer\">", $misc->formatVal($vdata->fields['vwdefinition']), "</pre></td></tr>\n";
 		echo "</table>\n";
 	} else
 		echo "<p>{$lang['strnodata']}</p>\n";
@@ -188,7 +188,7 @@ function doProperties($msg = '')
 			echo "<tr><td><input name=\"field\" size=\"32\" value=\"",
 				html_esc($_REQUEST['field']), "\" /></td>";
 
-			echo "<td>", $misc->printVal($pg->formatType($column->fields['type'], $column->fields['atttypmod'])), "</td>";
+			echo "<td>", $misc->formatVal($pg->formatType($column->fields['type'], $column->fields['atttypmod'])), "</td>";
 			echo "<td><input name=\"default\" size=\"20\" value=\"",
 				html_esc($_REQUEST['default']), "\" /></td>";
 			echo "<td><input name=\"comment\" size=\"32\" value=\"",
@@ -419,7 +419,7 @@ function doDefault($msg = '')
 
 	// Show comment if any
 	if ($vdata->fields['relcomment'] !== null)
-		echo "<p class=\"comment\">", $misc->printVal($vdata->fields['relcomment']), "</p>\n";
+		echo "<p class=\"comment\">", $misc->formatVal($vdata->fields['relcomment']), "</p>\n";
 
 	$columns = [
 		'column' => [

@@ -146,7 +146,7 @@ class FormRenderer extends AppContext
 					echo "<div class=\"flex-row\">";
 					echo "<div class=\"ml-auto\"></div>";
 					echo "<div class=\"me-1\"><a href=\"$downloadUrl\">", htmlspecialchars($lang['strdownload']), "</a></div>";
-					echo $this->misc()->printVal($byteaSize, 'prettysize');
+					echo $this->misc()->formatVal($byteaSize, 'prettysize');
 					echo "<input type=\"hidden\" name=\"bytea_keep[", htmlspecialchars($fieldKey), "]\" value=\"1\" />";
 					echo "</div>";
 				}

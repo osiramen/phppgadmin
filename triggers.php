@@ -86,8 +86,8 @@ function doDrop($confirm)
 
 		echo "<p>", sprintf(
 			$lang['strconfdroptrigger'],
-			$misc->printVal($_REQUEST['trigger']),
-			$misc->printVal($_REQUEST['table'])
+			$misc->formatVal($_REQUEST['trigger']),
+			$misc->formatVal($_REQUEST['table'])
 		), "</p>\n";
 
 		echo "<form action=\"triggers.php\" method=\"post\">\n";
@@ -125,8 +125,8 @@ function doEnable($confirm)
 
 		echo "<p>", sprintf(
 			$lang['strconfenabletrigger'],
-			$misc->printVal($_REQUEST['trigger']),
-			$misc->printVal($_REQUEST['table'])
+			$misc->formatVal($_REQUEST['trigger']),
+			$misc->formatVal($_REQUEST['table'])
 		), "</p>\n";
 
 		echo "<form action=\"triggers.php\" method=\"post\">\n";
@@ -163,8 +163,8 @@ function doDisable($confirm)
 
 		echo "<p>", sprintf(
 			$lang['strconfdisabletrigger'],
-			$misc->printVal($_REQUEST['trigger']),
-			$misc->printVal($_REQUEST['table'])
+			$misc->formatVal($_REQUEST['trigger']),
+			$misc->formatVal($_REQUEST['table'])
 		), "</p>\n";
 
 		echo "<form action=\"triggers.php\" method=\"post\">\n";

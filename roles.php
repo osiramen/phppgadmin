@@ -105,7 +105,7 @@ function doCreate($msg = '')
 						<select name="memberof[]" multiple="multiple" size="<?= min(20, $roles->recordCount()) ?>">
 							<?php while (!$roles->EOF):
 								$rolename = $roles->fields['rolname']; ?>
-								<option value="<?= html_esc($rolename) ?>" <?= in_array($rolename, $_POST['memberof']) ? 'selected="selected"' : '' ?>><?= $misc->printVal($rolename) ?></option>
+								<option value="<?= html_esc($rolename) ?>" <?= in_array($rolename, $_POST['memberof']) ? 'selected="selected"' : '' ?>><?= $misc->formatVal($rolename) ?></option>
 								<?php $roles->moveNext(); endwhile; ?>
 						</select>
 					</td>
@@ -118,7 +118,7 @@ function doCreate($msg = '')
 						<select name="members[]" multiple="multiple" size="<?= min(20, $roles->recordCount()) ?>">
 							<?php while (!$roles->EOF):
 								$rolename = $roles->fields['rolname']; ?>
-								<option value="<?= html_esc($rolename) ?>" <?= in_array($rolename, $_POST['members']) ? 'selected="selected"' : '' ?>><?= $misc->printVal($rolename) ?></option>
+								<option value="<?= html_esc($rolename) ?>" <?= in_array($rolename, $_POST['members']) ? 'selected="selected"' : '' ?>><?= $misc->formatVal($rolename) ?></option>
 								<?php $roles->moveNext(); endwhile; ?>
 						</select>
 					</td>
@@ -131,7 +131,7 @@ function doCreate($msg = '')
 						<select name="adminmembers[]" multiple="multiple" size="<?= min(20, $roles->recordCount()) ?>">
 							<?php while (!$roles->EOF):
 								$rolename = $roles->fields['rolname']; ?>
-								<option value="<?= html_esc($rolename) ?>" <?= in_array($rolename, $_POST['adminmembers']) ? 'selected="selected"' : '' ?>><?= $misc->printVal($rolename) ?></option>
+								<option value="<?= html_esc($rolename) ?>" <?= in_array($rolename, $_POST['adminmembers']) ? 'selected="selected"' : '' ?>><?= $misc->formatVal($rolename) ?></option>
 								<?php $roles->moveNext(); endwhile; ?>
 						</select>
 					</td>
@@ -250,7 +250,7 @@ function doAlter($msg = '')
 						<input name="formNewRoleName" size="15" maxlength="<?= $pg->_maxNameLen ?>"
 							value="<?= html_esc($_POST['formNewRoleName']) ?>" />
 					<?php else: ?>
-						<?= $misc->printVal($roledata->fields['rolname']) ?>
+						<?= $misc->formatVal($roledata->fields['rolname']) ?>
 					<?php endif; ?>
 				</td>
 			</tr>
@@ -344,7 +344,7 @@ function doAlter($msg = '')
 						<select name="memberof[]" multiple="multiple" size="<?= min(20, $roles->recordCount()) ?>">
 							<?php while (!$roles->EOF):
 								$rolename = $roles->fields['rolname']; ?>
-								<option value="<?= html_esc($rolename) ?>" <?= in_array($rolename, $_POST['memberof']) ? 'selected="selected"' : '' ?>><?= $misc->printVal($rolename) ?></option>
+								<option value="<?= html_esc($rolename) ?>" <?= in_array($rolename, $_POST['memberof']) ? 'selected="selected"' : '' ?>><?= $misc->formatVal($rolename) ?></option>
 								<?php $roles->moveNext(); endwhile; ?>
 						</select>
 					</td>
@@ -357,7 +357,7 @@ function doAlter($msg = '')
 						<select name="members[]" multiple="multiple" size="<?= min(20, $roles->recordCount()) ?>">
 							<?php while (!$roles->EOF):
 								$rolename = $roles->fields['rolname']; ?>
-								<option value="<?= html_esc($rolename) ?>" <?= in_array($rolename, $_POST['members']) ? 'selected="selected"' : '' ?>><?= $misc->printVal($rolename) ?></option>
+								<option value="<?= html_esc($rolename) ?>" <?= in_array($rolename, $_POST['members']) ? 'selected="selected"' : '' ?>><?= $misc->formatVal($rolename) ?></option>
 								<?php $roles->moveNext(); endwhile; ?>
 						</select>
 					</td>
@@ -370,7 +370,7 @@ function doAlter($msg = '')
 						<select name="adminmembers[]" multiple="multiple" size="<?= min(20, $roles->recordCount()) ?>">
 							<?php while (!$roles->EOF):
 								$rolename = $roles->fields['rolname']; ?>
-								<option value="<?= html_esc($rolename) ?>" <?= in_array($rolename, $_POST['adminmembers']) ? 'selected="selected"' : '' ?>><?= $misc->printVal($rolename) ?></option>
+								<option value="<?= html_esc($rolename) ?>" <?= in_array($rolename, $_POST['adminmembers']) ? 'selected="selected"' : '' ?>><?= $misc->formatVal($rolename) ?></option>
 								<?php $roles->moveNext(); endwhile; ?>
 						</select>
 					</td>
@@ -474,7 +474,7 @@ function doDrop($confirm)
 		$misc->printTitle($lang['strdroprole'], 'pg.role.drop');
 
 		?>
-		<p><?= sprintf($lang['strconfdroprole'], $misc->printVal($_REQUEST['rolename'])) ?></p>
+		<p><?= sprintf($lang['strconfdroprole'], $misc->formatVal($_REQUEST['rolename'])) ?></p>
 
 		<form action="roles.php" method="post">
 			<p>
@@ -550,18 +550,18 @@ function doProperties($msg = '')
 			<tr>
 				<td class="data1"><?= $lang['strconnlimit'] ?></td>
 				<td class="data1">
-					<?= ($roledata->fields['rolconnlimit'] === '-1' ? $lang['strnolimit'] : $misc->printVal($roledata->fields['rolconnlimit'])) ?>
+					<?= ($roledata->fields['rolconnlimit'] === '-1' ? $lang['strnolimit'] : $misc->formatVal($roledata->fields['rolconnlimit'])) ?>
 				</td>
 			</tr>
 			<tr>
 				<td class="data2"><?= $lang['strexpires'] ?></td>
 				<td class="data2">
-					<?= ($roledata->fields['rolvaliduntil'] == 'infinity' || is_null($roledata->fields['rolvaliduntil']) ? $lang['strnever'] : $misc->printVal($roledata->fields['rolvaliduntil'])) ?>
+					<?= ($roledata->fields['rolvaliduntil'] == 'infinity' || is_null($roledata->fields['rolvaliduntil']) ? $lang['strnever'] : $misc->formatVal($roledata->fields['rolvaliduntil'])) ?>
 				</td>
 			</tr>
 			<tr>
 				<td class="data1"><?= $lang['strsessiondefaults'] ?></td>
-				<td class="data1"><?= $misc->printVal($roledata->fields['rolconfig']) ?></td>
+				<td class="data1"><?= $misc->formatVal($roledata->fields['rolconfig']) ?></td>
 			</tr>
 			<tr>
 				<td class="data2"><?= $lang['strmemberof'] ?></td>
@@ -570,7 +570,7 @@ function doProperties($msg = '')
 					$memberof = $roleActions->getMemberOf($_REQUEST['rolename']);
 					if ($memberof->recordCount() > 0) {
 						while (!$memberof->EOF) {
-							echo $misc->printVal($memberof->fields['rolname']), "<br />\n";
+							echo $misc->formatVal($memberof->fields['rolname']), "<br />\n";
 							$memberof->moveNext();
 						}
 					}
@@ -584,7 +584,7 @@ function doProperties($msg = '')
 					$members = $roleActions->getMembers($_REQUEST['rolename']);
 					if ($members->recordCount() > 0) {
 						while (!$members->EOF) {
-							echo $misc->printVal($members->fields['rolname']), "<br />\n";
+							echo $misc->formatVal($members->fields['rolname']), "<br />\n";
 							$members->moveNext();
 						}
 					}
@@ -598,7 +598,7 @@ function doProperties($msg = '')
 					$adminmembers = $roleActions->getMembers($_REQUEST['rolename'], 't');
 					if ($adminmembers->recordCount() > 0) {
 						while (!$adminmembers->EOF) {
-							echo $misc->printVal($adminmembers->fields['rolname']), "<br />\n";
+							echo $misc->formatVal($adminmembers->fields['rolname']), "<br />\n";
 							$adminmembers->moveNext();
 						}
 					}
@@ -699,18 +699,18 @@ function doAccount($msg = '')
 				<th class="data"><?= $lang['strsessiondefaults'] ?></th>
 			</tr>
 			<tr>
-				<td class="data1"><?= $misc->printVal($roledata->fields['rolname']) ?></td>
-				<td class="data1"><?= $misc->printVal($roledata->fields['rolsuper'], 'yesno') ?></td>
-				<td class="data1"><?= $misc->printVal($roledata->fields['rolcreatedb'], 'yesno') ?></td>
-				<td class="data1"><?= $misc->printVal($roledata->fields['rolcreaterole'], 'yesno') ?></td>
-				<td class="data1"><?= $misc->printVal($roledata->fields['rolinherit'], 'yesno') ?></td>
+				<td class="data1"><?= $misc->formatVal($roledata->fields['rolname']) ?></td>
+				<td class="data1"><?= $misc->formatVal($roledata->fields['rolsuper'], 'yesno') ?></td>
+				<td class="data1"><?= $misc->formatVal($roledata->fields['rolcreatedb'], 'yesno') ?></td>
+				<td class="data1"><?= $misc->formatVal($roledata->fields['rolcreaterole'], 'yesno') ?></td>
+				<td class="data1"><?= $misc->formatVal($roledata->fields['rolinherit'], 'yesno') ?></td>
 				<td class="data1">
-					<?= ($roledata->fields['rolconnlimit'] == '-1' ? $lang['strnolimit'] : $misc->printVal($roledata->fields['rolconnlimit'])) ?>
+					<?= ($roledata->fields['rolconnlimit'] == '-1' ? $lang['strnolimit'] : $misc->formatVal($roledata->fields['rolconnlimit'])) ?>
 				</td>
 				<td class="data1">
-					<?= ($roledata->fields['rolvaliduntil'] == 'infinity' || is_null($roledata->fields['rolvaliduntil']) ? $lang['strnever'] : $misc->printVal($roledata->fields['rolvaliduntil'])) ?>
+					<?= ($roledata->fields['rolvaliduntil'] == 'infinity' || is_null($roledata->fields['rolvaliduntil']) ? $lang['strnever'] : $misc->formatVal($roledata->fields['rolvaliduntil'])) ?>
 				</td>
-				<td class="data1"><?= $misc->printVal($roledata->fields['rolconfig']) ?></td>
+				<td class="data1"><?= $misc->formatVal($roledata->fields['rolconfig']) ?></td>
 			</tr>
 		</table>
 		<?php

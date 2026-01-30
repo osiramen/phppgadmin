@@ -157,7 +157,7 @@ class ColumnFormRenderer
                     <select name="type[<?= $i ?>]" id="types<?= $i ?>" onchange="checkLengths(this.value, <?= $i ?>);">
                         <?php foreach ($allTypes as $t): ?>
                             <option value="<?= html_esc($t) ?>" <?= ($t == $type) ? ' selected="selected"' : '' ?>>
-                                <?= $this->misc->printVal($t) ?>
+                                <?= $this->misc->formatVal($t) ?>
                             </option>
                         <?php endforeach; ?>
                     </select>

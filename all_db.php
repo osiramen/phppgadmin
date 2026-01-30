@@ -140,13 +140,13 @@ function doDrop($confirm)
 				foreach ($_REQUEST['ma'] as $v) {
 					$a = unserialize(htmlspecialchars_decode($v, ENT_QUOTES));
 					?>
-					<p><?= sprintf($lang['strconfdropdatabase'], $misc->printVal($a['database'])); ?></p>
+					<p><?= sprintf($lang['strconfdropdatabase'], $misc->formatVal($a['database'])); ?></p>
 					<input type="hidden" name="dropdatabase[]" value="<?= html_esc($a['database']); ?>" />
 					<?php
 				}
 			} else {
 				?>
-				<p><?= sprintf($lang['strconfdropdatabase'], $misc->printVal($_REQUEST['dropdatabase'])); ?></p>
+				<p><?= sprintf($lang['strconfdropdatabase'], $misc->formatVal($_REQUEST['dropdatabase'])); ?></p>
 				<input type="hidden" name="dropdatabase" value="<?= html_esc($_REQUEST['dropdatabase']); ?>" />
 				<?php
 			}
@@ -267,7 +267,7 @@ function doCreate($msg = '')
 							?>
 							<option value="<?= html_esc($key); ?>" <?php if ($key == $_POST['formEncoding'])
 								  echo ' selected="selected"'; ?>>
-								<?= $misc->printVal($key); ?>
+								<?= $misc->formatVal($key); ?>
 							</option>
 							<?php
 						}

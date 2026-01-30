@@ -28,16 +28,16 @@ class Report extends Plugin
 		parent::__construct($language);
 
 		/* default values */
-		if (! isset($this->conf['reports_db'])) {
+		if (!isset($this->conf['reports_db'])) {
 			$this->conf['reports_db'] = 'phppgadmin';
 		}
-		if (! isset($this->conf['reports_schema'])) {
+		if (!isset($this->conf['reports_schema'])) {
 			$this->conf['reports_schema'] = 'public';
 		}
-		if (! isset($this->conf['reports_table'])) {
+		if (!isset($this->conf['reports_table'])) {
 			$this->conf['reports_table'] = 'ppa_reports';
 		}
-		if (! isset($this->conf['owned_reports_only'])) {
+		if (!isset($this->conf['owned_reports_only'])) {
 			$this->conf['owned_reports_only'] = false;
 		}
 	}
@@ -179,7 +179,7 @@ class Report extends Plugin
 			$trail['report_plugin'] = [
 				'title' => $this->lang['strreport'],
 				'text' => $this->lang['strreport'],
-				'url'   => $this->misc()->getActionUrl($url, $_REQUEST, null, false),
+				'url' => $this->misc()->getActionUrl($url, $_REQUEST, null, false),
 				'icon' => $this->icon('Reports')
 			];
 		}
@@ -206,7 +206,7 @@ class Report extends Plugin
 			$trail['report_plugin_name'] = [
 				'title' => $this->lang['strreport'],
 				'text' => $this->lang['strreport'],
-				'url'   => $this->misc()->getActionUrl($url, $_REQUEST, null, false),
+				'url' => $this->misc()->getActionUrl($url, $_REQUEST, null, false),
 				'icon' => $this->icon('Report')
 			];
 
@@ -228,8 +228,10 @@ class Report extends Plugin
 				and is_object($params['env']['rs'])
 				and $params['env']['rs']->recordCount() > 0)
 		) {
-			if (! (isset($_REQUEST['plugin'])
-				and $_REQUEST['plugin'] == $this->name)) {
+			if (
+				!(isset($_REQUEST['plugin'])
+					and $_REQUEST['plugin'] == $this->name)
+			) {
 				/* ResultSet doesn't come from a plugin:
 				 * show a create report link. */
 				$params['navlinks']['report_link'] = [
@@ -319,7 +321,7 @@ class Report extends Plugin
 	{
 		$vars = [];
 
-		if (! isset($_REQUEST['action']))
+		if (!isset($_REQUEST['action']))
 			return $vars;
 
 		$action = $_REQUEST['action'];
@@ -372,22 +374,22 @@ class Report extends Plugin
 		echo "<table style=\"width: 100%\">\n";
 		echo "<tr><th class=\"data left required\">{$this->lang['strname']}</th>\n";
 		echo "<td class=\"data1\"><input name=\"report_name\" size=\"32\" maxlength=\"{$this->postgres()->_maxNameLen}\" value=\"",
-		htmlspecialchars($_POST['report_name']), "\" /></td></tr>\n";
+			htmlspecialchars($_POST['report_name']), "\" /></td></tr>\n";
 		echo "<tr><th class=\"data left required\">{$this->lang['strdatabase']}</th>\n";
 		echo "<td class=\"data1\"><select name=\"db_name\">\n";
 		while (!$databases->EOF) {
 			$dbname = $databases->fields['datname'];
 			echo "<option value=\"", htmlspecialchars($dbname), "\"", ($dbname == $_POST['db_name']) ? ' selected="selected"' : '', ">",
-			htmlspecialchars($dbname), "</option>\n";
+				htmlspecialchars($dbname), "</option>\n";
 			$databases->moveNext();
 		}
 		echo "</select></td></tr>\n";
 		echo "<tr><th class=\"data left\">{$this->lang['strcomment']}</th>\n";
 		echo "<td class=\"data1\"><textarea style=\"width:100%;\" rows=\"5\" cols=\"50\" name=\"descr\">",
-		htmlspecialchars($_POST['descr']), "</textarea></td></tr>\n";
+			htmlspecialchars($_POST['descr']), "</textarea></td></tr>\n";
 		echo "<tr><th class=\"data left required\">{$this->lang['strsql']}</th>\n";
 		echo "<td class=\"data1\"><textarea style=\"width:100%;\" rows=\"15\" cols=\"50\" name=\"report_sql\">",
-		htmlspecialchars($_POST['report_sql']), "</textarea></td></tr>\n";
+			htmlspecialchars($_POST['report_sql']), "</textarea></td></tr>\n";
 		echo "</table>\n";
 		echo "<label for=\"paginate\"><input type=\"checkbox\" id=\"paginate\" name=\"paginate\"", (isset($_POST['paginate']) ? ' checked="checked"' : ''), " />&nbsp;{$this->lang['strpaginate']}</label>\n";
 		echo "<p><input type=\"hidden\" name=\"action\" value=\"save_edit\" />\n";
@@ -410,10 +412,14 @@ class Report extends Plugin
 			exit;
 		}
 
-		if (!isset($_POST['report_name'])) $_POST['report_name'] = '';
-		if (!isset($_POST['db_name'])) $_POST['db_name'] = '';
-		if (!isset($_POST['descr'])) $_POST['descr'] = '';
-		if (!isset($_POST['report_sql'])) $_POST['report_sql'] = '';
+		if (!isset($_POST['report_name']))
+			$_POST['report_name'] = '';
+		if (!isset($_POST['db_name']))
+			$_POST['db_name'] = '';
+		if (!isset($_POST['descr']))
+			$_POST['descr'] = '';
+		if (!isset($_POST['report_sql']))
+			$_POST['report_sql'] = '';
 
 		// Check that they've given a name and a definition
 		if ($_POST['report_name'] == '') {
@@ -456,24 +462,27 @@ class Report extends Plugin
 		if ($report->recordCount() == 1) {
 			echo "<table>\n";
 			echo "<tr><th class=\"data left\">{$this->lang['strname']}</th>\n";
-			echo "<td class=\"data1\">", $this->misc()->printVal($report->fields['report_name']), "</td></tr>\n";
+			echo "<td class=\"data1\">", $this->misc()->formatVal($report->fields['report_name']), "</td></tr>\n";
 			echo "<tr><th class=\"data left\">{$this->lang['strdatabase']}</th>\n";
-			echo "<td class=\"data1\">", $this->misc()->printVal($report->fields['db_name']), "</td></tr>\n";
+			echo "<td class=\"data1\">", $this->misc()->formatVal($report->fields['db_name']), "</td></tr>\n";
 			echo "<tr><th class=\"data left\">{$this->lang['strcomment']}</th>\n";
-			echo "<td class=\"data1\">", $this->misc()->printVal($report->fields['descr']), "</td></tr>\n";
+			echo "<td class=\"data1\">", $this->misc()->formatVal($report->fields['descr']), "</td></tr>\n";
 			echo "<tr><th class=\"data left\">{$this->lang['strpaginate']}</th>\n";
-			echo "<td class=\"data1\">", $this->misc()->printVal($report->fields['paginate'], 'yesno', ['align' => 'left']), "</td></tr>\n";
+			echo "<td class=\"data1\">", $this->misc()->formatVal($report->fields['paginate'], 'yesno', ['align' => 'left']), "</td></tr>\n";
 			echo "<tr><th class=\"data left\">{$this->lang['strsql']}</th>\n";
-			echo "<td class=\"data1\">", $this->misc()->printVal($report->fields['report_sql']), "</td></tr>\n";
+			echo "<td class=\"data1\">", $this->misc()->formatVal($report->fields['report_sql']), "</td></tr>\n";
 			echo "</table>\n";
-		} else echo "<p>{$this->lang['strinvalidparam']}</p>\n";
+		} else
+			echo "<p>{$this->lang['strinvalidparam']}</p>\n";
 
 		$urlvars = [
 			'plugin' => $this->name,
 			'server' => $_REQUEST['server']
 		];
-		if (isset($_REQUEST['schema'])) $urlvars['schema'] = $_REQUEST['schema'];
-		if (isset($_REQUEST['schema'])) $urlvars['database'] = $_REQUEST['schema'];
+		if (isset($_REQUEST['schema']))
+			$urlvars['schema'] = $_REQUEST['schema'];
+		if (isset($_REQUEST['schema']))
+			$urlvars['database'] = $_REQUEST['schema'];
 
 		$navlinks = [
 			'showall' => [
@@ -533,17 +542,22 @@ class Report extends Plugin
 		$this->misc()->printTabs('server', 'report_plugin');
 		$this->misc()->printMsg($msg);
 
-		if (!isset($_REQUEST['report_name'])) $_REQUEST['report_name'] = '';
-		if (!isset($_REQUEST['db_name'])) $_REQUEST['db_name'] = '';
-		if (!isset($_REQUEST['descr'])) $_REQUEST['descr'] = '';
+		if (!isset($_REQUEST['report_name']))
+			$_REQUEST['report_name'] = '';
+		if (!isset($_REQUEST['db_name']))
+			$_REQUEST['db_name'] = '';
+		if (!isset($_REQUEST['descr']))
+			$_REQUEST['descr'] = '';
 		if (!isset($_REQUEST['report_sql'])) {
 			// Set the query from session if linked from a user query result
 			if (isset($_REQUEST['fromsql']) and $_REQUEST['fromsql'] == 1) {
 				$_REQUEST['report_sql'] = $_SESSION['sqlquery'];
 			} else {
 				$_REQUEST['sortkey'] = $_REQUEST['sortkey'] ?? '';
-				if (preg_match('/^[0-9]+$/', $_REQUEST['sortkey']) && $_REQUEST['sortkey'] > 0) $orderby = [$_REQUEST['sortkey'] => $_REQUEST['sortdir']];
-				else $orderby = [];
+				if (preg_match('/^[0-9]+$/', $_REQUEST['sortkey']) && $_REQUEST['sortkey'] > 0)
+					$orderby = [$_REQUEST['sortkey'] => $_REQUEST['sortdir']];
+				else
+					$orderby = [];
 
 				$subject = isset($_REQUEST['subject']) && isset($_REQUEST[$_REQUEST['subject']])
 					? $_REQUEST[$_REQUEST['subject']]
@@ -566,22 +580,22 @@ class Report extends Plugin
 		echo "<table style=\"width: 100%\">\n";
 		echo "<tr><th class=\"data left required\">{$this->lang['strname']}</th>\n";
 		echo "<td class=\"data1\"><input name=\"report_name\" size=\"32\" maxlength=\"{$this->postgres()->_maxNameLen}\" value=\"",
-		htmlspecialchars($_REQUEST['report_name']), "\" /></td></tr>\n";
+			htmlspecialchars($_REQUEST['report_name']), "\" /></td></tr>\n";
 		echo "<tr><th class=\"data left required\">{$this->lang['strdatabase']}</th>\n";
 		echo "<td class=\"data1\"><select name=\"db_name\">\n";
 		while (!$databases->EOF) {
 			$dbname = $databases->fields['datname'];
 			echo "<option value=\"", htmlspecialchars($dbname), "\"", ($dbname == $_REQUEST['db_name']) ? ' selected="selected"' : '', ">",
-			htmlspecialchars($dbname), "</option>\n";
+				htmlspecialchars($dbname), "</option>\n";
 			$databases->moveNext();
 		}
 		echo "</select></td></tr>\n";
 		echo "<tr><th class=\"data left\">{$this->lang['strcomment']}</th>\n";
 		echo "<td class=\"data1\"><textarea style=\"width:100%;\" rows=\"5\" cols=\"50\" name=\"descr\">",
-		htmlspecialchars($_REQUEST['descr']), "</textarea></td></tr>\n";
+			htmlspecialchars($_REQUEST['descr']), "</textarea></td></tr>\n";
 		echo "<tr><th class=\"data left required\">{$this->lang['strsql']}</th>\n";
 		echo "<td class=\"data1\"><textarea style=\"width:100%;\" rows=\"15\" cols=\"50\" name=\"report_sql\">",
-		htmlspecialchars($_REQUEST['report_sql']), "</textarea></td></tr>\n";
+			htmlspecialchars($_REQUEST['report_sql']), "</textarea></td></tr>\n";
 		echo "</table>\n";
 		echo "<label for=\"paginate\"><input type=\"checkbox\" id=\"paginate\" name=\"paginate\"", (isset($_REQUEST['paginate']) ? ' checked="checked"' : ''), " />&nbsp;{$this->lang['strpaginate']}</label>\n";
 		echo "<p><input type=\"hidden\" name=\"action\" value=\"save_create\" />\n";
@@ -603,14 +617,20 @@ class Report extends Plugin
 
 		$reportsdb = $this->get_reportsdb();
 
-		if (!isset($_POST['report_name'])) $_POST['report_name'] = '';
-		if (!isset($_POST['db_name'])) $_POST['db_name'] = '';
-		if (!isset($_POST['descr'])) $_POST['descr'] = '';
-		if (!isset($_POST['report_sql'])) $_POST['report_sql'] = '';
+		if (!isset($_POST['report_name']))
+			$_POST['report_name'] = '';
+		if (!isset($_POST['db_name']))
+			$_POST['db_name'] = '';
+		if (!isset($_POST['descr']))
+			$_POST['descr'] = '';
+		if (!isset($_POST['report_sql']))
+			$_POST['report_sql'] = '';
 
 		// Check that they've given a name and a definition
-		if ($_POST['report_name'] == '') $this->create($this->lang['strreportneedsname']);
-		elseif ($_POST['report_sql'] == '') $this->create($this->lang['strreportneedsdef']);
+		if ($_POST['report_name'] == '')
+			$this->create($this->lang['strreportneedsname']);
+		elseif ($_POST['report_sql'] == '')
+			$this->create($this->lang['strreportneedsdef']);
 		else {
 			$status = $reportsdb->createReport(
 				$_POST['report_name'],
@@ -632,7 +652,8 @@ class Report extends Plugin
 	function drop()
 	{
 		$confirm = false;
-		if (isset($_REQUEST['confirm'])) $confirm = true;
+		if (isset($_REQUEST['confirm']))
+			$confirm = true;
 
 		$reportsdb = $this->get_reportsdb();
 
@@ -652,7 +673,7 @@ class Report extends Plugin
 			$this->misc()->printTrail('report');
 			$this->misc()->printTitle($this->lang['strdrop']);
 
-			echo "<p>", sprintf($this->lang['strconfdropreport'], $this->misc()->printVal($report->fields['report_name'])), "</p>\n";
+			echo "<p>", sprintf($this->lang['strconfdropreport'], $this->misc()->formatVal($report->fields['report_name'])), "</p>\n";
 
 			echo "<form action=\"plugin.php?plugin={$this->name}\" method=\"post\">\n";
 			echo $this->misc()->form;
@@ -702,8 +723,8 @@ class Report extends Plugin
 			'report' => [
 				'title' => $this->lang['strreport'],
 				'field' => field('report_name'),
-				'url'   => "plugin.php?plugin={$this->name}&amp;action=properties&amp;{$this->misc()->href}&amp;",
-				'vars'  => [
+				'url' => "plugin.php?plugin={$this->name}&amp;action=properties&amp;{$this->misc()->href}&amp;",
+				'vars' => [
 					'report_id' => 'report_id',
 					'report' => 'report_name'
 				],

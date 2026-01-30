@@ -1,5 +1,6 @@
 <?php
 
+use PhpPgAdmin\Database\Actions\SchemaActions;
 use PhpPgAdmin\Html\XHtmlButton;
 use PhpPgAdmin\Html\XHtmlOption;
 use PhpPgAdmin\Html\XHtmlSelect;
@@ -36,7 +37,7 @@ function doClusterIndex($confirm)
 		$misc->printTrail('index');
 		$misc->printTitle($lang['strclusterindex'], 'pg.index.cluster');
 		?>
-		<p><?= sprintf($lang['strconfcluster'], $misc->printVal($_REQUEST['index'])) ?></p>
+		<p><?= sprintf($lang['strconfcluster'], $misc->formatVal($_REQUEST['index'])) ?></p>
 
 		<form action="indexes.php" method="post">
 			<p>
@@ -284,7 +285,7 @@ function doConfirmDropIndex()
 	$misc->printTrail('index');
 	$misc->printTitle($lang['strdrop'], 'pg.index.drop');
 	?>
-	<p><?= sprintf($lang['strconfdropindex'], $misc->printVal($_REQUEST['index'])) ?></p>
+	<p><?= sprintf($lang['strconfdropindex'], $misc->formatVal($_REQUEST['index'])) ?></p>
 
 	<form action="indexes.php" method="post">
 		<input type="hidden" name="action" value="drop_index" />
@@ -401,26 +402,35 @@ function doDefault($msg = '')
 		]
 	];
 
+	$schemaActions = new SchemaActions($pg);
+	$isSystemSchema = $schemaActions->isSystemSchema($_REQUEST['schema']);
+	if ($isSystemSchema) {
+		$actions = [];
+		unset($columns['actions']);
+	}
+
 	$misc->printTable($indexes, $columns, $actions, 'indexes-indexes', $lang['strnoindexes'], $indPre);
 
-	$misc->printNavLinks([
-		'create' => [
-			'attr' => [
-				'href' => [
-					'url' => 'indexes.php',
-					'urlvars' => [
-						'action' => 'create_index',
-						'server' => $_REQUEST['server'],
-						'database' => $_REQUEST['database'],
-						'schema' => $_REQUEST['schema'],
-						'table' => $_REQUEST['table']
+	if (!$isSystemSchema) {
+		$misc->printNavLinks([
+			'create' => [
+				'attr' => [
+					'href' => [
+						'url' => 'indexes.php',
+						'urlvars' => [
+							'action' => 'create_index',
+							'server' => $_REQUEST['server'],
+							'database' => $_REQUEST['database'],
+							'schema' => $_REQUEST['schema'],
+							'table' => $_REQUEST['table']
+						]
 					]
-				]
-			],
-			'icon' => $misc->icon('CreateIndex'),
-			'content' => $lang['strcreateindex']
-		]
-	], 'indexes-indexes', get_defined_vars());
+				],
+				'icon' => $misc->icon('CreateIndex'),
+				'content' => $lang['strcreateindex']
+			]
+		], 'indexes-indexes', get_defined_vars());
+	}
 }
 
 function doTree()

@@ -57,11 +57,11 @@ function doDrop($confirm)
 		if (isset($_REQUEST['ma'])) {
 			foreach ($_REQUEST['ma'] as $v) {
 				$a = unserialize(htmlspecialchars_decode($v, ENT_QUOTES));
-				echo "<p>", sprintf($lang['strconfdropview'], $misc->printVal($a['view'])), "</p>\n";
+				echo "<p>", sprintf($lang['strconfdropview'], $misc->formatVal($a['view'])), "</p>\n";
 				echo '<input type="hidden" name="view[]" value="', html_esc($a['view']), "\" />\n";
 			}
 		} else {
-			echo "<p>", sprintf($lang['strconfdropview'], $misc->printVal($_REQUEST['view'])), "</p>\n";
+			echo "<p>", sprintf($lang['strconfdropview'], $misc->formatVal($_REQUEST['view'])), "</p>\n";
 			echo "<input type=\"hidden\" name=\"view\" value=\"", html_esc($_REQUEST['view']), "\" />\n";
 		}
 
@@ -126,7 +126,7 @@ function doRefresh($confirm)
 		$misc->printTitle($lang['strrefreshmaterializedview'], 'pg.matview.alter');
 
 		echo "<form action=\"views.php\" method=\"post\">\n";
-		echo "<p>", sprintf($lang['strconfrefreshmaterializedview'], $misc->printVal($_REQUEST['view'])), "</p>\n";
+		echo "<p>", sprintf($lang['strconfrefreshmaterializedview'], $misc->formatVal($_REQUEST['view'])), "</p>\n";
 
 		// Check if CONCURRENTLY option is available
 		$canUseConcurrently = false;

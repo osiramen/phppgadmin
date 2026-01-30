@@ -1,6 +1,7 @@
 <?php
 
 use PhpPgAdmin\Core\AppContainer;
+use PhpPgAdmin\Database\Actions\PartitionActions;
 use PhpPgAdmin\Gui\ColumnFormRenderer;
 use PhpPgAdmin\Gui\ImportFormRenderer;
 use PhpPgAdmin\Gui\QueryExportRenderer;
@@ -429,7 +430,7 @@ function doDrop($confirm)
 		$misc->printTitle($lang['strdrop'], 'pg.column.drop');
 		?>
 		<p>
-			<?= sprintf($lang['strconfdropcolumn'], $misc->printVal($_REQUEST['column']), $misc->printVal($_REQUEST['table'])) ?>
+			<?= sprintf($lang['strconfdropcolumn'], $misc->formatVal($_REQUEST['column']), $misc->formatVal($_REQUEST['table'])) ?>
 		</p>
 		<form action="tblproperties.php" method="post">
 			<input type="hidden" name="action" value="drop" />
@@ -527,6 +528,66 @@ function doDefault($msg = '')
 
 	// Get table
 	$tdata = $tableActions->getTable($_REQUEST['table']);
+	
+	// Check if this is a partition or partitioned table (PG 10+)
+	$is_partition = ($tdata->fields['relispartition'] ?? '') === 't';
+	$is_partitioned = ($tdata->fields['relkind'] ?? 'r') === 'p';
+	$parent_table = $tdata->fields['parent_table'] ?? null;
+
+	// Display partition information
+	if ($is_partition) {
+		echo "<div class=\"info text-center my-2\">\n";
+		echo "<div>\n";
+		echo "{$lang['strpartitionof']}: ";
+		echo "<a href=\"tblproperties.php?{$misc->href}&amp;table=";
+		echo urlencode($parent_table) . "\">";
+		$misc->printIcon('Table');
+		echo '&nbsp;', htmlspecialchars($parent_table) . "</a>";
+		echo "</div>\n";
+
+		if ($tdata->fields['partition_bound']) {
+			echo "<div>\n";
+			echo " <span class=\"sql-viewer\">";
+			echo htmlspecialchars($tdata->fields['partition_bound']);
+			echo "</span>";
+			echo "</div>\n";
+		}
+
+		// Link to view all partitions
+		echo "<a href=\"partitions.php?{$misc->href}&amp;table=";
+		echo urlencode($parent_table) . "\">";
+		$misc->printIcon('Partitions');
+		echo '&nbsp;', $lang['strviewallpartitions'] . "</a>";
+		echo "</div>\n";
+	}
+
+	// Display partitioned table information
+	if ($is_partitioned) {
+		// Map strategy code to readable name
+		$strategy = PartitionActions::PARTITION_STRATEGY_MAP[$tdata->fields['partstrat']] ?? $tdata->fields['partstrat'];
+
+		// Format partition keys array
+		$partition_keys = trim($tdata->fields['partition_keys'], '{}');
+
+		echo "<div class=\"info text-center my-2\">\n";
+		echo "<div>\n";
+		echo "{$lang['strpartitionedby']}: ";
+		echo "<span class=\"sql-viewer\">";
+		echo htmlspecialchars($strategy);
+		echo " ON (";
+		echo htmlspecialchars($partition_keys);
+		echo ")";
+		echo "</span>";
+		echo "</div>\n";
+
+		// Link to manage partitions
+		echo "<a href=\"partitions.php?{$misc->href}&amp;table=";
+		echo urlencode($_REQUEST['table']) . "\">";
+		$misc->printIcon('Partitions', $lang['strpartitions']);
+		echo " {$lang['strmanagepartitions']}</a>";
+		echo "</div>\n";
+	}
+
 	// Get columns
 	$attrs = $tableActions->getTableAttributes($_REQUEST['table']);
 	// Get constraints keys
@@ -536,7 +597,7 @@ function doDefault($msg = '')
 	if ($tdata->fields['relcomment'] !== null) {
 		?>
 		<p class="comment">
-			<?= $misc->printVal($tdata->fields['relcomment']) ?>
+			<?= $misc->formatVal($tdata->fields['relcomment']) ?>
 		</p>
 		<?php
 	}
@@ -656,6 +717,17 @@ function doDefault($msg = '')
 		],
 	];
 
+	if ($is_partition) {
+		unset($actions['multiactions'], $actions['alter'], $actions['drop']);
+	}
+
+	$schemaActions = new SchemaActions($pg);
+	$isSystemSchema = $schemaActions->isSystemSchema($_REQUEST['schema']);
+	if ($isSystemSchema) {
+		$actions = [];
+		unset($columns['actions']);
+	}
+
 	$misc->printTable($attrs, $columns, $actions, 'tblproperties-tblproperties', null, $attPre);
 
 	$navlinks = [
@@ -774,6 +846,39 @@ function doDefault($msg = '')
 			'content' => $lang['stredit'],
 		],
 	];
+
+	if ($is_partition) {
+		$navlinks = array_intersect_key(
+			$navlinks,
+			array_flip(['browse', 'select', 'insert'])
+		);
+	}
+
+	if ($is_partition || $is_partitioned) {
+		$navlinks['partitions'] = [
+			'attr' => [
+				'href' => [
+					'url' => 'partitions.php',
+					'urlvars' => [
+						'server' => $_REQUEST['server'],
+						'database' => $_REQUEST['database'],
+						'schema' => $_REQUEST['schema'],
+						'table' => $is_partition ? $parent_table : $_REQUEST['table'],
+					],
+				],
+			],
+			'icon' => $misc->icon('Partitions'),
+			'content' => $lang['strpartitions'],
+		];
+	}
+
+	if ($isSystemSchema) {
+		$navlinks = array_intersect_key(
+			$navlinks,
+			array_flip(['browse', 'select'])
+		);
+	}
+
 	$misc->printNavLinks(
 		$navlinks,
 		'tblproperties-tblproperties',
@@ -998,12 +1103,12 @@ function doDropMultiple($confirm)
 
 		?>
 		<p>
-			<?= sprintf($lang['strconfdropcolumns'] ?? 'Are you sure you want to drop the selected %d column(s) from table %s?', count($selectedColumns), $misc->printVal($_REQUEST['table'])) ?>
+			<?= sprintf($lang['strconfdropcolumns'] ?? 'Are you sure you want to drop the selected %d column(s) from table %s?', count($selectedColumns), $misc->formatVal($_REQUEST['table'])) ?>
 		</p>
 		<ul>
 			<?php foreach ($selectedColumns as $colname): ?>
 				<li>
-					<?= $misc->printVal($colname) ?>
+					<?= $misc->formatVal($colname) ?>
 				</li>
 			<?php endforeach; ?>
 		</ul>

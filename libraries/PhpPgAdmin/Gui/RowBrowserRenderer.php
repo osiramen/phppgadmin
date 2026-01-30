@@ -110,7 +110,7 @@ class RowBrowserRenderer extends AppContext
             }
         }
 
-        $sizeText = $misc->printVal($value, 'prettysize', $valParams);
+        $sizeText = $misc->formatVal($value, 'prettysize', $valParams);
         echo $sizeText;
         if ($canLink && $value !== null) {
             $params = [
@@ -387,7 +387,7 @@ class RowBrowserRenderer extends AppContext
             );
             if (!$is_bytea) {
                 echo "<div class=\"wrapper\">";
-                echo $misc->printVal($v, $finfo->type, $valParams);
+                echo $misc->formatVal($v, $finfo->type, $valParams);
                 echo "</div>";
             }
             echo "</td>\n";
@@ -963,6 +963,11 @@ class RowBrowserRenderer extends AppContext
         }
 
         $navlinks = $this->buildBrowseNavLinks($table_name ?? null, $subject ?? null, $_gets, $rs, $fields, $lang);
+
+        if ($isCatalogSchema) {
+            // Disable edit/delete buttons in catalog schema
+            unset($navlinks['insert']);
+        }
 
         $misc->printNavLinks($navlinks, 'display-browse', get_defined_vars());
 

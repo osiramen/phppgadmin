@@ -151,5 +151,8 @@ return [
 
     'pg.ftscfg' => ['textsearch.html', 'textsearch-intro.html#TEXTSEARCH-INTRO-CONFIGURATIONS'],
     'pg.ftscfg.create' => 'sql-createtsconfig.html',
+
+    'pg.partition' => 'ddl-partitioning.html',
+    'pg.partition.detach' => 'sql-altertable.html#SQL-ALTERTABLE-DETACH-PARTITION',
 ];
 

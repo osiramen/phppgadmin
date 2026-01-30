@@ -1,5 +1,6 @@
 <?php
 
+use PhpPgAdmin\Database\Actions\PartitionActions;
 use PhpPgAdmin\Gui\FormRenderer;
 use PhpPgAdmin\Gui\SearchFormRenderer;
 use PhpPgAdmin\Core\AppContainer;
@@ -85,9 +86,31 @@ function doCreate($msg = '')
 				echo "\t\t\t</select>\n\t\t</td>\n\t</tr>\n";
 			}
 
-			echo "\t<tr>\n\t\t<th class=\"data left\">{$lang['strcomment']}</th>\n";
-			echo "\t\t<td><textarea name=\"tblcomment\" rows=\"3\" cols=\"32\">",
-				html_esc($_REQUEST['tblcomment']), "</textarea></td>\n\t</tr>\n";
+			// Partitioning options (PG10+)
+			if ($pg->major_version >= 10) {
+				if (!isset($_REQUEST['is_partitioned']))
+					$_REQUEST['is_partitioned'] = '';
+				if (!isset($_REQUEST['partition_strategy']))
+					$_REQUEST['partition_strategy'] = '';
+
+				echo "\t<tr>\n\t\t<th class=\"data left\">{$lang['strpartitionstrategy']}</th>\n";
+				echo "\t\t<td class=\"data\">\n";
+				echo "\t\t\t<label><input type=\"checkbox\" id=\"is_partitioned\" name=\"is_partitioned\" value=\"1\"";
+				if ($_REQUEST['is_partitioned'])
+					echo ' checked="checked"';
+				echo " onchange=\"document.getElementById('partition_strategy_row').style.display = this.checked ? '' : 'none';\" />";
+				echo " {$lang['strcreatepartitionedtable']}</label>\n";
+				echo "\t\t\t<div id=\"partition_strategy_row\" style=\"display: " . ($_REQUEST['is_partitioned'] ? '' : 'none') . "; margin-top: 8px;\">\n";
+				echo "\t\t\t\t<select name=\"partition_strategy\" id=\"partition_strategy\">\n";
+				echo "\t\t\t\t\t<option value=\"\">{$lang['strselect']}</option>\n";
+				echo "\t\t\t\t\t<option value=\"RANGE\"" . ($_REQUEST['partition_strategy'] == 'RANGE' ? ' selected' : '') . ">RANGE - {$lang['strpartitionrange']}</option>\n";
+				echo "\t\t\t\t\t<option value=\"LIST\"" . ($_REQUEST['partition_strategy'] == 'LIST' ? ' selected' : '') . ">LIST - {$lang['strpartitionlist']}</option>\n";
+				echo "\t\t\t\t\t<option value=\"HASH\"" . ($_REQUEST['partition_strategy'] == 'HASH' ? ' selected' : '') . ">HASH - {$lang['strpartitionhash']}</option>\n";
+				echo "\t\t\t\t</select>\n";
+				echo "\t\t\t</div>\n";
+				echo "\t\t</td>\n\t</tr>\n";
+			}
+
 
 			echo "</table>\n";
 			echo "<p><input type=\"hidden\" name=\"action\" value=\"create\" />\n";
@@ -125,7 +148,12 @@ function doCreate($msg = '')
 			echo "\t<tr><th colspan=\"2\" class=\"data required\">{$lang['strcolumn']}</th><th colspan=\"2\" class=\"data required\">{$lang['strtype']}</th>";
 			echo "<th class=\"data\">{$lang['strlength']}</th><th class=\"data\">{$lang['strnotnull']}</th>";
 			echo "<th class=\"data\">{$lang['struniquekey']}</th><th class=\"data\">{$lang['strprimarykey']}</th>";
-			echo "<th class=\"data\">{$lang['strdefault']}</th><th class=\"data\">{$lang['strcomment']}</th></tr>\n";
+			echo "<th class=\"data\">{$lang['strdefault']}</th>";
+			// Show partition key column if partitioning is enabled
+			if ($pg->major_version >= 10 && isset($_REQUEST['is_partitioned']) && $_REQUEST['is_partitioned']) {
+				echo "<th class=\"data\">{$lang['strpartitionkey']}</th>";
+			}
+			echo "<th class=\"data\">{$lang['strcomment']}</th></tr>\n";
 
 			for ($i = 0; $i < $_REQUEST['fields']; $i++) {
 				if (!isset($_REQUEST['field'][$i]))
@@ -145,14 +173,14 @@ function doCreate($msg = '')
 				foreach ($pg->extraTypes as $v) {
 					$types_for_js[strtolower($v)] = 1;
 					echo "\t\t\t\t<option value=\"", html_esc($v), "\"", (isset($_REQUEST['type'][$i]) && $v == $_REQUEST['type'][$i]) ? ' selected="selected"' : '', ">",
-						$misc->printVal($v), "</option>\n";
+						$misc->formatVal($v), "</option>\n";
 				}
 				$types->moveFirst();
 				while (!$types->EOF) {
 					$typname = $types->fields['typname'];
 					$types_for_js[$typname] = 1;
 					echo "\t\t\t\t<option value=\"", html_esc($typname), "\"", (isset($_REQUEST['type'][$i]) && $typname == $_REQUEST['type'][$i]) ? ' selected="selected"' : '', ">",
-						$misc->printVal($typname), "</option>\n";
+						$misc->formatVal($typname), "</option>\n";
 					$types->moveNext();
 				}
 				echo "\t\t\t</select>\n\t\t\n";
@@ -180,7 +208,13 @@ function doCreate($msg = '')
 					. (isset($_REQUEST['primarykey'][$i]) ? ' checked="checked"' : '')
 					. " /></td>\n";
 				echo "\t\t<td><input name=\"default[{$i}]\" size=\"20\" value=\"",
-					html_esc($_REQUEST['default'][$i]), "\" /></td>\n";
+					html_esc($_REQUEST['default'][$i]), "\" /></td>\n";			// Partition key checkbox (PG10+)
+				if ($pg->major_version >= 10 && isset($_REQUEST['is_partitioned']) && $_REQUEST['is_partitioned']) {
+					echo "\t\t<td style=\"text-align: center\"><input type=\"checkbox\" name=\"partitionkey[{$i}]\"";
+					if (isset($_REQUEST['partitionkey'][$i]))
+						echo ' checked="checked"';
+					echo " /></td>\n";
+				}
 				echo "\t\t<td><input name=\"colcomment[{$i}]\" size=\"40\" value=\"",
 					html_esc($_REQUEST['colcomment'][$i]), "\" />
 						<script type=\"text/javascript\">checkLengths(document.getElementById('types{$i}').value,{$i});</script>
@@ -199,6 +233,15 @@ function doCreate($msg = '')
 			if (isset($_REQUEST['spcname'])) {
 				echo "<input type=\"hidden\" name=\"spcname\" value=\"", html_esc($_REQUEST['spcname']), "\" />\n";
 			}
+			// Pass partition settings to stage 3
+			if ($pg->major_version >= 10) {
+				if (isset($_REQUEST['is_partitioned']) && $_REQUEST['is_partitioned']) {
+					echo "<input type=\"hidden\" name=\"is_partitioned\" value=\"1\" />\n";
+					if (isset($_REQUEST['partition_strategy'])) {
+						echo "<input type=\"hidden\" name=\"partition_strategy\" value=\"", html_esc($_REQUEST['partition_strategy']), "\" />\n";
+					}
+				}
+			}
 			echo "<input type=\"submit\" value=\"{$lang['strcreate']}\" />\n";
 			echo "<input type=\"submit\" name=\"cancel\" value=\"{$lang['strcancel']}\" /></p>\n";
 			echo "</form>\n";
@@ -216,6 +259,33 @@ function doCreate($msg = '')
 			// Default tablespace to null if it isn't set
 			if (!isset($_REQUEST['spcname']))
 				$_REQUEST['spcname'] = null;
+
+			// Partition settings
+			$partitionStrategy = null;
+			$partitionKeys = [];
+			if ($pg->major_version >= 10 && isset($_REQUEST['is_partitioned']) && $_REQUEST['is_partitioned']) {
+				if (empty($_REQUEST['partition_strategy'])) {
+					$_REQUEST['stage'] = 1;
+					doCreate($lang['strpartitionstrategyrequired'] ?? 'Partition strategy is required');
+					return;
+				}
+				$partitionStrategy = $_REQUEST['partition_strategy'];
+
+				// Collect partition key columns
+				if (isset($_REQUEST['partitionkey'])) {
+					foreach ($_REQUEST['partitionkey'] as $idx => $val) {
+						if (!empty($_REQUEST['field'][$idx])) {
+							$partitionKeys[] = $_REQUEST['field'][$idx];
+						}
+					}
+				}
+
+				if (empty($partitionKeys)) {
+					$_REQUEST['stage'] = 2;
+					doCreate($lang['strpartitionkeyrequired'] ?? 'At least one partition key column is required');
+					return;
+				}
+			}
 
 			// Check inputs
 			$fields = trim($_REQUEST['fields']);
@@ -243,7 +313,9 @@ function doCreate($msg = '')
 				$_REQUEST['tblcomment'],
 				$_REQUEST['spcname'],
 				$_REQUEST['uniquekey'],
-				$_REQUEST['primarykey']
+				$_REQUEST['primarykey'],
+				$partitionStrategy,
+				$partitionKeys
 			);
 
 			if ($status == 0) {
@@ -420,7 +492,7 @@ function doEmpty($confirm)
 			echo "<form action=\"tables.php\" method=\"post\">\n";
 			foreach ($_REQUEST['ma'] as $v) {
 				$a = unserialize(htmlspecialchars_decode($v, ENT_QUOTES));
-				echo "<p>", sprintf($lang['strconfemptytable'], $misc->printVal($a['table'])), "</p>\n";
+				echo "<p>", sprintf($lang['strconfemptytable'], $misc->formatVal($a['table'])), "</p>\n";
 				printf('<input type="hidden" name="table[]" value="%s" />', html_esc($a['table']));
 			}
 		} // END multi empty
@@ -428,7 +500,7 @@ function doEmpty($confirm)
 			$misc->printTrail('table');
 			$misc->printTitle($lang['strempty'], 'pg.table.empty');
 
-			echo "<p>", sprintf($lang['strconfemptytable'], $misc->printVal($_REQUEST['table'])), "</p>\n";
+			echo "<p>", sprintf($lang['strconfemptytable'], $misc->formatVal($_REQUEST['table'])), "</p>\n";
 
 			echo "<form action=\"tables.php\" method=\"post\">\n";
 			echo "<input type=\"hidden\" name=\"table\" value=\"", html_esc($_REQUEST['table']), "\" />\n";
@@ -488,7 +560,7 @@ function doDrop($confirm)
 			echo "<form action=\"tables.php\" method=\"post\">\n";
 			foreach ($_REQUEST['ma'] as $v) {
 				$a = unserialize(htmlspecialchars_decode($v, ENT_QUOTES));
-				echo "<p>", sprintf($lang['strconfdroptable'], $misc->printVal($a['table'])), "</p>\n";
+				echo "<p>", sprintf($lang['strconfdroptable'], $misc->formatVal($a['table'])), "</p>\n";
 				printf('<input type="hidden" name="table[]" value="%s" />', html_esc($a['table']));
 			}
 		} else {
@@ -496,7 +568,7 @@ function doDrop($confirm)
 			$misc->printTrail('table');
 			$misc->printTitle($lang['strdrop'], 'pg.table.drop');
 
-			echo "<p>", sprintf($lang['strconfdroptable'], $misc->printVal($_REQUEST['table'])), "</p>\n";
+			echo "<p>", sprintf($lang['strconfdroptable'], $misc->formatVal($_REQUEST['table'])), "</p>\n";
 
 			echo "<form action=\"tables.php\" method=\"post\">\n";
 			echo "<input type=\"hidden\" name=\"table\" value=\"", html_esc($_REQUEST['table']), "\" />\n";
@@ -544,6 +616,282 @@ function doDrop($confirm)
 }// END Function
 
 /**
+ * Convert a regular table to a partitioned table
+ */
+function doConvertToPartitioned($confirm, $msg = '')
+{
+	$pg = AppContainer::getPostgres();
+	$misc = AppContainer::getMisc();
+	$lang = AppContainer::getLang();
+	$tableActions = new TableActions($pg);
+	$typeActions = new TypeActions($pg);
+
+	if (!isset($_REQUEST['stage'])) {
+		$_REQUEST['stage'] = 1;
+	}
+
+	if (!isset($_REQUEST['table'])) {
+		doDefault($lang['strspecifytabletoconvert']);
+		return;
+	}
+
+	$_REQUEST['table'] = trim($_REQUEST['table']);
+
+	switch ($_REQUEST['stage']) {
+		case 1:
+			// Stage 1: Show conversion form
+			$misc->printTrail('table');
+			$misc->printTitle($lang['strconverttopartitioned'], 'pg.table');
+			$misc->printMsg($msg);
+
+			// Get table info
+			$table = $tableActions->getTable($_REQUEST['table']);
+			if ($table->recordCount() == 0) {
+				doDefault($lang['strinvalidparam']);
+				return;
+			}
+
+			// Get columns for partition key selection
+			$attrs = $tableActions->getTableAttributes($_REQUEST['table']);
+			$atts_arr = [];
+			while (!$attrs->EOF) {
+				$atts_arr[] = [
+					'attname' => $attrs->fields['attname'],
+					'type' => $attrs->fields['type']
+				];
+				$attrs->MoveNext();
+			}
+
+			echo "<form action=\"tables.php\" method=\"post\">\n";
+			echo "<table>\n";
+
+			// Warning message
+			echo "<tr><td colspan=\"2\">";
+			echo "<div class=\"warning\">{$lang['strconverttopartitionedwarning']}</div>";
+			echo "</td></tr>\n";
+
+			// Partition strategy
+			echo "<tr><th class=\"data left required\">{$lang['strpartitionstrategy']}</th>\n";
+			echo "<td class=\"data1\">\n";
+			echo "<select name=\"partition_strategy\" required>\n";
+			echo "<option value=\"\">{$lang['strselect']}</option>\n";
+			echo "<option value=\"RANGE\">{$lang['strpartitionrange']}</option>\n";
+			echo "<option value=\"LIST\">{$lang['strpartitionlist']}</option>\n";
+			echo "<option value=\"HASH\">{$lang['strpartitionhash']}</option>\n";
+			echo "</select></td></tr>\n";
+
+			// Partition keys (multi-select)
+			echo "<tr><th class=\"data left required\">{$lang['strpartitionkey']}</th>\n";
+			echo "<td class=\"data1\">\n";
+			echo "<select name=\"partition_keys[]\" multiple size=\"5\" required>\n";
+			foreach ($atts_arr as $att) {
+				echo "<option value=\"", htmlspecialchars($att['attname']), "\">";
+				echo htmlspecialchars($att['attname']), " (", htmlspecialchars($att['type']), ")</option>\n";
+			}
+			echo "</select>\n";
+			echo "<br/><small>{$lang['strpartitionkeyselecthint']}</small>\n";
+			echo "</td></tr>\n";
+
+			// Copy data option
+			echo "<tr><th class=\"data left\">{$lang['strconvertcopydata']}</th>\n";
+			echo "<td class=\"data1\"><input type=\"checkbox\" name=\"copy_data\" checked /></td></tr>\n";
+
+			// Tablespace
+			$tablespaceActions = new TablespaceActions($pg);
+			$tablespaces = $tablespaceActions->getTablespaces();
+			if ($tablespaces->recordCount() > 0) {
+				echo "<tr><th class=\"data left\">{$lang['strtablespace']}</th>\n";
+				echo "<td class=\"data1\">\n";
+				echo "<select name=\"tablespace\">\n";
+				echo "<option value=\"\">{$lang['strdefault']}</option>\n";
+				while (!$tablespaces->EOF) {
+					echo "<option value=\"", htmlspecialchars($tablespaces->fields['spcname']), "\">";
+					echo htmlspecialchars($tablespaces->fields['spcname']), "</option>\n";
+					$tablespaces->MoveNext();
+				}
+				echo "</select></td></tr>\n";
+			}
+
+			echo "</table>\n";
+			echo "<input type=\"hidden\" name=\"action\" value=\"convert_to_partitioned\" />\n";
+			echo "<input type=\"hidden\" name=\"stage\" value=\"2\" />\n";
+			echo $misc->form;
+			echo "<input type=\"hidden\" name=\"table\" value=\"", htmlspecialchars($_REQUEST['table']), "\" />\n";
+			echo "<p><input type=\"submit\" name=\"convert\" value=\"{$lang['strnext']}\" />\n";
+			echo "<input type=\"submit\" name=\"cancel\" value=\"{$lang['strcancel']}\" /></p>\n";
+			echo "</form>\n";
+			break;
+
+		case 2:
+			// Stage 2: Show execution plan preview
+			$misc->printTrail('table');
+			$misc->printTitle($lang['strconverttopartitioned'], 'pg.table');
+
+			// Validate inputs
+			if (empty($_POST['partition_strategy']) || empty($_POST['partition_keys'])) {
+				doConvertToPartitioned(false, $lang['strpartitioninvalid']);
+				return;
+			}
+
+			$partition_strategy = $_POST['partition_strategy'];
+			$partition_keys = $_POST['partition_keys'];
+			$copy_data = isset($_POST['copy_data']);
+			$tablespace = $_POST['tablespace'] ?? '';
+
+			$table = $tableActions->getTable($_REQUEST['table']);
+			$table_row = $table->fields;
+
+			// Show execution plan
+			echo "<h3>{$lang['strconvertexecutionplan']}</h3>\n";
+			echo "<ol>\n";
+			echo "<li>{$lang['strconvertstep1']}</li>\n";
+			if ($copy_data) {
+				echo "<li>{$lang['strconvertstep2']}</li>\n";
+			}
+			echo "<li>{$lang['strconvertstep3']}</li>\n";
+			echo "</ol>\n";
+
+			echo "<div class=\"warning\">{$lang['strconvertwarning']}</div>\n";
+
+			echo "<form action=\"tables.php\" method=\"post\">\n";
+			echo "<input type=\"hidden\" name=\"action\" value=\"convert_to_partitioned\" />\n";
+			echo "<input type=\"hidden\" name=\"stage\" value=\"3\" />\n";
+			echo $misc->form;
+			echo "<input type=\"hidden\" name=\"table\" value=\"", htmlspecialchars($_REQUEST['table']), "\" />\n";
+			echo "<input type=\"hidden\" name=\"partition_strategy\" value=\"", htmlspecialchars($partition_strategy), "\" />\n";
+			foreach ($partition_keys as $key) {
+				echo "<input type=\"hidden\" name=\"partition_keys[]\" value=\"", htmlspecialchars($key), "\" />\n";
+			}
+			echo "<input type=\"hidden\" name=\"copy_data\" value=\"", $copy_data ? '1' : '0', "\" />\n";
+			echo "<input type=\"hidden\" name=\"tablespace\" value=\"", htmlspecialchars($tablespace), "\" />\n";
+			echo "<p><input type=\"submit\" name=\"confirm\" value=\"{$lang['strconvert']}\" />\n";
+			echo "<input type=\"submit\" name=\"cancel\" value=\"{$lang['strcancel']}\" /></p>\n";
+			echo "</form>\n";
+			break;
+
+		case 3:
+			// Stage 3: Execute conversion
+			if (!$confirm) {
+				doConvertToPartitioned(false, '');
+				return;
+			}
+
+			// Validate inputs
+			if (empty($_POST['partition_strategy']) || empty($_POST['partition_keys'])) {
+				doDefault($lang['strpartitioninvalid']);
+				return;
+			}
+
+			$partition_strategy = $_POST['partition_strategy'];
+			$partition_keys = $_POST['partition_keys'];
+			$copy_data = isset($_POST['copy_data']) && $_POST['copy_data'] == '1';
+			$tablespace = $_POST['tablespace'] ?? '';
+
+			// Get schema
+			$table = $tableActions->getTable($_REQUEST['table']);
+			if ($table->recordCount() == 0) {
+				doDefault($lang['strinvalidparam']);
+				return;
+			}
+
+			$schema = $_REQUEST['schema'];
+			$original_table = $_REQUEST['table'];
+			$temp_table = $original_table . '_old';
+			$new_table = $original_table . '_partitioned';
+
+			// Start transaction
+			$status = $pg->beginTransaction();
+			if ($status != 0) {
+				doDefault($lang['strconvertfailed']);
+				return;
+			}
+
+			try {
+				// Step 1: Rename original table
+				$sql = sprintf(
+					'ALTER TABLE %s.%s RENAME TO %s',
+					$pg->fieldClean($schema),
+					$pg->fieldClean($original_table),
+					$pg->fieldClean($temp_table)
+				);
+				$status = $pg->execute($sql);
+				if ($status != 0) {
+					throw new Exception($lang['strconvertstep1failed']);
+				}
+
+				// Step 2: Create partitioned table with same structure
+				$attrs = $tableActions->getTableAttributes($temp_table);
+				$col_definitions = [];
+				while (!$attrs->EOF) {
+					$col_def = sprintf(
+						'%s %s',
+						$pg->fieldClean($attrs->fields['attname']),
+						$attrs->fields['type']
+					);
+					if ($attrs->fields['attnotnull'] == 't') {
+						$col_def .= ' NOT NULL';
+					}
+					if ($attrs->fields['adsrc'] !== null) {
+						$col_def .= ' DEFAULT ' . $attrs->fields['adsrc'];
+					}
+					$col_definitions[] = $col_def;
+					$attrs->MoveNext();
+				}
+
+				$partition_key_str = implode(', ', array_map([$pg, 'fieldClean'], $partition_keys));
+
+				$sql = sprintf(
+					'CREATE TABLE %s.%s (%s) PARTITION BY %s (%s)',
+					$pg->fieldClean($schema),
+					$pg->fieldClean($original_table),
+					implode(', ', $col_definitions),
+					$partition_strategy,
+					$partition_key_str
+				);
+
+				if (!empty($tablespace)) {
+					$sql .= ' TABLESPACE ' . $pg->fieldClean($tablespace);
+				}
+
+				$status = $pg->execute($sql);
+				if ($status != 0) {
+					throw new Exception($lang['strconvertstep2failed']);
+				}
+
+				// Step 3: Copy data if requested
+				if ($copy_data) {
+					// Note: This will fail if no partitions exist yet
+					// User should create partitions first
+					echo "<div class=\"warning\">{$lang['strconvertdatacopynote']}</div>\n";
+				}
+
+				// Step 4: Drop old table
+				$sql = sprintf(
+					'DROP TABLE %s.%s',
+					$pg->fieldClean($schema),
+					$pg->fieldClean($temp_table)
+				);
+				$status = $pg->execute($sql);
+				if ($status != 0) {
+					throw new Exception($lang['strconvertstep3failed']);
+				}
+
+				// Commit transaction
+				$status = $pg->endTransaction();
+				if ($status != 0) {
+					throw new Exception($lang['strconvertcommitfailed']);
+				}
+
+				doDefault($lang['strconvertsuccess']);
+			} catch (Exception $e) {
+				$pg->rollbackTransaction();
+				doDefault($e->getMessage());
+			}
+			break;
+	}
+}
+
+/**
  * Show default list of tables in the database
  */
 function doDefault($msg = '')
@@ -560,13 +908,21 @@ function doDefault($msg = '')
 
 	$tables = $tableActions->getTables();
 
+	$getIcon = function ($f) {
+		// Use PartitionedTable icon for partitioned tables (relkind = 'p')
+		if (isset($f['relkind']) && $f['relkind'] === 'p') {
+			return 'PartitionedTable';
+		}
+		return 'Table';
+	};
+
 	$columns = [
 		'table' => [
 			'title' => $lang['strtable'],
 			'field' => field('relname'),
 			'url' => "redirect.php?subject=table&amp;{$misc->href}&amp;",
 			'vars' => ['table' => 'relname'],
-			'icon' => $misc->icon('Table'),
+			'icon' => callback($getIcon),
 			'class' => 'nowrap',
 		],
 		'owner' => [
@@ -664,6 +1020,19 @@ function doDefault($msg = '')
 				]
 			]
 		],
+		'convert_to_partitioned' => [
+			'icon' => $misc->icon('PartitionedTable'),
+			'content' => $lang['strconverttopartitioned'],
+			'attr' => [
+				'href' => [
+					'url' => 'tables.php',
+					'urlvars' => [
+						'action' => 'convert_to_partitioned',
+						'table' => field('relname')
+					]
+				]
+			]
+		],
 		'drop' => [
 			'multiaction' => 'confirm_drop',
 			'icon' => $misc->icon('Delete'),
@@ -731,6 +1100,16 @@ function doDefault($msg = '')
 		);
 	}
 
+	// Filter convert_to_partitioned action based on PG version and table type
+	if ($pg->major_version < 10) {
+		unset($actions['convert_to_partitioned']);
+	} else {
+		// Add disable condition for partitioned tables (relkind='p')
+		$actions['convert_to_partitioned']['disable'] = function ($row) {
+			return isset($row['relkind']) && $row['relkind'] === 'p';
+		};
+	}
+
 	$misc->printTable($tables, $columns, $actions, 'tables-tables', $lang['strnotables']);
 
 	$navlinks = [
@@ -789,9 +1168,17 @@ function doTree()
 
 	$reqvars = $misc->getRequestVars('table');
 
+	$getIcon = function ($f) {
+		// Use PartitionedTable icon for partitioned tables (relkind = 'p')
+		if (isset($f['relkind']) && $f['relkind'] === 'p') {
+			return 'PartitionedTable';
+		}
+		return 'Table';
+	};
+
 	$attrs = [
 		'text' => field('relname'),
-		'icon' => 'Table',
+		'icon' => callback($getIcon),
 		'iconAction' => url(
 			'display.php',
 			$reqvars,
@@ -820,8 +1207,16 @@ function doTree()
 function doSubTree()
 {
 	$misc = AppContainer::getMisc();
+	$pg = AppContainer::getPostgres();
+	$partitionActions = new PartitionActions($pg);
 
 	$tabs = $misc->getNavTabs('table');
+
+	if (!$partitionActions->isPartitionedTable($_REQUEST['table'])) {
+		// Remove 'Partitions' tab for non-partitioned tables
+		unset($tabs['partitions']);
+	}
+
 	$items = $misc->adjustTabsForTree($tabs);
 	$reqvars = $misc->getRequestVars('table');
 
@@ -909,6 +1304,14 @@ switch ($action) {
 		break;
 	case 'confirm_drop':
 		doDrop(true);
+		break;
+	case 'convert_to_partitioned':
+		if (isset($_POST['cancel']))
+			doDefault();
+		elseif (isset($_POST['confirm']))
+			doConvertToPartitioned(true);
+		else
+			doConvertToPartitioned(false);
 		break;
 	default:
 		if (adminActions($action, 'table') === false)

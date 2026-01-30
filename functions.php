@@ -193,20 +193,20 @@ function doEdit($msg = '')
 		echo "<input name=\"formFunction\" style=\"width: 100%\" maxlength=\"{$pg->_maxNameLen}\" value=\"", html_esc($_POST['formFunction']), "\" />";
 		echo "</td>\n";
 
-		echo "<td class=\"data1\">", $misc->printVal($args), "\n";
+		echo "<td class=\"data1\">", $misc->formatVal($args), "\n";
 		echo "<input type=\"hidden\" name=\"original_arguments\" value=\"", html_esc($args), "\" />\n";
 		echo "</td>\n";
 
 		echo "<td class=\"data1\">";
 		if ($fndata->fields['proretset'])
 			echo "setof ";
-		echo $misc->printVal($fndata->fields['proresult']), "\n";
+		echo $misc->formatVal($fndata->fields['proresult']), "\n";
 		echo "<input type=\"hidden\" name=\"original_returns\" value=\"", html_esc($fndata->fields['proresult']), "\" />\n";
 		if ($fndata->fields['proretset'])
 			echo "<input type=\"hidden\" name=\"original_setof\" value=\"yes\" />\n";
 		echo "</td>\n";
 
-		echo "<td class=\"data1\">", $misc->printVal($fndata->fields['prolanguage']), "\n";
+		echo "<td class=\"data1\">", $misc->formatVal($fndata->fields['prolanguage']), "\n";
 		echo "<input type=\"hidden\" name=\"original_lang\" value=\"", htmlspecialchars($fndata->fields['prolanguage']), "\" />\n";
 		echo "</td>\n";
 		echo "</tr>\n";
@@ -253,7 +253,7 @@ function doEdit($msg = '')
 				echo "<select name=\"formProperties[{$i}]\">\n";
 				foreach ($v as $p) {
 					echo "<option value=\"", htmlspecialchars($p), "\"", ($p == $_POST['formProperties'][$i]) ? ' selected="selected"' : '',
-						">", $misc->printVal($p), "</option>\n";
+						">", $misc->formatVal($p), "</option>\n";
 				}
 				echo "</select><br />\n";
 				$i++;
@@ -349,7 +349,7 @@ function doProperties($msg = '')
 
 		// Show comment if any
 		if ($funcdata->fields['procomment'] !== null)
-			echo "<p class=\"comment\">", $misc->printVal($funcdata->fields['procomment']), "</p>\n";
+			echo "<p class=\"comment\">", $misc->formatVal($funcdata->fields['procomment']), "</p>\n";
 
 		$funcdata->fields['proretset'] = $pg->phpBool($funcdata->fields['proretset']);
 		$func_full = $funcdata->fields['proname'] . "(" . $funcdata->fields['proarguments'] . ")";
@@ -358,34 +358,34 @@ function doProperties($msg = '')
 		echo "<th class=\"data\">{$lang['strarguments']}</th>\n";
 		echo "<th class=\"data\">{$lang['strreturns']}</th>\n";
 		echo "<th class=\"data\">{$lang['strproglanguage']}</th></tr>\n";
-		echo "<tr><td class=\"data1\">", $misc->printVal($funcdata->fields['proname']), "</td>\n";
-		echo "<td class=\"data1\">", $misc->printVal($args), "</td>\n";
+		echo "<tr><td class=\"data1\">", $misc->formatVal($funcdata->fields['proname']), "</td>\n";
+		echo "<td class=\"data1\">", $misc->formatVal($args), "</td>\n";
 		echo "<td class=\"data1\">";
 		if ($funcdata->fields['proretset'])
 			echo "setof ";
-		echo $misc->printVal($funcdata->fields['proresult']), "</td>\n";
-		echo "<td class=\"data1\">", $misc->printVal($funcdata->fields['prolanguage']), "</td></tr>\n";
+		echo $misc->formatVal($funcdata->fields['proresult']), "</td>\n";
+		echo "<td class=\"data1\">", $misc->formatVal($funcdata->fields['prolanguage']), "</td></tr>\n";
 
 		$fnlang = strtolower($funcdata->fields['prolanguage']);
 		if ($fnlang == 'c') {
 			echo "<tr><th class=\"data\" colspan=\"2\">{$lang['strobjectfile']}</th>\n";
 			echo "<th class=\"data\" colspan=\"2\">{$lang['strlinksymbol']}</th></tr>\n";
-			echo "<tr><td class=\"data1\" colspan=\"2\">", $misc->printVal($funcdata->fields['probin']), "</td>\n";
-			echo "<td class=\"data1\" colspan=\"2\">", $misc->printVal($funcdata->fields['prosrc']), "</td></tr>\n";
+			echo "<tr><td class=\"data1\" colspan=\"2\">", $misc->formatVal($funcdata->fields['probin']), "</td>\n";
+			echo "<td class=\"data1\" colspan=\"2\">", $misc->formatVal($funcdata->fields['prosrc']), "</td></tr>\n";
 		} else if ($fnlang == 'internal') {
 			echo "<tr><th class=\"data\" colspan=\"4\">{$lang['strlinksymbol']}</th></tr>\n";
-			echo "<tr><td class=\"data1\" colspan=\"4\">", $misc->printVal($funcdata->fields['prosrc']), "</td></tr>\n";
+			echo "<tr><td class=\"data1\" colspan=\"4\">", $misc->formatVal($funcdata->fields['prosrc']), "</td></tr>\n";
 		} else {
 			echo "<tr><th class=\"data\" colspan=\"4\">{$lang['strdefinition']}</th></tr>\n";
 			// Check to see if we have syntax highlighting for this language
-			echo "<tr><td class=\"data1\" colspan=\"4\">", $misc->printVal($funcdata->fields['prosrc'], $funcdata->fields['prolanguage']), "</td></tr>\n";
+			echo "<tr><td class=\"data1\" colspan=\"4\">", $misc->formatVal($funcdata->fields['prosrc'], $funcdata->fields['prolanguage']), "</td></tr>\n";
 		}
 
 		// Display function cost options
 		if ($functionActions->hasFunctionCosting()) {
 			echo "<tr><th class=\"data required\" colspan=\"4\">{$lang['strfunctioncosting']}</th></tr>\n";
-			echo "<td class=\"data1\" colspan=\"2\">{$lang['strexecutioncost']}: ", $misc->printVal($funcdata->fields['procost']), " </td>";
-			echo "<td class=\"data1\" colspan=\"2\">{$lang['strresultrows']}: ", $misc->printVal($funcdata->fields['prorows']), " </td>";
+			echo "<td class=\"data1\" colspan=\"2\">{$lang['strexecutioncost']}: ", $misc->formatVal($funcdata->fields['procost']), " </td>";
+			echo "<td class=\"data1\" colspan=\"2\">{$lang['strresultrows']}: ", $misc->formatVal($funcdata->fields['prorows']), " </td>";
 		}
 
 		// Show flags
@@ -395,7 +395,7 @@ function doProperties($msg = '')
 			echo "<tr><th class=\"data\" colspan=\"4\">{$lang['strproperties']}</th></tr>\n";
 			echo "<tr><td class=\"data1\" colspan=\"4\">\n";
 			foreach ($funcprops as $v) {
-				echo $misc->printVal($v), "<br />\n";
+				echo $misc->formatVal($v), "<br />\n";
 			}
 			echo "</td></tr>\n";
 		}
@@ -485,12 +485,12 @@ function doDrop($confirm)
 		if (isset($_REQUEST['ma'])) {
 			foreach ($_REQUEST['ma'] as $v) {
 				$a = unserialize(htmlspecialchars_decode($v, ENT_QUOTES));
-				echo "<p>", sprintf($lang['strconfdropfunction'], $misc->printVal($a['function'])), "</p>\n";
+				echo "<p>", sprintf($lang['strconfdropfunction'], $misc->formatVal($a['function'])), "</p>\n";
 				echo '<input type="hidden" name="function[]" value="', html_esc($a['function']), "\" />\n";
 				echo "<input type=\"hidden\" name=\"function_oid[]\" value=\"", html_esc($a['function_oid']), "\" />\n";
 			}
 		} else {
-			echo "<p>", sprintf($lang['strconfdropfunction'], $misc->printVal($_REQUEST['function'])), "</p>\n";
+			echo "<p>", sprintf($lang['strconfdropfunction'], $misc->formatVal($_REQUEST['function'])), "</p>\n";
 			echo "<input type=\"hidden\" name=\"function\" value=\"", html_esc($_REQUEST['function']), "\" />\n";
 			echo "<input type=\"hidden\" name=\"function_oid\" value=\"", html_esc($_REQUEST['function_oid']), "\" />\n";
 		}
@@ -657,7 +657,7 @@ function doCreate($msg = '', $szJS = "")
 			}
 			if (strtolower($langs->fields['lanname']) != 'c' && strtolower($langs->fields['lanname']) != 'internal')
 				$szLanguage .= "<option value=\"" . html_esc($langs->fields['lanname']) . "\"{$szSelected}>\n" .
-					$misc->printVal($langs->fields['lanname']) . "</option>";
+					$misc->formatVal($langs->fields['lanname']) . "</option>";
 			$langs->moveNext();
 		}
 		$szLanguage .= "</select>\n";
@@ -760,7 +760,7 @@ function doCreate($msg = '', $szJS = "")
 			echo "<select name=\"formProperties[{$i}]\">\n";
 			foreach ($v as $p) {
 				echo "<option value=\"", html_esc($p), "\"", ($p == $_POST['formProperties'][$i]) ? ' selected="selected"' : '',
-					">", $misc->printVal($p), "</option>\n";
+					">", $misc->formatVal($p), "</option>\n";
 			}
 			echo "</select><br />\n";
 			$i++;

@@ -183,7 +183,7 @@ function doProperties($msg = '')
 		$sequence->fields['is_called'] = $pg->phpBool($sequence->fields['is_called']);
 		// Show comment if any
 		if ($sequence->fields['seqcomment'] !== null)
-			echo "<p class=\"comment\">", $misc->printVal($sequence->fields['seqcomment']), "</p>\n";
+			echo "<p class=\"comment\">", $misc->formatVal($sequence->fields['seqcomment']), "</p>\n";
 
 		echo "<table border=\"0\">";
 		echo "<tr><th class=\"data\">{$lang['strname']}</th>";
@@ -199,16 +199,16 @@ function doProperties($msg = '')
 		echo "<th class=\"data\">{$lang['strcancycle']}</th>";
 		echo "<th class=\"data\">{$lang['striscalled']}</th></tr>";
 		echo "<tr>";
-		echo "<td class=\"data1 no-wrap\"><img src=\"", $misc->icon('Sequence'), "\" alt=\"Sequence\" class=\"icon\" />", $misc->printVal($sequence->fields['seqname']), "</td>";
+		echo "<td class=\"data1 no-wrap\"><img src=\"", $misc->icon('Sequence'), "\" alt=\"Sequence\" class=\"icon\" />", $misc->formatVal($sequence->fields['seqname']), "</td>";
 		if ($pg->hasAlterSequenceStart()) {
-			echo "<td class=\"data1\">", $misc->printVal($sequence->fields['start_value']), "</td>";
+			echo "<td class=\"data1\">", $misc->formatVal($sequence->fields['start_value']), "</td>";
 		}
-		echo "<td class=\"data1\">", $misc->printVal($sequence->fields['last_value']), "</td>";
-		echo "<td class=\"data1\">", $misc->printVal($sequence->fields['increment_by']), "</td>";
-		echo "<td class=\"data1\">", $misc->printVal($sequence->fields['max_value']), "</td>";
-		echo "<td class=\"data1\">", $misc->printVal($sequence->fields['min_value']), "</td>";
-		echo "<td class=\"data1\">", $misc->printVal($sequence->fields['cache_value']), "</td>";
-		echo "<td class=\"data1\">", $misc->printVal($sequence->fields['log_cnt']), "</td>";
+		echo "<td class=\"data1\">", $misc->formatVal($sequence->fields['last_value']), "</td>";
+		echo "<td class=\"data1\">", $misc->formatVal($sequence->fields['increment_by']), "</td>";
+		echo "<td class=\"data1\">", $misc->formatVal($sequence->fields['max_value']), "</td>";
+		echo "<td class=\"data1\">", $misc->formatVal($sequence->fields['min_value']), "</td>";
+		echo "<td class=\"data1\">", $misc->formatVal($sequence->fields['cache_value']), "</td>";
+		echo "<td class=\"data1\">", $misc->formatVal($sequence->fields['log_cnt']), "</td>";
 		echo "<td class=\"data1\">", ($sequence->fields['is_cycled'] ? $lang['stryes'] : $lang['strno']), "</td>";
 		echo "<td class=\"data1\">", ($sequence->fields['is_called'] ? $lang['stryes'] : $lang['strno']), "</td>";
 		echo "</tr>";
@@ -345,11 +345,11 @@ function doDrop($confirm, $msg = '')
 		if (isset($_REQUEST['ma'])) {
 			foreach ($_REQUEST['ma'] as $v) {
 				$a = unserialize(htmlspecialchars_decode($v, ENT_QUOTES));
-				echo "<p>", sprintf($lang['strconfdropsequence'], $misc->printVal($a['sequence'])), "</p>\n";
+				echo "<p>", sprintf($lang['strconfdropsequence'], $misc->formatVal($a['sequence'])), "</p>\n";
 				printf('<input type="hidden" name="sequence[]" value="%s" />', html_esc($a['sequence']));
 			}
 		} else {
-			echo "<p>", sprintf($lang['strconfdropsequence'], $misc->printVal($_REQUEST['sequence'])), "</p>\n";
+			echo "<p>", sprintf($lang['strconfdropsequence'], $misc->formatVal($_REQUEST['sequence'])), "</p>\n";
 			echo "<input type=\"hidden\" name=\"sequence\" value=\"", html_esc($_REQUEST['sequence']), "\" />\n";
 		}
 

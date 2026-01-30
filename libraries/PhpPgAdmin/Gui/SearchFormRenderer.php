@@ -139,9 +139,9 @@ class SearchFormRenderer
                             <input type="checkbox" name="show[<?= html_esc($attrs->fields['attname']) ?>]"
                                 <?= isset($_REQUEST['show'][$attrs->fields['attname']]) ? ' checked="checked"' : '' ?> />
                         </td>
-                        <td style="white-space:nowrap;"><?= $misc->printVal($attrs->fields['attname']) ?></td>
+                        <td style="white-space:nowrap;"><?= $misc->formatVal($attrs->fields['attname']) ?></td>
                         <td style="white-space:nowrap;">
-                            <?= $misc->printVal($pg->formatType($attrs->fields['type'], $attrs->fields['atttypmod'])) ?>
+                            <?= $misc->formatVal($pg->formatType($attrs->fields['type'], $attrs->fields['atttypmod'])) ?>
                         </td>
                         <td style="white-space:nowrap;">
                             <select name="ops[<?= html_esc($attrs->fields['attname']) ?>]">

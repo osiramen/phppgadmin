@@ -177,7 +177,7 @@ function doDefault($msg = '', $isTable = true)
 		// Show comment if any
 		if ($attrs->fields['comment'] !== null):
 			?>
-			<p class="comment"><?= $misc->printVal($attrs->fields['comment']) ?></p>
+			<p class="comment"><?= $misc->formatVal($attrs->fields['comment']) ?></p>
 			<?php
 		endif;
 

@@ -53,8 +53,8 @@ function Error_Handler($dbms, $fn, $errno, $errmsg, $p1 = false, $p2 = false)
 			$sql = $p1;
 			$inputparams = $p2;
 
-			$s = "<p><b>{$lang['strsqlerror']}</b><br />" . $misc->printVal($errmsg, 'errormsg') . "</p>
-		      <div class=\"mb-3\"><b>{$lang['strinstatement']}</b><br /><pre class=\"sql-viewer\">" . $misc->printVal($sql) . "</pre></div>\n";
+			$s = "<p><b>{$lang['strsqlerror']}</b><br />" . $misc->formatVal($errmsg, 'errormsg') . "</p>
+		      <div class=\"mb-3\"><b>{$lang['strinstatement']}</b><br /><pre class=\"sql-viewer\">" . $misc->formatVal($sql) . "</pre></div>\n";
 			echo "<table class=\"error mb-3\" cellpadding=\"5\"><tr><td>{$s}</td></tr></table>\n";
 			break;
 

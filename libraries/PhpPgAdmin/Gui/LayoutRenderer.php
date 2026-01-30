@@ -470,7 +470,7 @@ EOT;
 	 *
 	 * @return string The HTML rendered value
 	 */
-	function printVal($str, $type = null, $params = [])
+	function formatVal($str, $type = null, $params = [])
 	{
 		$lang = $this->lang();
 		$conf = $this->conf();
@@ -604,6 +604,9 @@ EOT;
 				}
 				$out = floor(((float) $str + $mult / 2) / $mult) . ' ' . $units[$idx];
 				break;
+			case 'html':
+				$out = $str;
+				break;
 			case 'time':
 			case 'timetz':
 			case 'timestamp':
@@ -621,7 +624,7 @@ EOT;
 		if (isset($params['align']))
 			$align = $params['align'];
 
-		if (!isset($tag)) {
+		if (!isset($tag) || isset($params['tag'])) {
 			$tag = $params['tag'] ?? (isset($align) ? 'div' : 'span');
 		}
 

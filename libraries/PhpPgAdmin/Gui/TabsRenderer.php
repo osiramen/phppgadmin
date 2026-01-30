@@ -5,6 +5,8 @@ namespace PhpPgAdmin\Gui;
 use PhpPgAdmin\Core\AppContext;
 use PhpPgAdmin\Database\Actions\AclActions;
 use PhpPgAdmin\Database\Actions\RoleActions;
+use PhpPgAdmin\Database\Actions\TableActions;
+use PhpPgAdmin\Database\Actions\PartitionActions;
 
 class TabsRenderer extends AppContext
 {
@@ -16,12 +18,25 @@ class TabsRenderer extends AppContext
     public function printTabs($tabs, $activeTab): void
     {
         if (is_string($tabs)) {
+            $isTable = ($tabs === 'table');
             $_SESSION['webdbLastTab'][$tabs] = $activeTab;
             $tabs = $this->getNavTabs($tabs);
+            if ($isTable && !empty($_REQUEST['table'])) {
+                $partitionActions = new PartitionActions(
+                    $this->postgres()
+                );
+                $isPartitioned = $partitionActions->isPartitionedTable(
+                    $_REQUEST['table']
+                );
+                if (!$isPartitioned) {
+                    // Remove 'Partitions' tab for non-partitioned tables
+                    unset($tabs['partitions']);
+                }
+            }
         }
 
         if (count($tabs) > 0) {
-            $width = (int) (100 / count($tabs)) . '%';
+            $width = number_format(100 / count($tabs), 2) . '%';
         } else {
             $width = '1';
         }
@@ -413,6 +428,15 @@ class TabsRenderer extends AppContext
                         'icon' => 'Triggers',
                         'branch' => true,
                     ],
+                    'partitions' => [
+                        'title' => $lang['strpartitions'],
+                        'url' => 'partitions.php',
+                        'urlvars' => ['subject' => 'table', 'table' => field('table')],
+                        'help' => 'pg.partition',
+                        'icon' => 'Partitions',
+                        'branch' => true,
+                        'hide' => $pg->major_version < 10, // Only show for PG10+
+                    ],
                     'rules' => [
                         'title' => $lang['strrules'],
                         'url' => 'rules.php',
@@ -426,12 +450,14 @@ class TabsRenderer extends AppContext
                         'url' => 'tables.php',
                         'urlvars' => ['subject' => 'table', 'table' => field('table'), 'action' => 'admin'],
                         'icon' => 'Admin',
+                        'tree' => false,
                     ],
                     'info' => [
                         'title' => $lang['strinfo'],
                         'url' => 'info.php',
                         'urlvars' => ['subject' => 'table', 'table' => field('table')],
                         'icon' => 'Statistics',
+                        'tree' => false,
                     ],
                     'privileges' => [
                         'title' => $lang['strprivileges'],
@@ -439,6 +465,7 @@ class TabsRenderer extends AppContext
                         'urlvars' => ['subject' => 'table', 'table' => field('table')],
                         'help' => 'pg.privilege',
                         'icon' => 'Privileges',
+                        'tree' => false,
                     ],
                     'export' => [
                         'title' => $lang['strexport'],
@@ -446,6 +473,7 @@ class TabsRenderer extends AppContext
                         'urlvars' => ['subject' => 'table', 'table' => field('table'), 'action' => 'export'],
                         'icon' => 'Export',
                         'hide' => false,
+                        'tree' => false,
                     ],
                     'import' => [
                         'title' => $lang['strimport'],
@@ -453,6 +481,7 @@ class TabsRenderer extends AppContext
                         'urlvars' => ['subject' => 'table', 'table' => field('table'), 'action' => 'import'],
                         'icon' => 'Import',
                         'hide' => false,
+                        'tree' => false,
                     ],
                 ];
                 if ($this->misc()->isCatalogSchema()) {

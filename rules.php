@@ -141,8 +141,8 @@ function doDrop($confirm)
 		<p>
 			<?php printf(
 				$lang['strconfdroprule'],
-				$misc->printVal($_REQUEST['rule']),
-				$misc->printVal($_REQUEST[$_REQUEST['reltype']])
+				$misc->formatVal($_REQUEST['rule']),
+				$misc->formatVal($_REQUEST[$_REQUEST['reltype']])
 			) ?>
 		</p>
 		<form action="rules.php" method="post">

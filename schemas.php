@@ -320,11 +320,11 @@ function doDrop($confirm)
 		if (isset($_REQUEST['ma'])) {
 			foreach ($_REQUEST['ma'] as $v) {
 				$a = unserialize(htmlspecialchars_decode($v, ENT_QUOTES));
-				echo '<p>', sprintf($lang['strconfdropschema'], $misc->printVal($a['nsp'])), "</p>\n";
+				echo '<p>', sprintf($lang['strconfdropschema'], $misc->formatVal($a['nsp'])), "</p>\n";
 				echo '<input type="hidden" name="nsp[]" value="', html_esc($a['nsp']), "\" />\n";
 			}
 		} else {
-			echo "<p>", sprintf($lang['strconfdropschema'], $misc->printVal($_REQUEST['nsp'])), "</p>\n";
+			echo "<p>", sprintf($lang['strconfdropschema'], $misc->formatVal($_REQUEST['nsp'])), "</p>\n";
 			echo "<input type=\"hidden\" name=\"nsp\" value=\"", html_esc($_REQUEST['nsp']), "\" />\n";
 		}
 

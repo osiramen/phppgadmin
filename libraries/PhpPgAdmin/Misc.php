@@ -137,9 +137,9 @@ class Misc extends AppContext
 	 * @param array $params Additional parameters for formatting
 	 * @return string The formatted value
 	 */
-	function printVal($str, $type = null, $params = [])
+	function formatVal($str, $type = null, $params = [])
 	{
-		return $this->getLayoutRenderer()->printVal($str, $type, $params);
+		return $this->getLayoutRenderer()->formatVal($str, $type, $params);
 	}
 
 	/**
@@ -766,6 +766,17 @@ class Misc extends AppContext
 		}
 	}
 
+	public function printIcon($icon, $alt = '', $class = '')
+	{
+		$iconPath = $this->icon($icon);
+		if (!$iconPath) {
+			return;
+		}
+		$altAttr = $alt ? ' alt="' . htmlspecialchars($alt) . '"' : '';
+		$classAttr = $class ? ' class="' . htmlspecialchars($class) . '"' : '';
+		echo '<img src="', htmlspecialchars($iconPath), '"', $altAttr, $classAttr, ' />';
+	}
+
 	/**
 	 * Function to escape command line parameters
 	 * @param string $str The string to escape
@@ -1241,4 +1252,6 @@ class Misc extends AppContext
 		}
 		return $name === 'pg_catalog' || $name === 'information_schema';
 	}
+
 }
+

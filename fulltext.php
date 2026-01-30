@@ -120,7 +120,7 @@ function doDropConfig($confirm)
 		$misc->printTrail('ftscfg');
 		$misc->printTitle($lang['strdrop'], 'pg.ftscfg.drop');
 
-		echo "<p>", sprintf($lang['strconfdropftsconfig'], $misc->printVal($_REQUEST['ftscfg'])), "</p>\n";
+		echo "<p>", sprintf($lang['strconfdropftsconfig'], $misc->formatVal($_REQUEST['ftscfg'])), "</p>\n";
 
 		echo "<form action=\"fulltext.php\" method=\"post\">\n";
 		echo "<p><input type=\"checkbox\" id=\"cascade\" name=\"cascade\" /> <label for=\"cascade\">{$lang['strcascade']}</label></p>\n";
@@ -155,7 +155,7 @@ function doDropDict($confirm)
 		$misc->printTrail('ftscfg'); // TODO: change to smth related to dictionary
 		$misc->printTitle($lang['strdrop'], 'pg.ftsdict.drop');
 
-		echo "<p>", sprintf($lang['strconfdropftsdict'], $misc->printVal($_REQUEST['ftsdict'])), "</p>\n";
+		echo "<p>", sprintf($lang['strconfdropftsdict'], $misc->formatVal($_REQUEST['ftsdict'])), "</p>\n";
 
 		echo "<form action=\"fulltext.php\" method=\"post\">\n";
 		echo "<p><input type=\"checkbox\" id=\"cascade\" name=\"cascade\" /> <label for=\"cascade\">{$lang['strcascade']}</label></p>\n";
@@ -921,11 +921,11 @@ function doDropMapping($confirm)
 
 			foreach ($_REQUEST['ma'] as $v) {
 				$a = unserialize(htmlspecialchars_decode($v, ENT_QUOTES));
-				echo "<p>", sprintf($lang['strconfdropftsmapping'], $misc->printVal($a['mapping']), $misc->printVal($_REQUEST['ftscfg'])), "</p>\n";
+				echo "<p>", sprintf($lang['strconfdropftsmapping'], $misc->formatVal($a['mapping']), $misc->formatVal($_REQUEST['ftscfg'])), "</p>\n";
 				printf('<input type="hidden" name="mapping[]" value="%s" />', html_esc($a['mapping']));
 			}
 		} else {
-			echo "<p>", sprintf($lang['strconfdropftsmapping'], $misc->printVal($_REQUEST['mapping']), $misc->printVal($_REQUEST['ftscfg'])), "</p>\n";
+			echo "<p>", sprintf($lang['strconfdropftsmapping'], $misc->formatVal($_REQUEST['mapping']), $misc->formatVal($_REQUEST['ftscfg'])), "</p>\n";
 			echo "<input type=\"hidden\" name=\"mapping\" value=\"", html_esc($_REQUEST['mapping']), "\" />\n";
 		}
 

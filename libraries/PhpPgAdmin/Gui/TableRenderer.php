@@ -169,7 +169,7 @@ class TableRenderer extends AppContext
                                 }
                                 $type = $column['type'] ?? null;
                                 $params = $column['params'] ?? [];
-                                echo $this->misc()->printVal($val, $type, $params);
+                                echo $this->misc()->formatVal($val, $type, $params);
                                 if (isset($column['url'])) {
                                     echo "</a>";
                                 }

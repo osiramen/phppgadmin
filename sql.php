@@ -90,7 +90,7 @@ function renderQueryResult($result, $query, $lineInfo = null)
 		if ($isLargeType) {
 			$class .= ' large_type';
 		}
-		echo "<th class=\"{$class}\">", $misc->printVal($finfo->name), "</th>\n";
+		echo "<th class=\"{$class}\">", $misc->formatVal($finfo->name), "</th>\n";
 	}
 	echo "</tr>\n";
 	echo "</thead>\n";
@@ -118,7 +118,7 @@ function renderQueryResult($result, $query, $lineInfo = null)
 			}
 			echo "<td class=\"auto-wrap field $finfo->type $class\">\n";
 			echo "<div class=\"wrapper\">\n";
-			echo $misc->printVal($v, $finfo->type, array('null' => true));
+			echo $misc->formatVal($v, $finfo->type, array('null' => true));
 			echo "</div>\n";
 			echo "</td>\n";
 		}

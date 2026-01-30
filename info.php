@@ -205,13 +205,13 @@ function doDefault($msg = '')
 				$id = (($i % 2) == 0 ? '1' : '2');
 				?>
 				<tr class="data<?= $id ?>">
-					<td><?= $misc->printVal($tablestatstups->fields['seq_scan'], 'int4', $shownull) ?></td>
-					<td><?= $misc->printVal($tablestatstups->fields['seq_tup_read'], 'int4', $shownull) ?></td>
-					<td><?= $misc->printVal($tablestatstups->fields['idx_scan'], 'int4', $shownull) ?></td>
-					<td><?= $misc->printVal($tablestatstups->fields['idx_tup_fetch'], 'int4', $shownull) ?></td>
-					<td><?= $misc->printVal($tablestatstups->fields['n_tup_ins'], 'int4', $shownull) ?></td>
-					<td><?= $misc->printVal($tablestatstups->fields['n_tup_upd'], 'int4', $shownull) ?></td>
-					<td><?= $misc->printVal($tablestatstups->fields['n_tup_del'], 'int4', $shownull) ?></td>
+					<td><?= $misc->formatVal($tablestatstups->fields['seq_scan'], 'int4', $shownull) ?></td>
+					<td><?= $misc->formatVal($tablestatstups->fields['seq_tup_read'], 'int4', $shownull) ?></td>
+					<td><?= $misc->formatVal($tablestatstups->fields['idx_scan'], 'int4', $shownull) ?></td>
+					<td><?= $misc->formatVal($tablestatstups->fields['idx_tup_fetch'], 'int4', $shownull) ?></td>
+					<td><?= $misc->formatVal($tablestatstups->fields['n_tup_ins'], 'int4', $shownull) ?></td>
+					<td><?= $misc->formatVal($tablestatstups->fields['n_tup_upd'], 'int4', $shownull) ?></td>
+					<td><?= $misc->formatVal($tablestatstups->fields['n_tup_del'], 'int4', $shownull) ?></td>
 				</tr>
 				<?php
 				$tablestatstups->movenext();
@@ -288,20 +288,20 @@ function doDefault($msg = '')
 				$tidx_hit = $tablestatsio->fields['tidx_blks_hit'];
 				?>
 				<tr class="data<?= $id ?>">
-					<td><?= $misc->printVal($heap_read, 'int4', $shownull) ?></td>
-					<td><?= $misc->printVal($heap_hit, 'int4', $shownull) ?></td>
+					<td><?= $misc->formatVal($heap_read, 'int4', $shownull) ?></td>
+					<td><?= $misc->formatVal($heap_hit, 'int4', $shownull) ?></td>
 					<td>(<?= $percentage ?><?= $lang['strpercent'] ?>)</td>
 
-					<td><?= $misc->printVal($idx_read, 'int4', $shownull) ?></td>
-					<td><?= $misc->printVal($idx_hit, 'int4', $shownull) ?></td>
+					<td><?= $misc->formatVal($idx_read, 'int4', $shownull) ?></td>
+					<td><?= $misc->formatVal($idx_hit, 'int4', $shownull) ?></td>
 					<td>(<?= $percentage_idx ?><?= $lang['strpercent'] ?>)</td>
 
-					<td><?= $misc->printVal($toast_read, 'int4', $shownull) ?></td>
-					<td><?= $misc->printVal($toast_hit, 'int4', $shownull) ?></td>
+					<td><?= $misc->formatVal($toast_read, 'int4', $shownull) ?></td>
+					<td><?= $misc->formatVal($toast_hit, 'int4', $shownull) ?></td>
 					<td>(<?= $percentage_toast ?><?= $lang['strpercent'] ?>)</td>
 
-					<td><?= $misc->printVal($tidx_read, 'int4', $shownull) ?></td>
-					<td><?= $misc->printVal($tidx_hit, 'int4', $shownull) ?></td>
+					<td><?= $misc->formatVal($tidx_read, 'int4', $shownull) ?></td>
+					<td><?= $misc->formatVal($tidx_hit, 'int4', $shownull) ?></td>
 					<td>(<?= $percentage_tidx ?><?= $lang['strpercent'] ?>)</td>
 				</tr>
 				<?php
@@ -333,10 +333,10 @@ function doDefault($msg = '')
 				$id = (($i % 2) == 0 ? '1' : '2');
 				?>
 				<tr class="data<?= $id ?>">
-					<td><?= $misc->printVal($indexstatstups->fields['indexrelname']) ?></td>
-					<td><?= $misc->printVal($indexstatstups->fields['idx_scan'], 'int4', $shownull) ?></td>
-					<td><?= $misc->printVal($indexstatstups->fields['idx_tup_read'], 'int4', $shownull) ?></td>
-					<td><?= $misc->printVal($indexstatstups->fields['idx_tup_fetch'], 'int4', $shownull) ?></td>
+					<td><?= $misc->formatVal($indexstatstups->fields['indexrelname']) ?></td>
+					<td><?= $misc->formatVal($indexstatstups->fields['idx_scan'], 'int4', $shownull) ?></td>
+					<td><?= $misc->formatVal($indexstatstups->fields['idx_tup_read'], 'int4', $shownull) ?></td>
+					<td><?= $misc->formatVal($indexstatstups->fields['idx_tup_fetch'], 'int4', $shownull) ?></td>
 				</tr>
 				<?php
 				$indexstatstups->movenext();
@@ -373,9 +373,9 @@ function doDefault($msg = '')
 					$percentage = 0;
 				?>
 				<tr class="data<?= $id ?>">
-					<td><?= $misc->printVal($indexstatsio->fields['indexrelname']) ?></td>
-					<td><?= $misc->printVal($indexstatsio->fields['idx_blks_read'], 'int4', $shownull) ?></td>
-					<td><?= $misc->printVal($indexstatsio->fields['idx_blks_hit'], 'int4', $shownull) ?></td>
+					<td><?= $misc->formatVal($indexstatsio->fields['indexrelname']) ?></td>
+					<td><?= $misc->formatVal($indexstatsio->fields['idx_blks_read'], 'int4', $shownull) ?></td>
+					<td><?= $misc->formatVal($indexstatsio->fields['idx_blks_hit'], 'int4', $shownull) ?></td>
 					<td>(<?= $percentage ?><?= $lang['strpercent'] ?>)</td>
 				</tr>
 				<?php

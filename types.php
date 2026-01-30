@@ -71,17 +71,17 @@ function doProperties($msg = '')
 				$byval = $pg->phpBool($typedata->fields['typbyval']);
 				echo "<table>\n";
 				echo "<tr><th class=\"data left\">{$lang['strname']}</th>\n";
-				echo "<td class=\"data1\">", $misc->printVal($typedata->fields['typname']), "</td></tr>\n";
+				echo "<td class=\"data1\">", $misc->formatVal($typedata->fields['typname']), "</td></tr>\n";
 				echo "<tr><th class=\"data left\">{$lang['strinputfn']}</th>\n";
-				echo "<td class=\"data1\">", $misc->printVal($typedata->fields['typin']), "</td></tr>\n";
+				echo "<td class=\"data1\">", $misc->formatVal($typedata->fields['typin']), "</td></tr>\n";
 				echo "<tr><th class=\"data left\">{$lang['stroutputfn']}</th>\n";
-				echo "<td class=\"data1\">", $misc->printVal($typedata->fields['typout']), "</td></tr>\n";
+				echo "<td class=\"data1\">", $misc->formatVal($typedata->fields['typout']), "</td></tr>\n";
 				echo "<tr><th class=\"data left\">{$lang['strlength']}</th>\n";
-				echo "<td class=\"data1\">", $misc->printVal($typedata->fields['typlen']), "</td></tr>\n";
+				echo "<td class=\"data1\">", $misc->formatVal($typedata->fields['typlen']), "</td></tr>\n";
 				echo "<tr><th class=\"data left\">{$lang['strpassbyval']}</th>\n";
 				echo "<td class=\"data1\">", ($byval) ? $lang['stryes'] : $lang['strno'], "</td></tr>\n";
 				echo "<tr><th class=\"data left\">{$lang['stralignment']}</th>\n";
-				echo "<td class=\"data1\">", $misc->printVal($typedata->fields['typalign']), "</td></tr>\n";
+				echo "<td class=\"data1\">", $misc->formatVal($typedata->fields['typalign']), "</td></tr>\n";
 				if ($typeActions->hasEnumTypes() && $vals) {
 					$vals = $vals->getArray();
 					$nbVals = count($vals);
@@ -171,7 +171,7 @@ function doAlter($msg = '')
 		$_POST['renameEnumNew'] = [];
 
 	$misc->printTrail('type');
-	$misc->printTitle($lang['stredit'] . ' - ' . $misc->printVal($typname), 'pg.type.alter');
+	$misc->printTitle($lang['stredit'] . ' - ' . $misc->formatVal($typname), 'pg.type.alter');
 	$misc->printMsg($msg);
 
 	echo "<form action=\"types.php\" method=\"post\">\n";
@@ -375,7 +375,7 @@ function doDrop($confirm)
 		$misc->printTrail('type');
 		$misc->printTitle($lang['strdrop'], 'pg.type.drop');
 
-		echo "<p>", sprintf($lang['strconfdroptype'], $misc->printVal($_REQUEST['type'])), "</p>\n";
+		echo "<p>", sprintf($lang['strconfdroptype'], $misc->formatVal($_REQUEST['type'])), "</p>\n";
 
 		echo "<form action=\"types.php\" method=\"post\">\n";
 		echo "<p><input type=\"checkbox\" id=\"cascade\" name=\"cascade\" /> <label for=\"cascade\">{$lang['strcascade']}</label></p>\n";
@@ -482,7 +482,7 @@ function doCreateComposite($msg = '')
 				while (!$types->EOF) {
 					$typname = $types->fields['typname'];
 					echo "\t\t\t\t<option value=\"", html_esc($typname), "\"", (isset($_REQUEST['type'][$i]) && $typname == $_REQUEST['type'][$i]) ? ' selected="selected"' : '', ">",
-						$misc->printVal($typname), "</option>\n";
+						$misc->formatVal($typname), "</option>\n";
 					$types->moveNext();
 				}
 				echo "\t\t\t</select>\n\t\t</td>\n";

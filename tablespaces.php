@@ -120,7 +120,7 @@ function doDrop($confirm)
 		$misc->printTrail('tablespace');
 		$misc->printTitle($lang['strdrop'], 'pg.tablespace.drop');
 
-		echo "<p>", sprintf($lang['strconfdroptablespace'], $misc->printVal($_REQUEST['tablespace'])), "</p>\n";
+		echo "<p>", sprintf($lang['strconfdroptablespace'], $misc->formatVal($_REQUEST['tablespace'])), "</p>\n";
 
 		echo "<form action=\"tablespaces.php\" method=\"post\">\n";
 		echo $misc->form;

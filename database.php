@@ -199,127 +199,127 @@ function doFind($confirm = true, $msg = '')
 
 			switch ($curr) {
 				case 'SCHEMA':
-					echo "<li><a href=\"redirect.php?subject=schema&amp;{$misc->href}&amp;schema=", $misc->printVal($rs->fields['name']), "\">", _highlight($misc->printVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
+					echo "<li><a href=\"redirect.php?subject=schema&amp;{$misc->href}&amp;schema=", $misc->formatVal($rs->fields['name']), "\">", _highlight($misc->formatVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
 					break;
 				case 'TABLE':
 					echo "<li>";
-					echo "<a href=\"tables.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['schemaname']), "</a>.";
+					echo "<a href=\"tables.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['schemaname']), "</a>.";
 					echo "<a href=\"redirect.php?subject=table&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "&amp;table=",
-						urlencode($rs->fields['name']), "\">", _highlight($misc->printVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
+						urlencode($rs->fields['name']), "\">", _highlight($misc->formatVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
 					break;
 				case 'VIEW':
 					echo "<li>";
-					echo "<a href=\"views.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['schemaname']), "</a>.";
+					echo "<a href=\"views.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['schemaname']), "</a>.";
 					echo "<a href=\"redirect.php?subject=view&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "&amp;view=",
-						urlencode($rs->fields['name']), "\">", _highlight($misc->printVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
+						urlencode($rs->fields['name']), "\">", _highlight($misc->formatVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
 					break;
 				case 'SEQUENCE':
 					echo "<li>";
-					echo "<a href=\"sequences.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['schemaname']), "</a>.";
+					echo "<a href=\"sequences.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['schemaname']), "</a>.";
 					echo "<a href=\"sequences.php?subject=sequence&amp;action=properties&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']),
-						"&amp;sequence=", urlencode($rs->fields['name']), "\">", _highlight($misc->printVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
+						"&amp;sequence=", urlencode($rs->fields['name']), "\">", _highlight($misc->formatVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
 					break;
 				case 'COLUMNTABLE':
 					echo "<li>";
-					echo "<a href=\"redirect.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['schemaname']), "</a>.";
-					echo "<a href=\"tblproperties.php?subject=table&amp;{$misc->href}&amp;table=", urlencode($rs->fields['relname']), "&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['relname']), "</a>.";
+					echo "<a href=\"redirect.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['schemaname']), "</a>.";
+					echo "<a href=\"tblproperties.php?subject=table&amp;{$misc->href}&amp;table=", urlencode($rs->fields['relname']), "&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['relname']), "</a>.";
 					echo "<a href=\"colproperties.php?{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "&amp;table=",
 						urlencode($rs->fields['relname']), "&amp;column=", urlencode($rs->fields['name']), "\">",
-						_highlight($misc->printVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
+						_highlight($misc->formatVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
 					break;
 				case 'COLUMNVIEW':
 					echo "<li>";
-					echo "<a href=\"redirect.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['schemaname']), "</a>.";
-					echo "<a href=\"viewproperties.php?subject=view&amp;{$misc->href}&amp;view=", urlencode($rs->fields['relname']), "&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['relname']), "</a>.";
+					echo "<a href=\"redirect.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['schemaname']), "</a>.";
+					echo "<a href=\"viewproperties.php?subject=view&amp;{$misc->href}&amp;view=", urlencode($rs->fields['relname']), "&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['relname']), "</a>.";
 					echo "<a href=\"colproperties.php?{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "&amp;view=",
 						urlencode($rs->fields['relname']), "&amp;column=", urlencode($rs->fields['name']), "\">",
-						_highlight($misc->printVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
+						_highlight($misc->formatVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
 					break;
 				case 'INDEX':
 					echo "<li>";
-					echo "<a href=\"redirect.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['schemaname']), "</a>.";
-					echo "<a href=\"redirect.php?subject=table&amp;{$misc->href}&amp;table=", urlencode($rs->fields['relname']), "&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['relname']), "</a>.";
-					echo "<a href=\"indexes.php?{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "&amp;table=", urlencode($rs->fields['relname']), "\">", _highlight($misc->printVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
+					echo "<a href=\"redirect.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['schemaname']), "</a>.";
+					echo "<a href=\"redirect.php?subject=table&amp;{$misc->href}&amp;table=", urlencode($rs->fields['relname']), "&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['relname']), "</a>.";
+					echo "<a href=\"indexes.php?{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "&amp;table=", urlencode($rs->fields['relname']), "\">", _highlight($misc->formatVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
 					break;
 				case 'CONSTRAINTTABLE':
 					echo "<li>";
-					echo "<a href=\"redirect.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['schemaname']), "</a>.";
-					echo "<a href=\"redirect.php?subject=table&amp;{$misc->href}&amp;table=", urlencode($rs->fields['relname']), "&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['relname']), "</a>.";
+					echo "<a href=\"redirect.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['schemaname']), "</a>.";
+					echo "<a href=\"redirect.php?subject=table&amp;{$misc->href}&amp;table=", urlencode($rs->fields['relname']), "&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['relname']), "</a>.";
 					echo "<a href=\"constraints.php?{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "&amp;table=",
-						urlencode($rs->fields['relname']), "\">", _highlight($misc->printVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
+						urlencode($rs->fields['relname']), "\">", _highlight($misc->formatVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
 					break;
 				case 'CONSTRAINTDOMAIN':
 					echo "<li>";
-					echo "<a href=\"domains.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['schemaname']), "</a>.";
+					echo "<a href=\"domains.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['schemaname']), "</a>.";
 					echo "<a href=\"domains.php?action=properties&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "&amp;domain=", urlencode($rs->fields['relname']), "\">",
-						$misc->printVal($rs->fields['relname']), '.', _highlight($misc->printVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
+						$misc->formatVal($rs->fields['relname']), '.', _highlight($misc->formatVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
 					break;
 				case 'TRIGGER':
 					echo "<li>";
-					echo "<a href=\"redirect.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['schemaname']), "</a>.";
-					echo "<a href=\"redirect.php?subject=table&amp;{$misc->href}&amp;table=", urlencode($rs->fields['relname']), "&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['relname']), "</a>.";
+					echo "<a href=\"redirect.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['schemaname']), "</a>.";
+					echo "<a href=\"redirect.php?subject=table&amp;{$misc->href}&amp;table=", urlencode($rs->fields['relname']), "&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['relname']), "</a>.";
 					echo "<a href=\"triggers.php?{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "&amp;table=", urlencode($rs->fields['relname']), "\">",
-						_highlight($misc->printVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
+						_highlight($misc->formatVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
 					break;
 				case 'RULETABLE':
 					echo "<li>";
-					echo "<a href=\"redirect.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['schemaname']), "</a>.";
-					echo "<a href=\"redirect.php?subject=table&amp;{$misc->href}&amp;table=", urlencode($rs->fields['relname']), "&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['relname']), "</a>.";
+					echo "<a href=\"redirect.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['schemaname']), "</a>.";
+					echo "<a href=\"redirect.php?subject=table&amp;{$misc->href}&amp;table=", urlencode($rs->fields['relname']), "&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['relname']), "</a>.";
 					echo "<a href=\"rules.php?subject=table&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "&amp;reltype=table&amp;table=",
-						urlencode($rs->fields['relname']), "\">", _highlight($misc->printVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
+						urlencode($rs->fields['relname']), "\">", _highlight($misc->formatVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
 					break;
 				case 'RULEVIEW':
 					echo "<li>";
-					echo "<a href=\"redirect.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['schemaname']), "</a>.";
-					echo "<a href=\"redirect.php?subject=view&amp;{$misc->href}&amp;view=", urlencode($rs->fields['relname']), "&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['relname']), "</a>.";
+					echo "<a href=\"redirect.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['schemaname']), "</a>.";
+					echo "<a href=\"redirect.php?subject=view&amp;{$misc->href}&amp;view=", urlencode($rs->fields['relname']), "&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['relname']), "</a>.";
 					echo "<a href=\"rules.php?subject=view&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "&amp;reltype=view&amp;view=",
-						urlencode($rs->fields['relname']), "\">", _highlight($misc->printVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
+						urlencode($rs->fields['relname']), "\">", _highlight($misc->formatVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
 					break;
 				case 'FUNCTION':
 					echo "<li>";
-					echo "<a href=\"functions.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['schemaname']), "</a>.";
+					echo "<a href=\"functions.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['schemaname']), "</a>.";
 					echo "<a href=\"functions.php?action=properties&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "&amp;function=",
 						urlencode($rs->fields['name']), "&amp;function_oid=", urlencode($rs->fields['oid']), "\">",
-						_highlight($misc->printVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
+						_highlight($misc->formatVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
 					break;
 				case 'TYPE':
 					echo "<li>";
-					echo "<a href=\"types.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['schemaname']), "</a>.";
+					echo "<a href=\"types.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['schemaname']), "</a>.";
 					echo "<a href=\"types.php?action=properties&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "&amp;type=",
-						urlencode($rs->fields['name']), "\">", _highlight($misc->printVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
+						urlencode($rs->fields['name']), "\">", _highlight($misc->formatVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
 					break;
 				case 'DOMAIN':
 					echo "<li>";
-					echo "<a href=\"domains.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['schemaname']), "</a>.";
+					echo "<a href=\"domains.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['schemaname']), "</a>.";
 					echo "<a href=\"domains.php?action=properties&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "&amp;domain=",
-						urlencode($rs->fields['name']), "\">", _highlight($misc->printVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
+						urlencode($rs->fields['name']), "\">", _highlight($misc->formatVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
 					break;
 				case 'OPERATOR':
 					echo "<li>";
-					echo "<a href=\"operators.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['schemaname']), "</a>.";
+					echo "<a href=\"operators.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['schemaname']), "</a>.";
 					echo "<a href=\"operators.php?action=properties&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "&amp;operator=",
-						urlencode($rs->fields['name']), "&amp;operator_oid=", urlencode($rs->fields['oid']), "\">", _highlight($misc->printVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
+						urlencode($rs->fields['name']), "&amp;operator_oid=", urlencode($rs->fields['oid']), "\">", _highlight($misc->formatVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
 					break;
 				case 'CONVERSION':
 					echo "<li>";
-					echo "<a href=\"conversions.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['schemaname']), "</a>.";
+					echo "<a href=\"conversions.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['schemaname']), "</a>.";
 					echo "<a href=\"conversions.php?{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']),
-						"\">", _highlight($misc->printVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
+						"\">", _highlight($misc->formatVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
 					break;
 				case 'LANGUAGE':
-					echo "<li><a href=\"languages.php?{$misc->href}\">", _highlight($misc->printVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
+					echo "<li><a href=\"languages.php?{$misc->href}\">", _highlight($misc->formatVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
 					break;
 				case 'AGGREGATE':
 					echo "<li>";
-					echo "<a href=\"aggregates.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['schemaname']), "</a>.";
+					echo "<a href=\"aggregates.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['schemaname']), "</a>.";
 					echo "<a href=\"aggregates.php?{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">",
-						_highlight($misc->printVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
+						_highlight($misc->formatVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
 					break;
 				case 'OPCLASS':
 					echo "<li>";
-					echo "<a href=\"redirect.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->printVal($rs->fields['schemaname']), "</a>.";
+					echo "<a href=\"redirect.php?subject=schema&amp;{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">", $misc->formatVal($rs->fields['schemaname']), "</a>.";
 					echo "<a href=\"opclasses.php?{$misc->href}&amp;schema=", urlencode($rs->fields['schemaname']), "\">",
-						_highlight($misc->printVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
+						_highlight($misc->formatVal($rs->fields['name']), $_REQUEST['term']), "</a></li>\n";
 					break;
 			}
 			$rs->moveNext();

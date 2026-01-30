@@ -4,6 +4,7 @@ namespace PhpPgAdmin\Database\Actions;
 
 use ADORecordSet;
 
+use ADORecordSet_empty;
 use PhpPgAdmin\Database\Actions\AclActions;
 use PhpPgAdmin\Database\Actions\ConstraintActions;
 use PhpPgAdmin\Database\Actions\IndexActions;
@@ -11,56 +12,7 @@ use PhpPgAdmin\Database\Actions\RuleActions;
 
 class TableActions extends ActionsBase
 {
-    //public const 
 
-    /** @var AclActions */
-    private $acl;
-
-    /** @var ConstraintActions */
-    private $constraint;
-
-    /** @var IndexActions */
-    private $index;
-
-    /** @var RuleActions */
-    private $rule;
-
-    private function getAclAction()
-    {
-        if ($this->acl === null) {
-            $this->acl = new AclActions($this->connection);
-        }
-        return $this->acl;
-    }
-
-    private function getConstraintAction()
-    {
-        if ($this->constraint === null) {
-            $this->constraint = new ConstraintActions($this->connection);
-        }
-        return $this->constraint;
-    }
-
-    private function getIndexAction()
-    {
-        if ($this->index === null) {
-            $this->index = new IndexActions($this->connection);
-        }
-        return $this->index;
-    }
-
-    private function getRuleAction()
-    {
-        if ($this->rule === null) {
-            $this->rule = new RuleActions($this->connection);
-        }
-        return $this->rule;
-    }
-
-    private function hasGrantOption()
-    {
-        return $this->connection->hasGrantOption();
-    }
 
     private function supportsTablespaces()
     {
@@ -73,28 +25,63 @@ class TableActions extends ActionsBase
      */
     public function getTable($table)
     {
-        $c_schema = $this->connection->_schema;
-        $this->connection->clean($c_schema);
+        $schema = $this->connection->_schema;
+        $this->connection->clean($schema);
         $this->connection->clean($table);
+
+        $extraPartitionCols = "";
+        $extraPartitionJoins = "";
+        if ($this->connection->major_version >= 10) {
+            $extraPartitionCols = "
+                c.relispartition,
+                parent.relname AS parent_table,
+                pn.nspname AS parent_schema,
+                pg_get_expr(c.relpartbound, c.oid) AS partition_bound,
+                p.partstrat,
+                p.partnatts,
+                (
+                    SELECT ARRAY(
+                        SELECT a.attname
+                        FROM pg_attribute a
+                        WHERE a.attrelid = p.partrelid
+                        AND a.attnum = ANY(p.partattrs)
+                        ORDER BY array_position(p.partattrs, a.attnum)
+                    )
+                ) AS partition_keys,
+            ";
+            $extraPartitionJoins = "
+                LEFT JOIN pg_inherits i ON i.inhrelid = c.oid
+                LEFT JOIN pg_class parent ON parent.oid = i.inhparent
+                LEFT JOIN pg_namespace pn ON pn.oid = parent.relnamespace
+                LEFT JOIN pg_partitioned_table p ON p.partrelid = c.oid
+            ";
+        }
 
         $sql =
             "SELECT
-              c.relname, n.nspname, u.usename AS relowner, c.oid, c.relkind,
-              c.relacl,
-              pg_catalog.obj_description(c.oid, 'pg_class') AS relcomment,
-              (SELECT spcname
-                FROM pg_catalog.pg_tablespace pt
-                WHERE pt.oid=c.reltablespace) AS tablespace
-            FROM pg_catalog.pg_class c
-                 LEFT JOIN pg_catalog.pg_user u ON u.usesysid = c.relowner
-                 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-            WHERE c.relkind = 'r'
-                  AND n.nspname = '{$c_schema}'
-                  AND n.oid = c.relnamespace
-                  AND c.relname = '{$table}'";
+                {$extraPartitionCols}
+                c.relname,
+                n.nspname,
+                u.usename AS relowner,
+                c.oid,
+                c.relkind,
+                c.relacl,
+                pg_catalog.obj_description(c.oid, 'pg_class') AS relcomment,
+                (SELECT spcname
+                FROM pg_tablespace pt
+                WHERE pt.oid = c.reltablespace) AS tablespace
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            LEFT JOIN pg_user u ON u.usesysid = c.relowner
+            {$extraPartitionJoins}
+            WHERE c.relkind IN ('r', 'p')
+            AND n.nspname = '{$schema}'
+            AND c.relname = '{$table}'
+        ";
 
         return $this->connection->selectSet($sql);
     }
+
 
     /**
      * Finds schema of table/view.
@@ -140,6 +127,9 @@ class TableActions extends ActionsBase
         if ($type == 'r' || $type == 'f') {
             return 'table';
         }
+        if ($type == 'p') {
+            return 'partitioned_table';
+        }
         if ($type == 'v' || $type == 'm') {
             return 'view';
         }
@@ -159,14 +149,19 @@ class TableActions extends ActionsBase
                     WHERE schemaname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
                     ORDER BY schemaname, tablename";
         } else {
-            $sql = "SELECT c.relname, pg_catalog.pg_get_userbyid(c.relowner) AS relowner,
+            // Include both regular tables (r) and partitioned tables (p)
+            // Exclude child partitions by checking pg_inherits
+            $sql = "SELECT c.relname, c.relkind, pg_catalog.pg_get_userbyid(c.relowner) AS relowner,
                         pg_catalog.obj_description(c.oid, 'pg_class') AS relcomment,
                         reltuples::bigint,
                         (SELECT spcname FROM pg_catalog.pg_tablespace pt WHERE pt.oid=c.reltablespace) AS tablespace
                     FROM pg_catalog.pg_class c
                     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-                    WHERE c.relkind = 'r'
+                    LEFT JOIN pg_inherits i ON c.oid = i.inhrelid 
+                        AND EXISTS (SELECT 1 FROM pg_class pc WHERE pc.oid = i.inhparent AND pc.relkind = 'p')
+                    WHERE c.relkind IN ('r', 'p')
                     AND nspname='{$c_schema}'
+                    AND i.inhrelid IS NULL
                     ORDER BY c.relname";
         }
 
@@ -305,7 +300,9 @@ class TableActions extends ActionsBase
         $tblcomment,
         $tablespace,
         $uniquekey,
-        $primarykey
+        $primarykey,
+        $partitionStrategy = null,
+        $partitionKeys = []
     ) {
         $f_schema = $this->connection->_schema;
         $this->connection->fieldClean($f_schema);
@@ -394,6 +391,18 @@ class TableActions extends ActionsBase
         if ($this->supportsTablespaces() && $tablespace != '') {
             $this->connection->fieldClean($tablespace);
             $sql .= " TABLESPACE \"{$tablespace}\"";
+        }
+
+        // Add PARTITION BY clause if partitioning is enabled (PG10+)
+        if ($this->connection->major_version >= 10 && $partitionStrategy !== null && !empty($partitionKeys)) {
+            $sql .= " PARTITION BY {$partitionStrategy} (";
+            $cleanedKeys = [];
+            foreach ($partitionKeys as $key) {
+                $this->connection->fieldClean($key);
+                $cleanedKeys[] = "\"{$key}\"";
+            }
+            $sql .= implode(", ", $cleanedKeys);
+            $sql .= ")";
         }
 
         $status = $this->connection->execute($sql);
@@ -624,7 +633,7 @@ class TableActions extends ActionsBase
         $this->connection->fieldClean($f_schema);
         $this->connection->fieldClean($table);
 
-        $sql = "DELETE FROM \"{$f_schema}\".\"{$table}\"";
+        $sql = "TRUNCATE TABLE \"{$f_schema}\".\"{$table}\"";
 
         return $this->connection->execute($sql);
     }
@@ -726,4 +735,5 @@ class TableActions extends ActionsBase
 
         return $this->connection->selectSet($sql);
     }
+
 }

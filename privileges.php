@@ -218,7 +218,7 @@ function doDefault($msg = '')
 		foreach ($privileges as $v) {
 			$id = (($i & 1) == 0 ? '1' : '2');
 			echo "<tr class=\"data{$id}\">\n";
-			echo "<td><img class=\"icon\" src=\"", $misc->icon('Role'), "\" alt=\"", $lang['strrole'], "\" /> <b>", $misc->printVal($v['entity']), "</b></td>\n";
+			echo "<td><img class=\"icon\" src=\"", $misc->icon('Role'), "\" alt=\"", $lang['strrole'], "\" /> <b>", $misc->formatVal($v['entity']), "</b></td>\n";
 			foreach (AclActions::PRIV_LIST[$_REQUEST['subject']] as $v2) {
 				// Skip over ALL PRIVILEGES
 				if ($v2 == 'ALL PRIVILEGES')
@@ -234,7 +234,7 @@ function doDefault($msg = '')
 				echo "</td>\n";
 			}
 			if ($pg->hasGrantOption()) {
-				echo "<td>", $misc->printVal($v['grantor']), "</td>\n";
+				echo "<td>", $misc->formatVal($v['grantor']), "</td>\n";
 			}
 			echo "</tr>\n";
 			$i++;

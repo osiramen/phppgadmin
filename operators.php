@@ -41,27 +41,27 @@ function doProperties($msg = '')
 	<table>
 		<tr>
 			<th class="data left"><?= $lang['strname'] ?></th>
-			<td class="data1"><?= $misc->printVal($oprdata->fields['oprname']) ?></td>
+			<td class="data1"><?= $misc->formatVal($oprdata->fields['oprname']) ?></td>
 		</tr>
 		<tr>
 			<th class="data left"><?= $lang['strleftarg'] ?></th>
-			<td class="data1"><?= $misc->printVal($oprdata->fields['oprleftname']) ?></td>
+			<td class="data1"><?= $misc->formatVal($oprdata->fields['oprleftname']) ?></td>
 		</tr>
 		<tr>
 			<th class="data left"><?= $lang['strrightarg'] ?></th>
-			<td class="data1"><?= $misc->printVal($oprdata->fields['oprrightname']) ?></td>
+			<td class="data1"><?= $misc->formatVal($oprdata->fields['oprrightname']) ?></td>
 		</tr>
 		<tr>
 			<th class="data left"><?= $lang['strcommutator'] ?></th>
-			<td class="data1"><?= $misc->printVal($oprdata->fields['oprcom']) ?></td>
+			<td class="data1"><?= $misc->formatVal($oprdata->fields['oprcom']) ?></td>
 		</tr>
 		<tr>
 			<th class="data left"><?= $lang['strnegator'] ?></th>
-			<td class="data1"><?= $misc->printVal($oprdata->fields['oprnegate']) ?></td>
+			<td class="data1"><?= $misc->formatVal($oprdata->fields['oprnegate']) ?></td>
 		</tr>
 		<tr>
 			<th class="data left"><?= $lang['strjoin'] ?></th>
-			<td class="data1"><?= $misc->printVal($oprdata->fields['oprjoin']) ?></td>
+			<td class="data1"><?= $misc->formatVal($oprdata->fields['oprjoin']) ?></td>
 		</tr>
 		<tr>
 			<th class="data left"><?= $lang['strhashes'] ?></th>
@@ -77,23 +77,23 @@ function doProperties($msg = '')
 			</tr>
 			<tr>
 				<th class="data left"><?= $lang['strrestrict'] ?></th>
-				<td class="data1"><?= $misc->printVal($oprdata->fields['oprrest']) ?></td>
+				<td class="data1"><?= $misc->formatVal($oprdata->fields['oprrest']) ?></td>
 			</tr>
 			<tr>
 				<th class="data left"><?= $lang['strleftsort'] ?></th>
-				<td class="data1"><?= $misc->printVal($oprdata->fields['oprlsortop']) ?></td>
+				<td class="data1"><?= $misc->formatVal($oprdata->fields['oprlsortop']) ?></td>
 			</tr>
 			<tr>
 				<th class="data left"><?= $lang['strrightsort'] ?></th>
-				<td class="data1"><?= $misc->printVal($oprdata->fields['oprrsortop']) ?></td>
+				<td class="data1"><?= $misc->formatVal($oprdata->fields['oprrsortop']) ?></td>
 			</tr>
 			<tr>
 				<th class="data left"><?= $lang['strlessthan'] ?></th>
-				<td class="data1"><?= $misc->printVal($oprdata->fields['oprltcmpop']) ?></td>
+				<td class="data1"><?= $misc->formatVal($oprdata->fields['oprltcmpop']) ?></td>
 			</tr>
 			<tr>
 				<th class="data left"><?= $lang['strgreaterthan'] ?></th>
-				<td class="data1"><?= $misc->printVal($oprdata->fields['oprgtcmpop']) ?></td>
+				<td class="data1"><?= $misc->formatVal($oprdata->fields['oprgtcmpop']) ?></td>
 			</tr>
 		<?php else: ?>
 			<tr>
@@ -142,7 +142,7 @@ function doDrop($confirm)
 		$misc->printTrail('operator');
 		$misc->printTitle($lang['strdrop'], 'pg.operator.drop');
 
-		echo "<p>", sprintf($lang['strconfdropoperator'], $misc->printVal($_REQUEST['operator'])), "</p>\n";
+		echo "<p>", sprintf($lang['strconfdropoperator'], $misc->formatVal($_REQUEST['operator'])), "</p>\n";
 
 		echo "<form action=\"operators.php\" method=\"post\">\n";
 		echo "<p><input type=\"checkbox\" id=\"cascade\" name=\"cascade\" /> <label for=\"cascade\">{$lang['strcascade']}</label></p>\n";

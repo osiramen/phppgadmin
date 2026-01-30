@@ -1,5 +1,6 @@
 <?php
 
+use PhpPgAdmin\Database\Actions\PartitionActions;
 use PhpPgAdmin\Html\XHtmlButton;
 use PhpPgAdmin\Html\XHtmlOption;
 use PhpPgAdmin\Html\XHtmlSelect;
@@ -474,8 +475,8 @@ function doDrop($confirm)
 
 		echo "<p>", sprintf(
 			$lang['strconfdropconstraint'],
-			$misc->printVal($_REQUEST['constraint']),
-			$misc->printVal($_REQUEST['table'])
+			$misc->formatVal($_REQUEST['constraint']),
+			$misc->formatVal($_REQUEST['table'])
 		), "</p>\n";
 
 		echo "<form action=\"constraints.php\" method=\"post\">\n";
@@ -511,9 +512,10 @@ function doDefault($msg = '')
 	$misc = AppContainer::getMisc();
 	$lang = AppContainer::getLang();
 	$tableActions = new TableActions($pg);
+	$partitionActions = new PartitionActions($pg);
 	$constraintActions = new ConstraintActions($pg);
 
-	$cnPre = function (&$rowdata) use ($tableActions) {
+	$cnPre = function (&$rowdata) use ($tableActions, $pg, $lang) {
 		if (is_null($rowdata->fields['consrc'])) {
 			$atts = $tableActions->getAttributeNames($_REQUEST['table'], explode(' ', $rowdata->fields['indkey']));
 			$rowdata->fields['+definition'] = ($rowdata->fields['contype'] == 'u' ? "UNIQUE (" : "PRIMARY KEY (") . join(',', $atts) . ')';
@@ -521,6 +523,20 @@ function doDefault($msg = '')
 			$rowdata->fields['+definition'] = $rowdata->fields['consrc'];
 		}
 		$rowdata->fields['icon'] = getConstraintIcon($rowdata->fields['contype']);
+
+		// Determine scope (for partitions PG 10+)
+		if ($pg->major_version >= 10) {
+			$conislocal = $rowdata->fields['conislocal'] ?? 't';
+			$coninhcount = $rowdata->fields['coninhcount'] ?? 0;
+
+			if ($conislocal == 'f' || $coninhcount > 0) {
+				$rowdata->fields['+scope'] = '<span class="constraint-inherited">' . $lang['strconstraintinherited'] . '</span>';
+				$rowdata->fields['+data-scope'] = 'inherited';
+			} else {
+				$rowdata->fields['+scope'] = '<span class="constraint-local">' . $lang['strconstraintlocal'] . '</span>';
+				$rowdata->fields['+data-scope'] = 'local';
+			}
+		}
 	};
 
 	$misc->printTrail('table');
@@ -528,6 +544,43 @@ function doDefault($msg = '')
 	$misc->printMsg($msg);
 
 	$constraints = $constraintActions->getConstraints($_REQUEST['table']);
+
+	// Check if this is a partition (PG 10+)
+	$is_partition = $partitionActions->isPartition($_REQUEST['table']);
+
+	// Add filter controls for partitions
+	if ($is_partition && $constraints->recordCount() > 0) {
+		echo "<div class=\"constraint-filter\" style=\"margin-bottom: 10px;\">\n";
+		echo "<strong>{$lang['strfilter']}:</strong> ";
+		echo "<button type=\"button\" onclick=\"filterConstraints('all')\" id=\"filter-all\">{$lang['strshowall']}</button> ";
+		echo "<button type=\"button\" onclick=\"filterConstraints('inherited')\" id=\"filter-inherited\">{$lang['strshowinherited']}</button> ";
+		echo "<button type=\"button\" onclick=\"filterConstraints('local')\" id=\"filter-local\">{$lang['strshowlocal']}</button>\n";
+		echo "</div>\n";
+
+		// Add JavaScript for filtering
+		echo "<script type=\"text/javascript\">\n";
+		echo "(function() {\n";
+		echo "  function filterConstraints(type) {\n";
+		echo "    var rows = document.querySelectorAll('.constraints-constraints tbody tr');\n";
+		echo "    for (var i = 0; i < rows.length; i++) {\n";
+		echo "      var scopeCell = rows[i].cells[2];\n"; // Assuming Scope is 3rd column
+		echo "      if (!scopeCell) continue;\n";
+		echo "      var scopeText = scopeCell.textContent.trim().toLowerCase();\n";
+		echo "      if (type === 'all') {\n";
+		echo "        rows[i].style.display = '';\n";
+		echo "      } else if (type === 'inherited' && scopeText.indexOf('inherited') >= 0) {\n";
+		echo "        rows[i].style.display = '';\n";
+		echo "      } else if (type === 'local' && scopeText.indexOf('local') >= 0) {\n";
+		echo "        rows[i].style.display = '';\n";
+		echo "      } else {\n";
+		echo "        rows[i].style.display = 'none';\n";
+		echo "      }\n";
+		echo "    }\n";
+		echo "  }\n";
+		echo "  window.filterConstraints = filterConstraints;\n";
+		echo "})();\n";
+		echo "</script>\n";
+	}
 
 	$columns = [
 		'constraint' => [
@@ -540,13 +593,22 @@ function doDefault($msg = '')
 			'field' => field('+definition'),
 			'type' => 'sql',
 		],
-		'actions' => [
-			'title' => $lang['stractions'],
-		],
-		'comment' => [
-			'title' => $lang['strcomment'],
-			'field' => field('constcomment'),
-		],
+	];
+
+	// Add Scope column for partitions (PG 10+)
+	if ($is_partition) {
+		$columns['scope'] = [
+			'title' => $lang['strscope'],
+			'field' => field('+scope'),
+		];
+	}
+
+	$columns['actions'] = [
+		'title' => $lang['stractions'],
+	];
+	$columns['comment'] = [
+		'title' => $lang['strcomment'],
+		'field' => field('constcomment'),
 	];
 
 	$actions = [
@@ -566,6 +628,19 @@ function doDefault($msg = '')
 			]
 		]
 	];
+
+	// Disable drop action for inherited constraints in partitions
+	if ($is_partition) {
+		$actions['drop']['disable'] = function ($row) use ($pg) {
+			if ($pg->major_version >= 10) {
+				$conislocal = $row['conislocal'] ?? 't';
+				$coninhcount = $row['coninhcount'] ?? 0;
+				// Disable if inherited (not local or has inheritance count)
+				return ($conislocal == 'f' || $coninhcount > 0);
+			}
+			return false;
+		};
+	}
 
 	$misc->printTable($constraints, $columns, $actions, 'constraints-constraints', $lang['strnoconstraints'], $cnPre);
 

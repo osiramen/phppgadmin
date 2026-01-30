@@ -331,12 +331,14 @@ tr[class^="data"]:hover {
 	background-color: #ddd;
 }
 
+/*.data-row:nth-child(even),*/
 .row1,
 .data1 {
 	background-color: #fff;
 	text-align: left;
 }
 
+/*.data-row:nth-child(odd),*/
 .row2,
 .data2 {
 	background-color: #eee;

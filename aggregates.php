@@ -332,7 +332,7 @@ function doProperties($msg = '')
 			</tr>
 			<tr>
 				<th class="data left"><?= $lang['strcomment'] ?></th>
-				<td class="data1"><?= $misc->printVal($aggrdata->fields['aggrcomment']) ?></td>
+				<td class="data1"><?= $misc->formatVal($aggrdata->fields['aggrcomment']) ?></td>
 			</tr>
 		</table>
 		<?php

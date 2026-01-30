@@ -71,9 +71,9 @@ function doAlter($msg = '')
 		echo "<form action=\"domains.php\" method=\"post\">\n";
 		echo "<table>\n";
 		echo "<tr><th class=\"data left required\" style=\"width: 70px\">{$lang['strname']}</th>\n";
-		echo "<td class=\"data1\">", $misc->printVal($domaindata->fields['domname']), "</td></tr>\n";
+		echo "<td class=\"data1\">", $misc->formatVal($domaindata->fields['domname']), "</td></tr>\n";
 		echo "<tr><th class=\"data left required\">{$lang['strtype']}</th>\n";
-		echo "<td class=\"data1\">", $misc->printVal($domaindata->fields['domtype']), "</td></tr>\n";
+		echo "<td class=\"data1\">", $misc->formatVal($domaindata->fields['domtype']), "</td></tr>\n";
 		echo "<tr><th class=\"data left\"><label for=\"domnotnull\">{$lang['strnotnull']}</label></th>\n";
 		echo "<td class=\"data1\"><input type=\"checkbox\" id=\"domnotnull\" name=\"domnotnull\"", (isset($_POST['domnotnull']) ? ' checked="checked"' : ''), " /></td></tr>\n";
 		echo "<tr><th class=\"data left\">{$lang['strdefault']}</th>\n";
@@ -175,8 +175,8 @@ function doDropConstraint($confirm, $msg = '')
 
 		echo "<p>", sprintf(
 			$lang['strconfdropconstraint'],
-			$misc->printVal($_REQUEST['constraint']),
-			$misc->printVal($_REQUEST['domain'])
+			$misc->formatVal($_REQUEST['constraint']),
+			$misc->formatVal($_REQUEST['domain'])
 		), "</p>\n";
 		echo "<form action=\"domains.php\" method=\"post\">\n";
 		echo "<input type=\"hidden\" name=\"action\" value=\"drop_con\" />\n";
@@ -220,21 +220,21 @@ function doProperties($msg = '')
 	if ($domaindata->recordCount() > 0) {
 		// Show comment if any
 		if ($domaindata->fields['domcomment'] !== null)
-			echo "<p class=\"comment\">", $misc->printVal($domaindata->fields['domcomment']), "</p>\n";
+			echo "<p class=\"comment\">", $misc->formatVal($domaindata->fields['domcomment']), "</p>\n";
 
 		// Display domain info
 		$domaindata->fields['domnotnull'] = $pg->phpBool($domaindata->fields['domnotnull']);
 		echo "<table>\n";
 		echo "<tr><th class=\"data left\" style=\"width: 70px\">{$lang['strname']}</th>\n";
-		echo "<td class=\"data1\">", $misc->printVal($domaindata->fields['domname']), "</td></tr>\n";
+		echo "<td class=\"data1\">", $misc->formatVal($domaindata->fields['domname']), "</td></tr>\n";
 		echo "<tr><th class=\"data left\">{$lang['strtype']}</th>\n";
-		echo "<td class=\"data1\">", $misc->printVal($domaindata->fields['domtype']), "</td></tr>\n";
+		echo "<td class=\"data1\">", $misc->formatVal($domaindata->fields['domtype']), "</td></tr>\n";
 		echo "<tr><th class=\"data left\">{$lang['strnotnull']}</th>\n";
 		echo "<td class=\"data1\">", ($domaindata->fields['domnotnull'] ? 'NOT NULL' : ''), "</td></tr>\n";
 		echo "<tr><th class=\"data left\">{$lang['strdefault']}</th>\n";
-		echo "<td class=\"data1\">", $misc->printVal($domaindata->fields['domdef']), "</td></tr>\n";
+		echo "<td class=\"data1\">", $misc->formatVal($domaindata->fields['domdef']), "</td></tr>\n";
 		echo "<tr><th class=\"data left\">{$lang['strowner']}</th>\n";
-		echo "<td class=\"data1\">", $misc->printVal($domaindata->fields['domowner']), "</td></tr>\n";
+		echo "<td class=\"data1\">", $misc->formatVal($domaindata->fields['domowner']), "</td></tr>\n";
 		echo "</table>\n";
 
 		// Display domain constraints
@@ -359,7 +359,7 @@ function doDrop($confirm)
 		$misc->printTrail('domain');
 		$misc->printTitle($lang['strdrop'], 'pg.domain.drop');
 
-		echo "<p>", sprintf($lang['strconfdropdomain'], $misc->printVal($_REQUEST['domain'])), "</p>\n";
+		echo "<p>", sprintf($lang['strconfdropdomain'], $misc->formatVal($_REQUEST['domain'])), "</p>\n";
 		echo "<form action=\"domains.php\" method=\"post\">\n";
 		echo "<p><input type=\"checkbox\" id=\"cascade\" name=\"cascade\" /><label for=\"cascade\">{$lang['strcascade']}</label></p>\n";
 		echo "<p><input type=\"hidden\" name=\"action\" value=\"drop\" />\n";
@@ -424,7 +424,7 @@ function doCreate($msg = '')
 	while (!$types->EOF) {
 		echo "<option value=\"", html_esc($types->fields['typname']), "\"",
 			($types->fields['typname'] == $_POST['domtype']) ? ' selected="selected"' : '', ">",
-			$misc->printVal($types->fields['typname']), "</option>\n";
+			$misc->formatVal($types->fields['typname']), "</option>\n";
 		$types->moveNext();
 	}
 	echo "</select>\n";
