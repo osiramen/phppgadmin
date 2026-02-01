@@ -33,13 +33,80 @@ function doAlter($msg = '')
 	$misc->printTitle($lang['stralter'], 'pg.column.alter');
 	$misc->printMsg($msg);
 
+	$column = $tableActions->getTableAttributes($_REQUEST['table'], $_REQUEST['column']);
+	$column->fields['attnotnull'] = $pg->phpBool($column->fields['attnotnull']);
+
+	// Check if this is a generated column (PG12+)
+	$isGenerated = isset($column->fields['attgenerated']) && $column->fields['attgenerated'] === 's';
+
+	// Show info message for generated columns with appropriate options
+	if ($isGenerated) {
+		$genExpr = $column->fields['adsrc'] ?? '';
+		$canEditExpression = $pg->hasEditableGeneratedColumns();
+		$canDropExpression = $pg->hasDropGeneratedExpression();
+
+		echo "<div class=\"message\">";
+		echo "<strong>{$lang['strgeneratedcolumn']}:</strong> ";
+		echo "GENERATED ALWAYS AS (" . html_esc($genExpr) . ") {$lang['strgeneratedstored']}";
+		echo "<br><small><em>{$lang['strgeneratedcolumninfo']}</em></small>";
+		echo "</div>";
+
+		// Show form to edit generated expression (PG17+)
+		if ($canEditExpression) {
+			?>
+			<h3><?= $lang['strsetexpression'] ?></h3>
+			<form action="colproperties.php" method="post">
+				<table>
+					<tr>
+						<th class="data left"><?= $lang['strgeneratedexpression'] ?></th>
+						<td class="data1">
+							<input type="text" name="new_expression" size="60" value="<?= html_esc($genExpr) ?>"
+								placeholder="e.g., price * quantity" />
+						</td>
+					</tr>
+				</table>
+				<p>
+					<input type="hidden" name="action" value="save_expression" />
+					<?= $misc->form ?>
+					<input type="hidden" name="table" value="<?= html_esc($_REQUEST['table']) ?>" />
+					<input type="hidden" name="column" value="<?= html_esc($_REQUEST['column']) ?>" />
+					<input type="submit" name="save_expr" value="<?= $lang['strsetexpression'] ?>" />
+				</p>
+			</form>
+			<?php
+		}
+
+		// Show option to drop expression (PG13+)
+		if ($canDropExpression) {
+			?>
+			<h3><?= $lang['strdropexpression'] ?></h3>
+			<form action="colproperties.php" method="post">
+				<p><?= $lang['strdropexpressionconfirm'] ?></p>
+				<p>
+					<input type="hidden" name="action" value="drop_expression" />
+					<?= $misc->form ?>
+					<input type="hidden" name="table" value="<?= html_esc($_REQUEST['table']) ?>" />
+					<input type="hidden" name="column" value="<?= html_esc($_REQUEST['column']) ?>" />
+					<input type="submit" name="drop_expr" value="<?= $lang['strdropexpression'] ?>" />
+					<input type="submit" name="cancel" value="<?= $lang['strcancel'] ?>" />
+				</p>
+			</form>
+			<?php
+		}
+
+		// For generated columns, don't show the standard alter form
+		// unless we're on older PG versions without SET/DROP EXPRESSION support
+		if (!$canEditExpression && !$canDropExpression) {
+			echo "<p><em>" . ($lang['strgeneratedcolumnnoalter'] ?? 'Generated columns cannot be altered on this PostgreSQL version.') . "</em></p>";
+		}
+
+		return; // Don't show regular alter form for generated columns
+	}
+
 	?>
 	<form action="colproperties.php" method="post">
 
 		<?php
-		$column = $tableActions->getTableAttributes($_REQUEST['table'], $_REQUEST['column']);
-		$column->fields['attnotnull'] = $pg->phpBool($column->fields['attnotnull']);
-
 		$length = '';
 		if (
 			isset($column->fields['type'], $column->fields['base_type'])
@@ -58,16 +125,19 @@ function doAlter($msg = '')
 				'attnotnull' => $column->fields['attnotnull'],
 				'adsrc' => $column->fields['adsrc'],
 				'comment' => $column->fields['comment'],
+				'attgenerated' => $column->fields['attgenerated'] ?? '',
 			]
 		];
 
-		$renderer->renderTable($columns, $_REQUEST);
+		// Pass isAlter option to hide Generated checkbox (cannot alter generated status)
+		$renderer->renderTable($columns, $_REQUEST, ['isAlter' => true, 'isGenerated' => false]);
 		?>
 		<p><input type="hidden" name="action" value="save_properties" />
 			<?= $misc->form ?>
 			<input type="hidden" name="table" value="<?= html_esc($_REQUEST['table']) ?>" />
 			<input type="hidden" name="column" value="<?= html_esc($_REQUEST['column']) ?>" />
 			<input type="hidden" name="olddefault" value="<?= html_esc($column->fields['adsrc']) ?>" />
+			<input type="hidden" name="is_generated" value="" />
 			<?php if ($column->fields['attnotnull']): ?>
 				<input type="hidden" name="oldnotnull" value="on" />
 			<?php endif; ?>
@@ -142,6 +212,57 @@ function doSaveAlter()
 		return;
 	}
 
+}
+
+/**
+ * Save a new generated expression for a generated column (PG17+)
+ */
+function doSaveExpression()
+{
+	$pg = AppContainer::getPostgres();
+	$lang = AppContainer::getLang();
+	$columnActions = new ColumnActions($pg);
+
+	$expression = trim($_REQUEST['new_expression'] ?? '');
+
+	if ($expression === '') {
+		doAlter($lang['strgeneratedexpressionrequired']);
+		return;
+	}
+
+	$status = $columnActions->setGeneratedExpression(
+		$_REQUEST['table'],
+		$_REQUEST['column'],
+		$expression
+	);
+
+	if ($status == 0) {
+		doDefault($lang['strsetexpressionsuccess']);
+	} else {
+		doAlter($lang['strsetexpressionfailed']);
+	}
+}
+
+/**
+ * Drop the generated expression, converting the column to a regular column (PG13+)
+ */
+function doDropExpression()
+{
+	$pg = AppContainer::getPostgres();
+	$lang = AppContainer::getLang();
+	$columnActions = new ColumnActions($pg);
+
+	$status = $columnActions->dropGeneratedExpression(
+		$_REQUEST['table'],
+		$_REQUEST['column']
+	);
+
+	if ($status == 0) {
+		AppContainer::setShouldReloadTree(true);
+		doDefault($lang['strdropexpressionsuccess']);
+	} else {
+		doAlter($lang['strdropexpressionfailed']);
+	}
 }
 
 /**
@@ -358,6 +479,18 @@ switch ($action) {
 			doSaveAlter();
 		else
 			doDefault();
+		break;
+	case 'save_expression':
+		if (isset($_POST['save_expr']))
+			doSaveExpression();
+		else
+			doAlter();
+		break;
+	case 'drop_expression':
+		if (isset($_POST['drop_expr']))
+			doDropExpression();
+		else
+			doAlter();
 		break;
 	default:
 		doDefault(null, !isset($_REQUEST['view']));

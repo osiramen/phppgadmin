@@ -82,6 +82,9 @@ class ColumnFormRenderer
                 <th class="data required" colspan="2"><?= $this->lang['strtype'] ?></th>
                 <th class="data"><?= $this->lang['strlength'] ?></th>
                 <th class="data text-center"><?= $this->lang['strnotnull'] ?></th>
+                <?php if ($this->pg->hasGeneratedColumns() && !($options['isAlter'] ?? false)): ?>
+                    <th class="data text-center"><?= $this->lang['strgenerated'] ?></th>
+                <?php endif; ?>
                 <?php if ($options['showUniqueKey'] ?? false): ?>
                     <th class="data text-center"><?= $this->lang['struniquekey'] ?></th>
                 <?php endif; ?>
@@ -136,6 +139,8 @@ class ColumnFormRenderer
                 $uniquekey = isset($postData['uniquekey'][$i]);
                 $primarykey = isset($postData['primarykey'][$i]);
                 $partitionkey = isset($postData['partitionkey'][$i]);
+                $isGenerated = isset($postData['is_generated'][$i]);
+                $generatedExpr = $postData['generated_expr'][$i] ?? '';
             } else {
                 $field = $col['attname'] ?? '';
                 $type = $col['base_type'] ?? '';
@@ -153,6 +158,8 @@ class ColumnFormRenderer
                 $uniquekey = isset($col['uniquekey']) && $col['uniquekey'];
                 $primarykey = isset($col['primarykey']) && $col['primarykey'];
                 $partitionkey = isset($col['partitionkey']) && $col['partitionkey'];
+                $isGenerated = isset($col['attgenerated']) && $col['attgenerated'] === 's';
+                $generatedExpr = $isGenerated ? ($col['adsrc'] ?? '') : ($col['generated_expr'] ?? '');
 
                 // Determine default preset
                 if (isset($col['default_preset'])) {
@@ -204,6 +211,13 @@ class ColumnFormRenderer
                             echo ' checked="checked"'; ?> />
                 </td>
 
+                <?php if ($this->pg->hasGeneratedColumns() && !($options['isAlter'] ?? false)): ?>
+                    <td class="text-center">
+                        <input type="checkbox" name="is_generated[<?= $i ?>]" id="is_generated<?= $i ?>" <?php if ($isGenerated)
+                                echo ' checked="checked"'; ?> onchange="handleGeneratedChange(<?= $i ?>);" />
+                    </td>
+                <?php endif; ?>
+
                 <?php if ($options['showUniqueKey'] ?? false): ?>
                     <td class="text-center">
                         <input type="checkbox" name="uniquekey[<?= $i ?>]" <?php if ($uniquekey)
@@ -219,17 +233,28 @@ class ColumnFormRenderer
                 <?php endif; ?>
 
                 <td>
-                    <select name="default_preset[<?= $i ?>]" id="default_preset<?= $i ?>"
-                        onchange="handleDefaultPresetChange(<?= $i ?>);" style="margin-bottom: 2px;">
-                        <?php foreach ($columnDefaults as $value => $label): ?>
-                            <option value="<?= html_esc($value) ?>" <?= ($default_preset == $value) ? ' selected="selected"' : '' ?>>
-                                <?= html_esc($label) ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
+                    <div id="default_container<?= $i ?>" style="display: <?= $isGenerated ? 'none' : 'block' ?>;">
+                        <select name="default_preset[<?= $i ?>]" id="default_preset<?= $i ?>"
+                            onchange="handleDefaultPresetChange(<?= $i ?>);" style="margin-bottom: 2px;">
+                            <?php foreach ($columnDefaults as $value => $label): ?>
+                                <option value="<?= html_esc($value) ?>" <?= ($default_preset == $value) ? ' selected="selected"' : '' ?>>
+                                    <?= html_esc($label) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
 
-                    <input name="default[<?= $i ?>]" id="default<?= $i ?>" size="7" value="<?= html_esc($default) ?>"
-                        style="display: <?= $showCustom ? 'inline' : 'none' ?>;" />
+                        <input name="default[<?= $i ?>]" id="default<?= $i ?>" size="7"
+                            value="<?= html_esc($isGenerated ? '' : $default) ?>"
+                            style="display: <?= $showCustom ? 'inline' : 'none' ?>;" />
+                    </div>
+
+                    <?php if ($this->pg->hasGeneratedColumns()): ?>
+                        <div id="generated_container<?= $i ?>" style="display: <?= $isGenerated ? 'block' : 'none' ?>;">
+                            <input type="text" name="generated_expr[<?= $i ?>]" id="generated_expr<?= $i ?>" size="30"
+                                value="<?= html_esc($generatedExpr) ?>"
+                                placeholder="<?= html_esc($this->lang['strgeneratedexpression']) ?>" />
+                        </div>
+                    <?php endif; ?>
                 </td>
 
                 <?php if ($options['showPartitionKey'] ?? false): ?>
@@ -261,6 +286,7 @@ class ColumnFormRenderer
             var predefined_lengths = <?= json_encode(array_values($predefined_size_types)) ?>;
             var maxNameLen = <?= (int) $this->pg->_maxNameLen ?>;
             var allTypes = <?= json_encode(array_values($allTypes)) ?>;
+            var hasGeneratedColumns = <?= $this->pg->hasGeneratedColumns() ? 'true' : 'false' ?>;
 
             // Initialize all rows
             for (var i = 0; i < <?= (int) $numColumns ?>; i++) {
@@ -269,6 +295,9 @@ class ColumnFormRenderer
                     checkLengths(typeEl.value, i);
                 }
                 handleDefaultPresetChange(i, false);
+                if (hasGeneratedColumns) {
+                    handleGeneratedChange(i, false);
+                }
             }
         </script>
         <?php

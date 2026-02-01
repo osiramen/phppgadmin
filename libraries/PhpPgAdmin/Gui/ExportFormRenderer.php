@@ -115,13 +115,6 @@ class ExportFormRenderer
                     <input type="checkbox" id="export_all_objects" name="export_all_objects" value="true" checked="checked" />
                     <label for="export_all_objects"><?= $this->lang['strexportallobjects'] ?? 'Export all objects'; ?></label>
                 </legend>
-                <!--
-                <div class="mb-1">
-                    <a href="javascript:void(0);" onclick="toggleObjects(true)"><?= $this->lang['strselectall'] ?></a>
-                    &nbsp;|&nbsp;
-                    <a href="javascript:void(0);" onclick="toggleObjects(false)"><?= $this->lang['strunselectall'] ?></a>
-                </div>
-                -->
                 <?php
                 $objectGroups = $params['objects_by_type'] ?? [];
                 $iconGroups = $params['icons_by_type'] ?? [];
@@ -200,13 +193,23 @@ class ExportFormRenderer
                     <label for="include_comments"><?= $this->lang['strincludeobjectcomments']; ?></label>
                 </div>
                 <div class="my-1 ms-1">
-                    <input type="checkbox" id="if_not_exists" name="if_not_exists" value="true" checked="checked" />
+                    <input type="checkbox" id="if_not_exists" name="if_not_exists" value="true" />
                     <label for="if_not_exists"><?= $this->lang['struseifnotexists']; ?></label>
                 </div>
                 <div class="my-1 ms-1">
                     <input type="checkbox" id="drop_objects" name="drop_objects" value="true" />
                     <label for="drop_objects"><?= $this->lang['stradddropstatements']; ?>
                     </label>
+                </div>
+                <div class="my-1 ms-1">
+                    <input type="checkbox" id="no_owner" name="no_owner" value="true" />
+                    <label
+                        for="no_owner"><?= $this->lang['strnoowner'] ?? 'Do not output commands to set ownership of objects'; ?></label>
+                </div>
+                <div class="my-1 ms-1">
+                    <input type="checkbox" id="no_privileges" name="no_privileges" value="true" />
+                    <label
+                        for="no_privileges"><?= $this->lang['strnoprivileges'] ?? 'Do not output privileges (GRANT/REVOKE)'; ?></label>
                 </div>
                 <?php if ($subject === 'server' || $subject === 'database'): ?>
                     <div class="my-1 ms-1">
@@ -321,6 +324,7 @@ class ExportFormRenderer
                         cb.dispatchEvent(new Event('change', { bubbles: true }));
                     });
                 }
+
                 // Show/hide options based on export type and dumper selection
                 const form = document.getElementById('export-form');
                 const whatRadios = form.querySelectorAll('input[name="what"]');
@@ -343,6 +347,7 @@ class ExportFormRenderer
                 if (whatRadios.length > 0 && structureOptions) {
                     const addCreateSchema = document.getElementById('add_create_schema');
                     const addCreateDb = document.getElementById('add_create_database');
+
                     function updateOptions() {
                         const selectedWhat = form.querySelector('input[name="what"]:checked').value;
                         const dumperValue = form.querySelector('input[name="dumper"]:checked').value;
@@ -481,6 +486,9 @@ class ExportFormRenderer
                                 includeSchemaObjects.disabled = true;
                             } else {
                                 includeSchemaObjects.disabled = false;
+                                if (!includeSchemaObjects.dataset.changed) {
+                                    includeSchemaObjects.checked = exportAllObjects?.checked ?? true;
+                                }
                             }
                         }
 
@@ -537,6 +545,9 @@ class ExportFormRenderer
                     const objectCheckboxes = form.querySelectorAll('input[name="objects[]"]');
                     objectCheckboxes.forEach(cb => cb.addEventListener('change', updateOptions));
                     if (exportAllObjects) exportAllObjects.addEventListener('change', updateOptions);
+                    if (includeSchemaObjects) includeSchemaObjects.addEventListener('change', () => {
+                        includeSchemaObjects.dataset.changed = '1';
+                    });
                     updateOptions(); // Initial state
                     updateWhatRadios(); // Set initial what radio state
                 }

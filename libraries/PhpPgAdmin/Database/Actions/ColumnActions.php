@@ -207,7 +207,7 @@ class ColumnActions extends ActionsBase
     /**
      * Add a new column to a table.
      */
-    public function addColumn($table, $column, $type, $array, $length, $notnull, $default, $comment)
+    public function addColumn($table, $column, $type, $array, $length, $notnull, $default, $comment, $isGenerated = false)
     {
         $f_schema = $this->connection->_schema;
         $this->connection->fieldClean($f_schema);
@@ -240,8 +240,18 @@ class ColumnActions extends ActionsBase
             $sql .= '[]';
         if ($notnull)
             $sql .= ' NOT NULL';
-        if ($default != '')
-            $sql .= ' DEFAULT ' . $default;
+
+        // Handle generated columns vs regular defaults
+        if ($isGenerated) {
+            // For generated columns, the 'default' parameter contains the generation expression
+            if ($default != '') {
+                $sql .= ' GENERATED ALWAYS AS (' . $default . ') STORED';
+            }
+        } else {
+            // Regular default value
+            if ($default != '')
+                $sql .= ' DEFAULT ' . $default;
+        }
 
         $status = $this->connection->execute($sql);
         if ($status == 0 && trim($comment) != '') {
@@ -431,5 +441,47 @@ class ColumnActions extends ActionsBase
         }
 
         return $status;
+    }
+
+    /**
+     * Set a generated column's expression (PostgreSQL 17+).
+     * Changes the generation expression of a stored generated column.
+     *
+     * @param string $table The table containing the column
+     * @param string $column The column name
+     * @param string $expression The new generation expression (without parentheses)
+     * @return int 0 on success, non-zero on error
+     */
+    public function setGeneratedExpression($table, $column, $expression)
+    {
+        $f_schema = $this->connection->_schema;
+        $this->connection->fieldClean($f_schema);
+        $this->connection->fieldClean($table);
+        $this->connection->fieldClean($column);
+        // Don't clean expression - it's an SQL expression
+
+        $sql = "ALTER TABLE \"{$f_schema}\".\"{$table}\" ALTER COLUMN \"{$column}\" SET EXPRESSION AS ({$expression})";
+
+        return $this->connection->execute($sql);
+    }
+
+    /**
+     * Drop a generated column's expression (PostgreSQL 13+).
+     * Converts a stored generated column to a regular column, keeping existing values.
+     *
+     * @param string $table The table containing the column
+     * @param string $column The column name
+     * @return int 0 on success, non-zero on error
+     */
+    public function dropGeneratedExpression($table, $column)
+    {
+        $f_schema = $this->connection->_schema;
+        $this->connection->fieldClean($f_schema);
+        $this->connection->fieldClean($table);
+        $this->connection->fieldClean($column);
+
+        $sql = "ALTER TABLE \"{$f_schema}\".\"{$table}\" ALTER COLUMN \"{$column}\" DROP EXPRESSION";
+
+        return $this->connection->execute($sql);
     }
 }

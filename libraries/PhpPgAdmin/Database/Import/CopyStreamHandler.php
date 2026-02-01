@@ -46,7 +46,8 @@ class CopyStreamHandler
     }
 
     /**
-     * Stream COPY data.
+     * Stream COPY data - complete operation (header + data + terminator).
+     * Use this when you have a complete COPY block in one chunk.
      *
      * @throws CopyException on failures.
      */
@@ -90,6 +91,7 @@ class CopyStreamHandler
 
         $this->logs->addInfo('COPY completed: bytes=' . strlen($dataSend) . ' lines_sent=' . $linesSent);
     }
+
 
     private function maybeTruncateForCopyHeader(string $copyHeader): void
     {

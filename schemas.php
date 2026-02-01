@@ -385,9 +385,12 @@ function doExport($msg = '')
 	$sequenceActions = new SequenceActions($pg);
 
 	$tableNames = [];
+	$tableIcons = [];
 	$tables = $tableActions->getTables(false);
 	while (!$tables->EOF) {
-		$tableNames[] = $tables->fields['relname'];
+		$tableName = $tables->fields['relname'];
+		$tableNames[] = $tableName;
+		$tableIcons[$tableName] = $tables->fields['relkind'] == 'p' ? 'PartitionedTable' : 'Table';
 		$tables->moveNext();
 	}
 
@@ -419,6 +422,7 @@ function doExport($msg = '')
 		],
 		'icons_by_type' => [
 			'views' => $viewIcons,
+			'tables' => $tableIcons,
 		],
 	]);
 }

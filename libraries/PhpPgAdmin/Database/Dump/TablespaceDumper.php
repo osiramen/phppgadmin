@@ -47,6 +47,12 @@ class TablespaceDumper extends ExportDumper
                 }
             }
 
+            $spcnameQuoted = $this->connection->quoteIdentifier($spcname);
+            $this->writeOwner(
+                $spcnameQuoted,
+                'TABLESPACE',
+                $tablespaces->fields['spcowner']
+            );
             $this->writePrivileges(
                 $spcname,
                 'tablespace',

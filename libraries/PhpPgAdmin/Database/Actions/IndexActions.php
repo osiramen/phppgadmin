@@ -14,15 +14,19 @@ class IndexActions extends ActionsBase
      */
     public function getIndexes($table = '', $unique = false)
     {
+        $c_schema = $this->connection->_schema;
+        $this->connection->clean($c_schema);
         $this->connection->clean($table);
 
         $sql =
-            "SELECT c2.relname AS indname, i.indisprimary, i.indisunique, i.indisclustered,
+            "SELECT c2.relname AS indname, i.indisprimary, i.indisunique,
+                i.indisclustered, i.indexrelid,
                 pg_catalog.pg_get_indexdef(i.indexrelid, 0, true) AS inddef
-            FROM pg_catalog.pg_class c, pg_catalog.pg_class c2, pg_catalog.pg_index i
-            WHERE c.relname = '{$table}' AND pg_catalog.pg_table_is_visible(c.oid)
-                AND c.oid = i.indrelid AND i.indexrelid = c2.oid
-        ";
+            FROM pg_catalog.pg_class c
+            JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_catalog.pg_index i ON c.oid = i.indrelid
+            JOIN pg_catalog.pg_class c2 ON i.indexrelid = c2.oid
+            WHERE c.relname = '{$table}' AND n.nspname = '{$c_schema}'";
         if ($unique) {
             $sql .= " AND i.indisunique ";
         }

@@ -14,6 +14,8 @@ class DatabaseDumper extends ExportDumper
 {
     public function dump($subject, array $params, array $options = [])
     {
+        $this->setDumpOptions($options);
+
         $database = $params['database'] ?? $this->connection->conn->database;
         if (!$database) {
             return;
@@ -90,6 +92,11 @@ class DatabaseDumper extends ExportDumper
             $schemas->moveNext();
         }
 
+        $this->writeOwner(
+            $databaseQuoted,
+            'DATABASE',
+            $rs->fields['owner']
+        );
         $this->writePrivileges(
             $database,
             'database',

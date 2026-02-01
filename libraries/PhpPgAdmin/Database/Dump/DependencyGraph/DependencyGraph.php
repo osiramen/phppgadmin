@@ -51,8 +51,12 @@ class DependencyGraph
     /**
      * Add a dependency edge from one node to another.
      *
-     * @param string $fromOid OID of dependent object
-     * @param string $toOid OID of dependency
+     * Semantics: addEdge(A, B) means "A depends on B", so B must come before A in the sorted output.
+     * Example: addEdge(function_oid, table_oid) means the function depends on the table,
+     * so the table must be dumped before the function.
+     *
+     * @param string $fromOid OID of dependent object (depends on toOid)
+     * @param string $toOid OID of dependency (must come before fromOid)
      */
     public function addEdge($fromOid, $toOid)
     {
@@ -96,6 +100,9 @@ class DependencyGraph
      * Perform topological sort using Kahn's algorithm.
      * 
      * Detects circular dependencies and places unsorted nodes separately.
+     * 
+     * Semantics: If addEdge(A, B) was called, B comes before A in the output
+     * (A depends on B, so B must be processed/dumped first).
      *
      * @return array Array of sorted ObjectNode instances
      */
@@ -106,20 +113,26 @@ class DependencyGraph
         }
 
         // Build incoming edge count for each node
+        // edges[A] = [B] means A depends on B, so A has B as a dependency (not an incoming edge from B)
+        // We need to count: for each node, how many OTHER nodes depend on it
         $incomingCount = [];
         foreach ($this->nodes as $oid => $node) {
             $incomingCount[$oid] = 0;
         }
 
+        // Iterate through all edges and count incoming edges correctly
+        // If edges[A] contains B, it means A depends on B (B→A dependency arrow)
+        // So B has an outgoing edge to A, which means A has an incoming edge from B
         foreach ($this->edges as $fromOid => $targets) {
             foreach ($targets as $toOid) {
-                if (isset($incomingCount[$toOid])) {
-                    $incomingCount[$toOid]++;
+                // fromOid depends on toOid, so fromOid should have an incoming edge
+                if (isset($incomingCount[$fromOid])) {
+                    $incomingCount[$fromOid]++;
                 }
             }
         }
 
-        // Queue nodes with no incoming edges
+        // Queue nodes with no incoming edges (no dependencies)
         $queue = [];
         foreach ($incomingCount as $oid => $count) {
             if ($count === 0) {
@@ -137,12 +150,17 @@ class DependencyGraph
             $node->position = $position++;
             $sorted[] = $node;
 
-            // Reduce incoming count for dependent nodes
-            foreach ($this->edges[$oid] as $dependentOid) {
-                if (isset($incomingCount[$dependentOid])) {
-                    $incomingCount[$dependentOid]--;
-                    if ($incomingCount[$dependentOid] === 0) {
-                        $queue[] = $dependentOid;
+            // For nodes that depend on the current node, reduce their incoming count
+            // We need to find all nodes that have current node in their dependency list
+            foreach ($this->edges as $dependentOid => $dependencies) {
+                if (in_array($oid, $dependencies)) {
+                    // dependentOid depends on current oid
+                    // Now that oid is processed, reduce dependentOid's incoming count
+                    if (isset($incomingCount[$dependentOid])) {
+                        $incomingCount[$dependentOid]--;
+                        if ($incomingCount[$dependentOid] === 0) {
+                            $queue[] = $dependentOid;
+                        }
                     }
                 }
             }

@@ -27,6 +27,11 @@ abstract class ExportDumper extends AppContext
      */
     protected $parentDumper = null;
 
+    /**
+     * @var array Dump options (no_owner, no_privileges, etc.)
+     */
+    protected $dumpOptions = [];
+
     public function __construct(?Postgres $connection = null)
     {
         $this->connection = $connection ?? AppContainer::getPostgres();
@@ -40,6 +45,17 @@ abstract class ExportDumper extends AppContext
     public function setOutputStream($stream)
     {
         $this->outputStream = $stream;
+    }
+
+    /**
+     * Sets the dump options (no_owner, no_privileges, etc.)
+     * Should be called at the beginning of dump() method.
+     * 
+     * @param array $options
+     */
+    protected function setDumpOptions(array $options)
+    {
+        $this->dumpOptions = $options;
     }
 
     /**
@@ -58,6 +74,8 @@ abstract class ExportDumper extends AppContext
         }
         // Set parent reference so sub-dumpers can access parent's deferred collections
         $dumper->parentDumper = $this;
+        // Propagate dump options to sub-dumper
+        $dumper->dumpOptions = $this->dumpOptions;
         return $dumper;
     }
 
@@ -139,11 +157,34 @@ abstract class ExportDumper extends AppContext
     }
 
     /**
+     * Generates ALTER ... OWNER TO statement for an object.
+     * Skipped if no_owner option is set.
+     *
+     * @param string $objectName Quoted object name (may include schema)
+     * @param string $objectType SQL object type (TABLE, VIEW, FUNCTION, etc.)
+     * @param string $owner Owner role name (unquoted)
+     */
+    protected function writeOwner($objectName, $objectType, $owner)
+    {
+        if (!empty($this->dumpOptions['no_owner'])) {
+            return;
+        }
+
+        if (empty($owner)) {
+            return;
+        }
+
+        $ownerQuoted = $this->connection->quoteIdentifier($owner);
+        $this->write("\nALTER {$objectType} {$objectName} OWNER TO {$ownerQuoted};\n");
+    }
+
+    /**
      * Generates full GRANT/REVOKE SQL for an object, including:
      * - REVOKE ALL FROM PUBLIC (falls nötig)
      * - GRANT ... 
      * - GRANT ... WITH GRANT OPTION
      * - SET/RESET SESSION AUTHORIZATION für Grantor ≠ Owner
+     * Skipped if no_privileges option is set.
      *
      * @param string $objectName
      * @param string $objectType
@@ -151,6 +192,10 @@ abstract class ExportDumper extends AppContext
      */
     protected function writePrivileges($objectName, $objectType, $owner, $acl = null)
     {
+        if (!empty($this->dumpOptions['no_privileges'])) {
+            return;
+        }
+
         $aclActions = new AclActions($this->connection);
         if (isset($acl)) {
             $privileges = $aclActions->parseAcl($acl);

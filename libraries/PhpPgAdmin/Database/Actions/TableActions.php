@@ -144,7 +144,8 @@ class TableActions extends ActionsBase
         $c_schema = $this->connection->_schema;
         $this->connection->clean($c_schema);
         if ($all) {
-            $sql = "SELECT schemaname AS nspname, tablename AS relname, tableowner AS relowner
+            $sql = "SELECT schemaname AS nspname, tablename AS relname,
+                        tableowner AS relowner, relkind
                     FROM pg_catalog.pg_tables
                     WHERE schemaname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
                     ORDER BY schemaname, tablename";
@@ -302,7 +303,9 @@ class TableActions extends ActionsBase
         $uniquekey,
         $primarykey,
         $partitionStrategy = null,
-        $partitionKeys = []
+        $partitionKeys = [],
+        $isGenerated = [],
+        $generatedExpr = []
     ) {
         $f_schema = $this->connection->_schema;
         $this->connection->fieldClean($f_schema);
@@ -353,14 +356,24 @@ class TableActions extends ActionsBase
             }
             if ($array[$i] == '[]')
                 $sql .= '[]';
-            if (!isset($primarykey[$i])) {
-                if (isset($uniquekey[$i]))
-                    $sql .= " UNIQUE";
-                if (isset($notnull[$i]))
-                    $sql .= " NOT NULL";
+
+            // Check if this is a generated column (PG12+)
+            if (!empty($isGenerated[$i]) && !empty($generatedExpr[$i]) && $this->connection->major_version >= 12) {
+                // Generated column - use GENERATED ALWAYS AS ... STORED syntax
+                // Generated columns cannot have explicit DEFAULT or UNIQUE constraints
+                $this->connection->clean($generatedExpr[$i]);
+                $sql .= " GENERATED ALWAYS AS ({$generatedExpr[$i]}) STORED";
+            } else {
+                // Regular column - existing logic for NOT NULL, UNIQUE, DEFAULT
+                if (!isset($primarykey[$i])) {
+                    if (isset($uniquekey[$i]))
+                        $sql .= " UNIQUE";
+                    if (isset($notnull[$i]))
+                        $sql .= " NOT NULL";
+                }
+                if ($default[$i] != '')
+                    $sql .= " DEFAULT {$default[$i]}";
             }
-            if ($default[$i] != '')
-                $sql .= " DEFAULT {$default[$i]}";
 
             if ($colcomment[$i] != '')
                 $comment_sql .= "COMMENT ON COLUMN \"{$name}\".\"{$field[$i]}\" IS '{$colcomment[$i]}';\n";

@@ -100,6 +100,31 @@ function addColumnRow() {
 				"handleDefaultPresetChange(" + newRowIndex + ");",
 			);
 		}
+
+		// Update onchange for generated checkbox
+		if (
+			input.type === "checkbox" &&
+			name &&
+			name.match(/^is_generated\[/)
+		) {
+			input.setAttribute(
+				"onchange",
+				"handleGeneratedChange(" + newRowIndex + ");",
+			);
+		}
+	}
+
+	// Update IDs on div containers (default_container, generated_container)
+	var divContainers = newRow.querySelectorAll("div[id]");
+	for (var j = 0; j < divContainers.length; j++) {
+		var div = divContainers[j];
+		var divId = div.getAttribute("id");
+		if (divId) {
+			var divIdMatch = divId.match(/^(.+?)(\d+)$/);
+			if (divIdMatch) {
+				div.setAttribute("id", divIdMatch[1] + newRowIndex);
+			}
+		}
 	}
 
 	// Append the new row to the table
@@ -121,7 +146,12 @@ function addColumnRow() {
 	}
 
 	// Initialize the new row's default preset handling
-	handleDefaultPresetChange(newRowIndex);
+	handleDefaultPresetChange(newRowIndex, false);
+
+	// Initialize the new row's generated column handling (if PG12+)
+	if (typeof hasGeneratedColumns !== "undefined" && hasGeneratedColumns) {
+		handleGeneratedChange(newRowIndex, false);
+	}
 }
 
 function handleDefaultPresetChange(rowIndex, focusCustom) {
@@ -169,6 +199,69 @@ function handleDefaultPresetChange(rowIndex, focusCustom) {
 
 		if (presetValue === "NULL" && notnullCheckbox) {
 			notnullCheckbox.checked = false;
+		}
+	}
+}
+
+/**
+ * Handle generated column checkbox change.
+ * Toggles visibility between default value fields and generated expression field.
+ * Generated columns and default values are mutually exclusive.
+ *
+ * @param {number|string} rowIndex - The row index (0-based) or empty string for single-column forms
+ * @param {boolean} clearFields - Whether to clear the opposite field values (default: true)
+ */
+function handleGeneratedChange(rowIndex, clearFields) {
+	if (typeof rowIndex === "undefined" || rowIndex === null) {
+		rowIndex = "";
+	}
+	if (typeof clearFields === "undefined") {
+		clearFields = true;
+	}
+
+	function getMaybeIndexed(baseId) {
+		if (rowIndex === "") {
+			return document.getElementById(baseId);
+		}
+		return (
+			document.getElementById(baseId + rowIndex) ||
+			document.getElementById(baseId)
+		);
+	}
+
+	var generatedCheckbox = getMaybeIndexed("is_generated");
+	var defaultContainer = getMaybeIndexed("default_container");
+	var generatedContainer = getMaybeIndexed("generated_container");
+
+	if (!generatedCheckbox) {
+		return; // PG < 12 or not applicable
+	}
+
+	var isGenerated = generatedCheckbox.checked;
+
+	// Toggle visibility
+	if (defaultContainer) {
+		defaultContainer.style.display = isGenerated ? "none" : "block";
+	}
+	if (generatedContainer) {
+		generatedContainer.style.display = isGenerated ? "block" : "none";
+	}
+
+	// Clear opposite field values when toggling (but not during initialization)
+	if (clearFields) {
+		if (isGenerated) {
+			// Clear default fields when enabling generated
+			var defaultPreset = getMaybeIndexed("default_preset");
+			var defaultInput = getMaybeIndexed("default");
+			if (defaultPreset) defaultPreset.value = "";
+			if (defaultInput) {
+				defaultInput.value = "";
+				defaultInput.style.display = "none";
+			}
+		} else {
+			// Clear generated expression when disabling generated
+			var generatedExpr = getMaybeIndexed("generated_expr");
+			if (generatedExpr) generatedExpr.value = "";
 		}
 	}
 }

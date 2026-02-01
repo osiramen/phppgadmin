@@ -35,6 +35,8 @@ class SchemaDumper extends ExportDumper
 
     public function dump($subject, array $params, array $options = [])
     {
+        $this->setDumpOptions($options);
+
         $schema = $params['schema'] ?? $this->connection->_schema;
         if (!$schema) {
             return;
@@ -69,20 +71,33 @@ class SchemaDumper extends ExportDumper
             $this->write("CREATE SCHEMA " . $this->getIfNotExists($options) . $this->schemaQuoted . ";\n");
         }
 
-        // 1. Non-composite types (enums, base types) - no dependency issues
+        // 0. Owner
+        $this->writeOwner(
+            $this->schemaQuoted,
+            'SCHEMA',
+            $rs->fields['ownername']
+        );
+
+        // 1. Domains and composite types (with unified dependency sorting)
+        // These can have cross-dependencies so must be sorted together
+        if ($includeSchemaObjects) {
+            $this->dumpDomainsAndCompositeTypes($schema, $options);
+        }
+
+        // 2. Simple types (enums, base types) - no dependencies on user types
         if ($includeSchemaObjects) {
             $this->dumpSimpleTypes($schema, $options);
         }
 
-        // 2. Sequences (without ownership - deferred)
+        // 3. Sequences (without ownership - deferred)
         $this->dumpSequences($schema, $options);
 
-        // 3. Operators
+        // 4. Operators
         if ($includeSchemaObjects) {
             $this->dumpOperators($schema, $options);
         }
 
-        // 4. UNIFIED TOPOLOGICAL DUMP: Functions, Tables, Domains, Aggregates with dependency analysis
+        // 5. UNIFIED TOPOLOGICAL DUMP: Functions, Tables, Aggregates with dependency analysis
         $this->dumpObjectsTopologically($schema, $options);
 
         // 5. Views (regular views with dependency sorting)
@@ -129,7 +144,7 @@ class SchemaDumper extends ExportDumper
         // When specific objects are selected, check if dependencies should be included
         if ($this->hasObjectSelection) {
 
-            if (!$options['include_dependencies'] ?? false) {
+            if (!($options['include_dependencies'] ?? false)) {
                 // Skip types entirely when dependencies are disabled (pg_dump behavior)
                 return;
             }
@@ -186,7 +201,181 @@ class SchemaDumper extends ExportDumper
     }
 
     /**
-     * Dump functions, tables, and domains in topologically sorted order.
+     * Dump all domains and composite types with unified dependency ordering.
+     * Handles cross-dependencies: domains can depend on composite types and vice versa.
+     *
+     * @param string $schema Schema name
+     * @param array $options Dump options
+     */
+    protected function dumpDomainsAndCompositeTypes($schema, $options)
+    {
+        $this->write("\n-- Domains and Composite Types in schema $this->schemaQuoted\n");
+
+        // Get all domains and standalone composite types
+        // Exclude composite types that are implicitly created for tables/views
+        $types = $this->connection->selectSet(
+            "SELECT t.oid, t.typname, t.typtype
+                FROM pg_type t
+                JOIN pg_namespace n ON n.oid = t.typnamespace
+                LEFT JOIN pg_class c ON c.oid = t.typrelid
+                WHERE n.nspname = '{$this->schemaEscaped}'
+                AND (
+                    t.typtype = 'd'  -- All domains
+                    OR (t.typtype = 'c' AND c.relkind = 'c')  -- Only standalone composite types
+                )
+                ORDER BY t.typtype, t.typname"
+        );
+
+        if (!$types || $types->EOF) {
+            return;
+        }
+
+        // Build list of types and their dependencies
+        $typeList = [];
+        $typeDeps = [];
+
+        while (!$types->EOF) {
+            $oid = $types->fields['oid'];
+            $name = $types->fields['typname'];
+            $typtype = $types->fields['typtype'];
+            $typeList[$oid] = ['name' => $name, 'type' => $typtype];
+            $typeDeps[$oid] = [];
+            $types->moveNext();
+        }
+
+        // Find domain dependencies (domain base type can be domain or composite)
+        $domainDeps = $this->connection->selectSet(
+            "SELECT t1.oid AS type_oid, t2.oid AS depends_on_oid
+                FROM pg_type t1
+                JOIN pg_namespace n ON n.oid = t1.typnamespace
+                JOIN pg_type t2 ON t2.oid = t1.typbasetype
+                WHERE n.nspname = '{$this->schemaEscaped}'
+                AND t1.typtype = 'd'
+                AND t2.typtype IN ('d', 'c')"
+        );
+
+        while ($domainDeps && !$domainDeps->EOF) {
+            $typeOid = $domainDeps->fields['type_oid'];
+            $depOid = $domainDeps->fields['depends_on_oid'];
+            if (isset($typeDeps[$typeOid])) {
+                $typeDeps[$typeOid][] = $depOid;
+            }
+            $domainDeps->moveNext();
+        }
+
+        // Find composite type dependencies (attributes can be domains or other composite types)
+        $compositeDeps = $this->connection->selectSet(
+            "SELECT DISTINCT t1.oid AS type_oid, t2.oid AS depends_on_oid
+                FROM pg_type t1
+                JOIN pg_namespace n ON n.oid = t1.typnamespace
+                JOIN pg_class c ON c.oid = t1.typrelid
+                JOIN pg_attribute a ON a.attrelid = c.oid
+                JOIN pg_type t2 ON t2.oid = a.atttypid
+                WHERE n.nspname = '{$this->schemaEscaped}'
+                AND t1.typtype = 'c'
+                AND t2.typtype IN ('d', 'c')
+                AND a.attnum > 0
+                AND NOT a.attisdropped"
+        );
+
+        while ($compositeDeps && !$compositeDeps->EOF) {
+            $typeOid = $compositeDeps->fields['type_oid'];
+            $depOid = $compositeDeps->fields['depends_on_oid'];
+            if (isset($typeDeps[$typeOid])) {
+                $typeDeps[$typeOid][] = $depOid;
+            }
+            $compositeDeps->moveNext();
+        }
+
+        // Topological sort
+        $sorted = $this->sortTypesByDependency($typeList, $typeDeps);
+
+        // Dump types in sorted order
+        $domainDumper = $this->createSubDumper('domain');
+        $typeDumper = $this->createSubDumper('type');
+
+        foreach ($sorted as $typeInfo) {
+            if ($typeInfo['type'] === 'd') {
+                $domainDumper->dump('domain', [
+                    'schema' => $schema,
+                    'domain' => $typeInfo['name'],
+                ], $options);
+            } elseif ($typeInfo['type'] === 'c') {
+                $typeDumper->dump('type', [
+                    'schema' => $schema,
+                    'type' => $typeInfo['name'],
+                ], $options);
+            }
+        }
+    }
+
+    /**
+     * Sort types (domains and composite types) by dependency.
+     *
+     * @param array $typeList Map of OID => ['name' => string, 'type' => 'd'|'c']
+     * @param array $typeDeps Map of OID => array of dependency OIDs
+     * @return array Sorted array of type info ['name' => string, 'type' => 'd'|'c']
+     */
+    protected function sortTypesByDependency($typeList, $typeDeps)
+    {
+        // Build incoming edge count
+        $incomingCount = [];
+        foreach ($typeList as $oid => $info) {
+            $incomingCount[$oid] = 0;
+        }
+
+        foreach ($typeDeps as $typeOid => $deps) {
+            foreach ($deps as $depOid) {
+                if (isset($incomingCount[$depOid])) {
+                    $incomingCount[$typeOid]++;
+                }
+            }
+        }
+
+        // Queue types with no dependencies
+        $queue = [];
+        foreach ($incomingCount as $oid => $count) {
+            if ($count === 0) {
+                $queue[] = $oid;
+            }
+        }
+
+        // Process queue
+        $sorted = [];
+        $sortedOids = [];
+        while (!empty($queue)) {
+            $oid = array_shift($queue);
+            $sorted[] = $typeList[$oid];
+            $sortedOids[$oid] = true;
+
+            // Find types that depend on current type
+            foreach ($typeDeps as $depOid => $deps) {
+                if (in_array($oid, $deps)) {
+                    $incomingCount[$depOid]--;
+                    if ($incomingCount[$depOid] === 0) {
+                        $queue[] = $depOid;
+                    }
+                }
+            }
+        }
+
+        // Add any remaining types (circular dependencies) in alphabetical order
+        $remaining = [];
+        foreach ($typeList as $oid => $info) {
+            if (!isset($sortedOids[$oid])) {
+                $remaining[] = $info;
+            }
+        }
+        usort($remaining, function ($a, $b) {
+            return strcmp($a['name'], $b['name']);
+        });
+        $sorted = array_merge($sorted, $remaining);
+
+        return $sorted;
+    }
+
+    /**
+     * Dump functions, tables, and aggregates in topologically sorted order.
      *
      * @param string $schema Schema name
      * @param array $options Dump options
@@ -216,19 +405,35 @@ class SchemaDumper extends ExportDumper
                 // Set to true to include all dependent objects
                 $includeDependencies = $options['include_dependencies'] ?? false;
 
-                // Tables: only if explicitly selected
+                // Tables/Partitioned tables: only if explicitly selected
+                // Partitions/Sub-partitioned tables: include if parent partitioned table is selected
                 // Domains/Functions: include if used by selected tables (dependencies)
-                if ($node->type === 'table') {
+                if ($node->type === 'table' || $node->type === 'partitioned_table') {
                     if (!isset($this->selectedObjects[$node->name])) {
                         continue;
                     }
-                } elseif ($node->type === 'domain' || $node->type === 'function') {
+                } elseif ($node->type === 'partition' || $node->type === 'sub_partitioned_table') {
+                    // Partitions are included if their parent partitioned table is selected
+                    // The dependency graph ensures proper ordering (parent before partition)
+                    $parentOid = $node->metadata['parent_oid'] ?? null;
+                    if ($parentOid) {
+                        $parentNode = $this->dependencyGraph->getNode($parentOid);
+                        if (!$parentNode || !isset($this->selectedObjects[$parentNode->name])) {
+                            continue;
+                        }
+                    } else {
+                        // If we can't determine parent, skip unless explicitly selected
+                        if (!isset($this->selectedObjects[$node->name])) {
+                            continue;
+                        }
+                    }
+                } elseif ($node->type === 'function') {
                     // Skip dependencies if user wants pg_dump-style minimal output
                     if (!$includeDependencies) {
                         continue;
                     }
 
-                    // Check if this domain/function is a dependency of any selected table
+                    // Check if this function is a dependency of any selected table
                     if (!$this->isDependencyOfSelectedObjects($node)) {
                         continue;
                     }
@@ -250,10 +455,17 @@ class SchemaDumper extends ExportDumper
                     $this->dumpSingleTable($node, $schema, $dumpOptions);
                     break;
 
-                case 'domain':
-                    if ($includeSchemaObjects) {
-                        $this->dumpSingleDomain($node, $schema, $dumpOptions);
-                    }
+                case 'partitioned_table':
+                    $this->dumpSinglePartitionedTable($node, $schema, $dumpOptions);
+                    break;
+
+                case 'partition':
+                    $this->dumpSinglePartition($node, $schema, $dumpOptions);
+                    break;
+
+                case 'sub_partitioned_table':
+                    // Multi-level partitioning: a partition that is itself partitioned
+                    $this->dumpSingleSubPartitionedTable($node, $schema, $dumpOptions);
                     break;
 
                 case 'aggregate':
@@ -294,6 +506,57 @@ class SchemaDumper extends ExportDumper
     {
         $dumper = $this->createSubDumper('table');
         $dumper->dump('table', [
+            'table' => $node->name,
+            'schema' => $schema,
+        ], $options);
+    }
+
+    /**
+     * Dump a single partitioned table (parent table with PARTITION BY) by node.
+     * PostgreSQL 10+ feature.
+     *
+     * @param \PhpPgAdmin\Database\Dump\DependencyGraph\ObjectNode $node Partitioned table node
+     * @param string $schema Schema name
+     * @param array $options Dump options
+     */
+    protected function dumpSinglePartitionedTable($node, $schema, $options)
+    {
+        $dumper = $this->createSubDumper('partitioned_table');
+        $dumper->dump('partitioned_table', [
+            'table' => $node->name,
+            'schema' => $schema,
+        ], $options);
+    }
+
+    /**
+     * Dump a single partition (child table of a partitioned table) by node.
+     * PostgreSQL 10+ feature.
+     *
+     * @param \PhpPgAdmin\Database\Dump\DependencyGraph\ObjectNode $node Partition node
+     * @param string $schema Schema name
+     * @param array $options Dump options
+     */
+    protected function dumpSinglePartition($node, $schema, $options)
+    {
+        $dumper = $this->createSubDumper('partition');
+        $dumper->dump('partition', [
+            'table' => $node->name,
+            'schema' => $schema,
+        ], $options);
+    }
+
+    /**
+     * Dump a single sub-partitioned table (partition that is itself partitioned) by node.
+     * PostgreSQL 10+ multi-level partitioning feature.
+     *
+     * @param \PhpPgAdmin\Database\Dump\DependencyGraph\ObjectNode $node Sub-partitioned table node
+     * @param string $schema Schema name
+     * @param array $options Dump options
+     */
+    protected function dumpSingleSubPartitionedTable($node, $schema, $options)
+    {
+        $dumper = $this->createSubDumper('sub_partitioned_table');
+        $dumper->dump('sub_partitioned_table', [
             'table' => $node->name,
             'schema' => $schema,
         ], $options);
@@ -357,12 +620,18 @@ class SchemaDumper extends ExportDumper
             return false;
         }
 
-        // Check if any selected table has an incoming edge FROM this node
-        // Edge direction: dependency → dependent (e.g., domain → table)
-        // So we check if this node points TO any selected table
+        // Check if any selected table/partitioned table depends on this node
+        // Edge direction: table depends on domain/function
+        // So we check if any selected table has this node as a dependency
         foreach (array_keys($this->selectedObjects) as $selectedName) {
+            // Check regular tables
             $selectedNode = $this->findNodeByName($selectedName, 'table');
-            if ($selectedNode && $this->dependencyGraph->hasDependency($node->oid, $selectedNode->oid)) {
+            if ($selectedNode && $this->dependencyGraph->hasDependency($selectedNode->oid, $node->oid)) {
+                return true;
+            }
+            // Check partitioned tables
+            $selectedNode = $this->findNodeByName($selectedName, 'partitioned_table');
+            if ($selectedNode && $this->dependencyGraph->hasDependency($selectedNode->oid, $node->oid)) {
                 return true;
             }
         }

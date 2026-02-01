@@ -45,6 +45,8 @@ class MaterializedViewDumper extends ExportDumper
 
         if ($viewDef) {
             $this->write("CREATE MATERIALIZED VIEW " . $this->getIfNotExists($options) . "{$this->schemaQuoted}.{$this->viewQuoted} AS\n");
+            // Remove trailing semicolon from view definition if present
+            $viewDef = rtrim($viewDef, " \t\n\r\0\x0B;");
             $this->write($viewDef);
             $this->write("\nWITH NO DATA;\n\n");
 
@@ -68,6 +70,11 @@ class MaterializedViewDumper extends ExportDumper
         $this->deferTriggers($view, $schema, $options);
 
         // Materialized views use table privileges
+        $this->writeOwner(
+            "{$this->schemaQuoted}.{$this->viewQuoted}",
+            'MATERIALIZED VIEW',
+            $rs->fields['relowner']
+        );
         $this->writePrivileges($view, 'table', $rs->fields['relowner']);
     }
 

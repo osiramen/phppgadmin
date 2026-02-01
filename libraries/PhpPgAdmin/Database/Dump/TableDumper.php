@@ -4,29 +4,28 @@ namespace PhpPgAdmin\Database\Dump;
 
 use PhpPgAdmin\Database\Actions\AclActions;
 use PhpPgAdmin\Database\Actions\RuleActions;
-use PhpPgAdmin\Database\Actions\TriggerActions;
+use PhpPgAdmin\Database\Cursor\CursorReader;
 use PhpPgAdmin\Database\Export\SqlFormatter;
 use PhpPgAdmin\Database\Actions\AdminActions;
 use PhpPgAdmin\Database\Actions\IndexActions;
 use PhpPgAdmin\Database\Actions\TableActions;
+use PhpPgAdmin\Database\Actions\TriggerActions;
 use PhpPgAdmin\Database\Actions\ConstraintActions;
-use PhpPgAdmin\Database\Cursor\CursorReader;
+use PhpPgAdmin\Database\Dump\DependencyGraph\DependencyGraph;
 
 /**
  * Dumper for PostgreSQL tables (structure and data).
  */
-class TableDumper extends ExportDumper
+class TableDumper extends TableBaseDumper
 {
-    private $tableQuoted;
-    private $schemaQuoted;
+    // Advanced features specific to TableDumper (not in other dumpers)
     private $tableOid;
-    private $deferredConstraints = [];
     private $deferredIndexes = [];
     private $deferredDefaults = [];
     private $deferredGeneratedColumns = [];
 
     /**
-     * @var \PhpPgAdmin\Database\Dump\DependencyGraph\DependencyGraph|null
+     * @var DependencyGraph|null
      */
     private $dependencyGraph = null;
 
@@ -39,8 +38,7 @@ class TableDumper extends ExportDumper
             return;
         }
 
-        $this->tableQuoted = $this->connection->quoteIdentifier($table);
-        $this->schemaQuoted = $this->connection->quoteIdentifier($schema);
+        $this->initializeQuotedIdentifiers($table, $schema);
 
         // Get table OID for dependency analysis
         $this->tableOid = $this->getTableOid($table, $schema);
@@ -65,7 +63,7 @@ class TableDumper extends ExportDumper
         }
 
         if (empty($options['structure_only'])) {
-            $this->dumpData($table, $schema, $options);
+            $this->dumpData($table, $schema, $options, 'table');
         }
 
         if (empty($options['data_only'])) {
@@ -81,46 +79,6 @@ class TableDumper extends ExportDumper
         // Register this table as dumped (for sequence ownership validation)
         if ($this->parentDumper instanceof SchemaDumper) {
             $this->parentDumper->registerDumpedTable($schema, $table);
-        }
-    }
-
-    protected function dumpData($table, $schema, $options)
-    {
-        $this->write("\n-- Data for table \"{$schema}\".\"{$table}\"\n");
-
-        try {
-            // Build SQL query for table export
-            $sql = "SELECT * FROM {$this->schemaQuoted}.{$this->tableQuoted}";
-
-            // Create cursor reader with automatic chunk size calculation
-            $reader = new CursorReader(
-                $this->connection,
-                $sql,
-                null, // Auto-calculate chunk size
-                $table,
-                $schema,
-                'r' // relation kind
-            );
-
-            // Open cursor (begins transaction)
-            $reader->open();
-
-            // Send data to SQL formatter for output
-            $sqlFormatter = new SqlFormatter();
-            $sqlFormatter->setOutputStream($this->outputStream);
-            $metadata = [
-                'table' => "{$this->schemaQuoted}.{$this->tableQuoted}",
-                'batch_size' => $options['batch_size'] ?? 1000,
-                'insert_format' => $options['insert_format'] ?? 'copy',
-            ];
-            $reader->processRows($sqlFormatter, $metadata);
-
-            // Close cursor (commits transaction)
-            $reader->close();
-
-        } catch (\Exception $e) {
-            error_log('Error dumping table data: ' . $e->getMessage());
-            $this->write("-- Error dumping data: " . $e->getMessage() . "\n");
         }
     }
 
@@ -346,7 +304,12 @@ class TableDumper extends ExportDumper
             $this->write($col_comments_sql);
         }
 
-        // privileges
+        // owner and privileges
+        $this->writeOwner(
+            "{$this->schemaQuoted}.{$this->tableQuoted}",
+            'TABLE',
+            $t->fields['relowner']
+        );
         $this->writePrivileges(
             $table,
             'table',
@@ -361,14 +324,15 @@ class TableDumper extends ExportDumper
 
     /**
      * Apply deferred constraints after data import.
+     * Overrides parent to add validation logic for deferred check constraints.
      */
-    private function applyDeferredConstraints($options)
+    protected function applyDeferredConstraints($options, $sectionLabel = 'Constraints (applied after data import)')
     {
         if (empty($this->deferredConstraints)) {
             return;
         }
 
-        $this->write("\n-- Constraints (applied after data import)\n\n");
+        $this->write("\n-- {$sectionLabel}\n\n");
 
         $needsValidation = [];
 
@@ -396,174 +360,8 @@ class TableDumper extends ExportDumper
     }
 
     /**
-     * Defer foreign key constraint to parent SchemaDumper for global application.
-     * This prevents forward references where Table A references Table B before B is created.
-     */
-    private function deferForeignKeyToParent($constraintName, $definition)
-    {
-        // Access parent dumper's deferred foreign keys collection
-        if ($this->parentDumper instanceof SchemaDumper) {
-            $this->parentDumper->addDeferredForeignKey([
-                'schemaQuoted' => $this->schemaQuoted,
-                'tableQuoted' => $this->tableQuoted,
-                'name' => $constraintName,
-                'definition' => $definition,
-            ]);
-        }
-    }
-
-    /**
-     * Write indexes for the table.
-     */
-    private function writeIndexes($table, $options)
-    {
-        $indexActions = new IndexActions($this->connection);
-
-        $indexes = $indexActions->getIndexes($table);
-
-        if (!is_object($indexes) || $indexes->EOF) {
-            return;
-        }
-
-        $this->write("\n-- Indexes\n\n");
-
-        while (!$indexes->EOF) {
-            if ($indexes->fields['indisprimary']) {
-                // Skip primary key index (created with constraint)
-                $indexes->moveNext();
-                continue;
-            }
-
-            $def = $indexes->fields['inddef'];
-
-            if (!empty($options['if_not_exists'])) {
-                if ($this->connection->major_version >= 9.5) {
-                    $def = str_replace(
-                        'CREATE UNIQUE INDEX',
-                        'CREATE UNIQUE INDEX IF NOT EXISTS',
-
-                        $def
-                    );
-                    $def = str_replace(
-                        'CREATE INDEX',
-                        'CREATE INDEX IF NOT EXISTS',
-                        $def
-                    );
-                }
-            }
-            $this->write("$def;\n");
-            $indexes->moveNext();
-        }
-    }
-
-    /**
-     * Defer triggers for the table (to be applied after functions are created).
-     */
-    private function deferTriggers($table, $schema, $options)
-    {
-        $triggerActions = new TriggerActions($this->connection);
-        $triggers = $triggerActions->getTriggers($table);
-
-        if (!is_object($triggers) || $triggers->EOF) {
-            return;
-        }
-
-        while (!$triggers->EOF) {
-            $def = $triggers->fields['tgdef'];
-            if (!empty($options['if_not_exists'])) {
-                if ($this->connection->major_version >= 14) {
-                    $def = str_replace(
-                        'CREATE CONSTRAINT TRIGGER',
-                        'CREATE OR REPLACE CONSTRAINT TRIGGER',
-                        $def
-                    );
-                    $def = str_replace(
-                        'CREATE TRIGGER',
-                        'CREATE OR REPLACE TRIGGER',
-                        $def
-                    );
-                }
-            }
-
-            // Add to parent SchemaDumper's deferred collection
-            if ($this->parentDumper && method_exists($this->parentDumper, 'addDeferredTrigger')) {
-                $this->parentDumper->addDeferredTrigger($schema, $table, $def);
-            }
-
-            $triggers->moveNext();
-        }
-    }
-
-    /**
-     * Defer rules for the table (to be applied after functions are created).
-     */
-    private function deferRules($table, $schema, $options)
-    {
-        $ruleActions = new RuleActions($this->connection);
-        $rules = $ruleActions->getRules($table);
-
-        if (!is_object($rules) || $rules->EOF) {
-            return;
-        }
-
-        while (!$rules->EOF) {
-            $def = $rules->fields['definition'];
-            $def = str_replace('CREATE RULE', 'CREATE OR REPLACE RULE', $def);
-
-            // Add to parent SchemaDumper's deferred collection
-            if ($this->parentDumper && method_exists($this->parentDumper, 'addDeferredRule')) {
-                $this->parentDumper->addDeferredRule($schema, $table, $def);
-            }
-
-            $rules->moveNext();
-        }
-    }
-
-
-    /**
-     * Dump autovacuum settings for the table.
-     */
-    protected function dumpAutovacuumSettings($table, $schema)
-    {
-        $adminActions = new AdminActions($this->connection);
-
-        $oldSchema = $this->connection->_schema;
-        $this->connection->_schema = $schema;
-
-        $autovacs = $adminActions->getTableAutovacuum($table);
-
-        $this->connection->_schema = $oldSchema;
-
-        if (!$autovacs || $autovacs->EOF) {
-            return;
-        }
-
-        while ($autovacs && !$autovacs->EOF) {
-            $options = [];
-            foreach ($autovacs->fields as $key => $value) {
-                if (is_int($key)) {
-                    continue;
-                }
-                if ($key === 'nspname' || $key === 'relname') {
-                    continue;
-                }
-                if ($value === null || $value === '') {
-                    continue;
-                }
-                $options[] = $key . '=' . $value;
-            }
-
-            if (!empty($options)) {
-                $this->write("ALTER TABLE \"{$schema}\".\"{$table}\" SET (" . implode(', ', $options) . ");\n");
-                $this->write("\n");
-            }
-
-            $autovacs->moveNext();
-        }
-    }
-
-    /**
      * Get table OID for dependency analysis.
+     * Handles both regular tables (relkind 'r') and partitioned tables (relkind 'p').
      *
      * @param string $table Table name
      * @param string $schema Schema name
@@ -579,7 +377,7 @@ class TableDumper extends ExportDumper
                 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
                 WHERE c.relname = '$tableEsc'
                 AND n.nspname = '$schemaEsc'
-                AND c.relkind = 'r'";
+                AND c.relkind IN ('r', 'p')";
 
         $result = $this->connection->selectSet($sql);
 

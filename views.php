@@ -893,13 +893,16 @@ function doTree()
 	$pg = AppContainer::getPostgres();
 	$viewActions = new ViewActions($pg);
 
-	$views = $viewActions->getViews();
+	// Get both normal and materialized views
+	$views = $viewActions->getViews(true, true);
 
 	$reqvars = $misc->getRequestVars('view');
 
 	$attrs = [
 		'text' => field('relname'),
-		'icon' => 'View',
+		'icon' => callback(function ($row) {
+			return ($row['relkind'] == 'm') ? 'MaterializedView' : 'View';
+		}),
 		'iconAction' => url('display.php', $reqvars, ['view' => field('relname')]),
 		'toolTip' => field('relcomment'),
 		'action' => url('redirect.php', $reqvars, ['view' => field('relname')]),

@@ -95,6 +95,8 @@ if ($use_internal) {
 		'truncate_tables' => isset($_REQUEST['truncate_tables']),
 		'add_create_database' => isset($_REQUEST['add_create_database']),
 		'add_create_schema' => isset($_REQUEST['add_create_schema']),
+		'no_owner' => isset($_REQUEST['no_owner']),
+		'no_privileges' => isset($_REQUEST['no_privileges']),
 	];
 
 	// Set response headers and open output stream
@@ -169,6 +171,9 @@ if ($use_pg_dumpall) {
 	// Build command with connection parameters
 	$pg_dumpall = $misc->escapeShellCmd($pg_dumpall_path);
 	$cmd = buildDumpCommandWithConnectionParams($pg_dumpall, $server_info);
+
+	// Add format options based on request
+	$cmd = addPgDumpFormatOptions($cmd, $insert_format);
 
 	// Execute based on output method
 	try {
@@ -582,6 +587,12 @@ function addPgDumpFormatOptions($cmd, $insert_format)
 	}
 	if (!isset($_REQUEST['include_comments'])) {
 		$cmd .= ' --no-comments';
+	}
+	if (isset($_REQUEST['no_owner'])) {
+		$cmd .= ' --no-owner';
+	}
+	if (isset($_REQUEST['no_privileges'])) {
+		$cmd .= ' --no-privileges';
 	}
 	return $cmd;
 }

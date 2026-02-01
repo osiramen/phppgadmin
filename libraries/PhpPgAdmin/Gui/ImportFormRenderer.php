@@ -68,7 +68,7 @@ class ImportFormRenderer extends AppContext
                         <?= $lang['strdeferself'] ?></label></div>
                 <div class="my-1 ml-1"><label><input type="checkbox" name="opt_allow_drops" checked />
                         <?= $lang['strimportallowdrops'] ?></label></div>
-                <div class="my-1 ml-1"><label><input type="checkbox" name="opt_ignore_connect" />
+                <div class="my-1 ml-1"><label><input type="checkbox" name="opt_ignore_connect" checked />
                         <?= $lang['strimportignoreconnect'] ?? 'Ignore \\connect commands' ?></label></div>
                 <div class="my-1 ml-1"><label><input type="checkbox" name="opt_stop_on_error" checked />
                         <?= $lang['strimportstoponerror'] ?? 'Stop on error' ?>

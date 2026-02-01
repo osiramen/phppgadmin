@@ -42,6 +42,8 @@ class DependencyAnalyzer
 
     /**
      * Build complete dependency graph for objects in scope.
+     * 
+     * Note: Domains are excluded as they are dumped separately at the beginning.
      *
      * @return DependencyGraph Populated dependency graph
      */
@@ -52,7 +54,9 @@ class DependencyAnalyzer
         // Load all objects into graph as nodes
         $this->loadFunctions($graph);
         $this->loadTables($graph);
-        $this->loadDomains($graph);
+        $this->loadPartitionedTables($graph);
+        $this->loadPartitions($graph);
+        // Note: Domains are dumped separately before topological analysis
         $this->loadAggregates($graph);
 
         // Build type cache for efficient lookups
@@ -62,8 +66,7 @@ class DependencyAnalyzer
         $this->addFunctionToFunctionDependencies($graph);
         $this->addFunctionToTableDependencies($graph);
         $this->addTableToFunctionDependencies($graph);
-        $this->addTableToDomainDependencies($graph);
-        $this->addDomainToFunctionDependencies($graph);
+        // Note: Domain dependencies are handled separately in SchemaDumper::dumpDomains()
         $this->addAggregateToFunctionDependencies($graph);
 
         return $graph;
@@ -107,7 +110,8 @@ class DependencyAnalyzer
     }
 
     /**
-     * Load all tables in scope as graph nodes.
+     * Load all regular tables in scope as graph nodes.
+     * Excludes partitioned tables and partitions (handled separately).
      *
      * @param DependencyGraph $graph Graph to populate
      */
@@ -115,11 +119,17 @@ class DependencyAnalyzer
     {
         $schemaList = $this->escapeSchemaList();
 
+        // Regular tables only (relkind 'r'), exclude child partitions
         $sql = "SELECT c.oid, c.relname, n.nspname
                 FROM pg_catalog.pg_class c
                 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
                 WHERE n.nspname IN ($schemaList)
                 AND c.relkind = 'r'
+                AND NOT EXISTS (
+                    SELECT 1 FROM pg_inherits i
+                    JOIN pg_class p ON p.oid = i.inhparent
+                    WHERE i.inhrelid = c.oid AND p.relkind = 'p'
+                )
                 ORDER BY c.relname";
 
         $result = $this->connection->selectSet($sql);
@@ -132,6 +142,99 @@ class DependencyAnalyzer
                 $result->fields['nspname']
             );
             $graph->addNode($node);
+            $result->moveNext();
+        }
+    }
+
+    /**
+     * Load all partitioned tables (top-level parent tables) in scope as graph nodes.
+     * Excludes sub-partitioned tables (partitions that are themselves partitioned).
+     * PostgreSQL 10+ feature.
+     *
+     * @param DependencyGraph $graph Graph to populate
+     */
+    private function loadPartitionedTables(DependencyGraph $graph)
+    {
+        // Partitioned tables require PostgreSQL 10+
+        if ($this->connection->major_version < 10) {
+            return;
+        }
+
+        $schemaList = $this->escapeSchemaList();
+
+        // Only load top-level partitioned tables (those that are NOT partitions of another table)
+        $sql = "SELECT c.oid, c.relname, n.nspname
+                FROM pg_catalog.pg_class c
+                JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname IN ($schemaList)
+                AND c.relkind = 'p'
+                AND NOT EXISTS (
+                    SELECT 1 FROM pg_inherits i
+                    JOIN pg_class p ON p.oid = i.inhparent
+                    WHERE i.inhrelid = c.oid AND p.relkind = 'p'
+                )
+                ORDER BY c.relname";
+
+        $result = $this->connection->selectSet($sql);
+
+        while ($result && !$result->EOF) {
+            $node = new ObjectNode(
+                $result->fields['oid'],
+                'partitioned_table',
+                $result->fields['relname'],
+                $result->fields['nspname']
+            );
+            $graph->addNode($node);
+            $result->moveNext();
+        }
+    }
+
+    /**
+     * Load all partitions (child tables of partitioned tables) in scope as graph nodes.
+     * Adds dependency edges from partitions to their parent partitioned tables.
+     * PostgreSQL 10+ feature.
+     *
+     * @param DependencyGraph $graph Graph to populate
+     */
+    private function loadPartitions(DependencyGraph $graph)
+    {
+        // Partitions require PostgreSQL 10+
+        if ($this->connection->major_version < 10) {
+            return;
+        }
+
+        $schemaList = $this->escapeSchemaList();
+
+        // Get partitions with their parent OID
+        // Partitions can have relkind 'r' (regular table) or 'p' (sub-partitioned table for multi-level partitioning)
+        $sql = "SELECT c.oid, c.relname, n.nspname, c.relkind, i.inhparent AS parent_oid
+                FROM pg_catalog.pg_class c
+                JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                JOIN pg_inherits i ON i.inhrelid = c.oid
+                JOIN pg_class p ON p.oid = i.inhparent AND p.relkind = 'p'
+                WHERE n.nspname IN ($schemaList)
+                AND c.relkind IN ('r', 'p')
+                ORDER BY c.relname";
+
+        $result = $this->connection->selectSet($sql);
+
+        while ($result && !$result->EOF) {
+            // Determine if this is a leaf partition (r) or a sub-partitioned table (p)
+            $isSubPartitioned = $result->fields['relkind'] === 'p';
+
+            $node = new ObjectNode(
+                $result->fields['oid'],
+                $isSubPartitioned ? 'sub_partitioned_table' : 'partition',
+                $result->fields['relname'],
+                $result->fields['nspname'],
+                ['parent_oid' => $result->fields['parent_oid']] // Store parent OID in metadata
+            );
+            $graph->addNode($node);
+
+            // Add dependency edge: partition depends on parent partitioned table
+            // Edge direction: partition → parent (so parent is dumped first in topological sort)
+            $graph->addEdge($result->fields['oid'], $result->fields['parent_oid']);
+
             $result->moveNext();
         }
     }
@@ -358,10 +461,10 @@ class DependencyAnalyzer
                 $tableOid = $this->resolveTypeToTable($typeOid);
                 if ($tableOid) {
                     // Function depends on this table's composite type
-                    // Edge direction: table → function (table must come first)
+                    // Edge direction: function → table (function depends on table, so table comes first)
                     $tableNode = $graph->getNode($tableOid);
-                    if ($tableNode && $tableNode->type === 'table') {
-                        $graph->addEdge($tableOid, $funcOid);
+                    if ($tableNode && ($tableNode->type === 'table' || $tableNode->type === 'partitioned_table')) {
+                        $graph->addEdge($funcOid, $tableOid);
                     }
                 }
             }
@@ -491,6 +594,7 @@ class DependencyAnalyzer
         $schemaList = $this->escapeSchemaList();
 
         // Find all table columns that use domain types
+        // Include regular tables ('r') and partitioned tables ('p')
         $sql = "SELECT DISTINCT 
                     c.oid AS table_oid,
                     t.oid AS domain_oid
@@ -500,7 +604,7 @@ class DependencyAnalyzer
                 JOIN pg_catalog.pg_type t ON t.oid = a.atttypid
                 JOIN pg_catalog.pg_namespace nt ON nt.oid = t.typnamespace
                 WHERE nc.nspname IN ($schemaList)
-                AND c.relkind = 'r'
+                AND c.relkind IN ('r', 'p')
                 AND t.typtype = 'd'
                 AND a.attnum > 0
                 AND NOT a.attisdropped";
@@ -511,8 +615,8 @@ class DependencyAnalyzer
             $tableOid = $result->fields['table_oid'];
             $domainOid = $result->fields['domain_oid'];
 
-            // Edge: domain → table (domain must be created before table)
-            $graph->addEdge($domainOid, $tableOid);
+            // Edge: table depends on domain (domain must be created before table)
+            $graph->addEdge($tableOid, $domainOid);
 
             $result->moveNext();
         }

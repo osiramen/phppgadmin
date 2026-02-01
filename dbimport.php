@@ -46,8 +46,8 @@ function handle_process_chunk_stream(): void
         $misc = AppContainer::getMisc();
         $pg = AppContainer::getPostgres();
 
-        // Identify this import stream so multiple uploads can run in parallel without
-        // stomping each other's session state.
+        // Identify this import stream so multiple uploads can run in parallel
+        // without stomping each other's session state.
         $importSessionId = isset($_REQUEST['import_session_id']) ?? null;
         if (empty($importSessionId)) {
             http_response_code(400);
@@ -157,6 +157,8 @@ function handle_process_chunk_stream(): void
         if ($baseOffset === 0 && $remainderLen === 0) {
             $streamState['truncated_tables'] = [];
             $streamState['deferred'] = [];
+            $streamState['ownership_queue'] = [];
+            $streamState['rights_queue'] = [];
             $streamState['cached_settings'] = [];
             $streamState['last_applied_db'] = null;
             if ($streamState['home_database'] === '') {
@@ -271,8 +273,8 @@ function handle_process_chunk_stream(): void
             $execState = [
                 'scope' => $scope,
                 'scope_ident' => $scopeIdent,
-                'ownership_queue' => [],
-                'rights_queue' => [],
+                'ownership_queue' => &$streamState['ownership_queue'],
+                'rights_queue' => &$streamState['rights_queue'],
                 'deferred' => &$streamState['deferred'],
                 'truncated_tables' => &$streamState['truncated_tables'],
             ];
@@ -312,8 +314,8 @@ function handle_process_chunk_stream(): void
             $execState = [
                 'scope' => $scope,
                 'scope_ident' => $scopeIdent,
-                'ownership_queue' => [],
-                'rights_queue' => [],
+                'ownership_queue' => &$streamState['ownership_queue'],
+                'rights_queue' => &$streamState['rights_queue'],
                 'deferred' => [],
                 'truncated_tables' => &$streamState['truncated_tables'],
             ];
@@ -335,6 +337,65 @@ function handle_process_chunk_stream(): void
                 $errors
             );
             $logCollector->addInfo('Deferred statements executed: ' . count($stmts));
+            AppContainer::set('quiet_sql_error_handling', false);
+        };
+
+        // Execute queued ownership and rights statements (called on EOF)
+        $executeQueuedStatements = function () use (&$pg, &$streamState, $options, &$errors, $logCollector) {
+            $ownershipQueue = $streamState['ownership_queue'] ?? [];
+            $rightsQueue = $streamState['rights_queue'] ?? [];
+
+            if (empty($ownershipQueue) && empty($rightsQueue)) {
+                return;
+            }
+
+            $scope = $_REQUEST['scope'] ?? 'database';
+            $scopeIdent = $_REQUEST['scope_ident'] ?? '';
+
+            AppContainer::set('quiet_sql_error_handling', true);
+
+            // Execute ownership statements first
+            if (!empty($ownershipQueue)) {
+                $logCollector->addInfo('Executing ' . count($ownershipQueue) . ' queued ownership statements');
+                foreach ($ownershipQueue as $stmt) {
+                    try {
+                        $status = $pg->execute($stmt);
+                        if ($status < 0) {
+                            $errors++;
+                            $logCollector->addError('Ownership statement failed: ' . $stmt);
+                        }
+                    } catch (\Throwable $e) {
+                        $errors++;
+                        $logCollector->addError('Ownership statement failed: ' . $e->getMessage());
+                        if (!empty($options['stop_on_error'])) {
+                            break;
+                        }
+                    }
+                }
+                $streamState['ownership_queue'] = [];
+            }
+
+            // Execute rights statements
+            if (!empty($rightsQueue)) {
+                $logCollector->addInfo('Executing ' . count($rightsQueue) . ' queued rights statements');
+                foreach ($rightsQueue as $stmt) {
+                    try {
+                        $status = $pg->execute($stmt);
+                        if ($status < 0) {
+                            $errors++;
+                            $logCollector->addError('Rights statement failed: ' . $stmt);
+                        }
+                    } catch (\Throwable $e) {
+                        $errors++;
+                        $logCollector->addError('Rights statement failed: ' . $e->getMessage());
+                        if (!empty($options['stop_on_error'])) {
+                            break;
+                        }
+                    }
+                }
+                $streamState['rights_queue'] = [];
+            }
+
             AppContainer::set('quiet_sql_error_handling', false);
         };
 
@@ -440,6 +501,8 @@ function handle_process_chunk_stream(): void
                 $items = $split['items'];
                 $remainder = $split['remainder'];
                 $streamState['standard_conforming_strings'] = !empty($split['standard_conforming_strings']);
+                // Note: If remainder starts with COPY, streaming will be activated AFTER
+                // statements in $items are executed (see code after the foreach loop)
             }
         }
 
@@ -588,9 +651,44 @@ function handle_process_chunk_stream(): void
                 $logCollector->addError('Import stopped: ' . $errorCount . ' SQL error(s) occurred in this chunk (stop_on_error enabled)');
             }
 
+            // After all statements are executed, check if remainder starts with COPY
+            // Now it's safe to activate streaming since CREATE TABLE etc. have run
+            if (!$shouldStop && $remainder !== '' && !$inCopy && preg_match('/^\s*(COPY\b.*?FROM\s+stdin;\s*\r?\n)/si', $remainder, $copyMatch, PREG_OFFSET_CAPTURE)) {
+                $header = $copyMatch[1][0];
+                $headerEnd = $copyMatch[1][1] + strlen($copyMatch[1][0]);
+                $rest = substr($remainder, $headerEnd);
+
+                // Check if terminator is present in remainder
+                if (!preg_match($copyTermPattern, $rest)) {
+                    // Activate COPY streaming and send complete lines
+                    $streamState['copy_active'] = true;
+                    $streamState['copy_header'] = $header;
+                    $lastNl = strrpos($rest, "\n");
+                    if ($lastNl === false) {
+                        $remainder = $rest; // no full line yet
+                    } else {
+                        $dataSend = substr($rest, 0, $lastNl + 1);
+                        $tail = substr($rest, $lastNl + 1);
+                        try {
+                            $copyHandlerFactory()->stream($header, $dataSend);
+                        } catch (CopyException $e) {
+                            $errors++;
+                            $logCollector->addError($e->getMessage());
+                            if ($options['stop_on_error']) {
+                                $shouldStop = true;
+                                $logCollector->addError('Import will stop due to COPY error (stop_on_error enabled)');
+                            }
+                        }
+                        $remainder = $tail;
+                    }
+                }
+                // else: Full COPY with terminator - leave as-is, next chunk will handle it via SqlParser
+            }
+
             $logCollector->addInfo('Chunk processed: offset=' . $absoluteOffset . ' items=' . $itemsProcessed . ' remainder=' . strlen($remainder));
             if (strlen($remainder) > 10000) {
-                $logCollector->addWarning('Large remainder detected: ' . strlen($remainder) . ' bytes. Preview: ' . substr($remainder, 0, 200));
+                $copyStatus = !empty($streamState['copy_active']) ? ' (COPY streaming active)' : '';
+                $logCollector->addWarning('Large remainder detected: ' . strlen($remainder) . ' bytes' . $copyStatus . '. Preview: ' . substr($remainder, 0, 200));
             }
         }
 
@@ -609,6 +707,7 @@ function handle_process_chunk_stream(): void
         // On EOF, flush any remaining deferred statements for the last database.
         if ($eof && !$inCopy) {
             $executeDeferred();
+            $executeQueuedStatements();
         }
 
         // Return the *actual* remainder string.

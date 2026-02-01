@@ -66,10 +66,14 @@ class SequenceDumper extends ExportDumper
             }
         }
 
+        $this->writeOwner(
+            "{$schemaQuoted}.{$sequenceQuoted}",
+            'SEQUENCE',
+            $rs->fields['seqowner']
+        );
         $this->writePrivileges(
             $sequence,
             'sequence',
-            $schema,
             $rs->fields['seqowner']
         );
 

@@ -295,6 +295,8 @@ function doCreate($msg = '')
 		$colcomments = [];
 		$uniquekeys = [];
 		$primarykeys = [];
+		$isGeneratedArr = [];
+		$generatedExprArr = [];
 
 		for ($i = 0; $i < $num_columns; $i++) {
 			// Only include columns with non-empty field names
@@ -302,22 +304,39 @@ function doCreate($msg = '')
 			if ($fieldName === '') {
 				continue;
 			}
-			// Process default value from default_preset
-			$defaultValue = $_REQUEST['default'][$i] ?? '';
-			$defaultPreset = $_REQUEST['default_preset'][$i] ?? '';
-			if ($defaultPreset !== '' && $defaultPreset !== 'custom') {
-				$defaultValue = $defaultPreset;
+
+			// Check if this is a generated column
+			$isGeneratedCol = isset($_REQUEST['is_generated'][$i]);
+			$generatedExprVal = $isGeneratedCol ? trim($_REQUEST['generated_expr'][$i] ?? '') : '';
+
+			// Validate generated columns require an expression
+			if ($isGeneratedCol && $generatedExprVal === '') {
+				$_REQUEST['stage'] = 2;
+				doCreate($lang['strgeneratedexpressionrequired']);
+				return;
+			}
+
+			// Process default value from default_preset (only for non-generated columns)
+			$defaultValue = '';
+			if (!$isGeneratedCol) {
+				$defaultValue = $_REQUEST['default'][$i] ?? '';
+				$defaultPreset = $_REQUEST['default_preset'][$i] ?? '';
+				if ($defaultPreset !== '' && $defaultPreset !== 'custom') {
+					$defaultValue = $defaultPreset;
+				}
 			}
 
 			$fields[] = $fieldName;
 			$types[] = $_REQUEST['type'][$i] ?? '';
 			$arrays[] = $_REQUEST['array'][$i] ?? '';
 			$lengths[] = $_REQUEST['length'][$i] ?? '';
-			$notnulls[] = $_REQUEST['notnull'][$i] ?? null;
+			$notnulls[] = $isGeneratedCol ? null : ($_REQUEST['notnull'][$i] ?? null);
 			$defaults[] = $defaultValue;
 			$colcomments[] = $_REQUEST['colcomment'][$i] ?? '';
-			$uniquekeys[] = $_REQUEST['uniquekey'][$i] ?? null;
+			$uniquekeys[] = $isGeneratedCol ? null : ($_REQUEST['uniquekey'][$i] ?? null);
 			$primarykeys[] = $_REQUEST['primarykey'][$i] ?? null;
+			$isGeneratedArr[] = $isGeneratedCol ? true : null;
+			$generatedExprArr[] = $generatedExprVal;
 		}
 
 		// Check if at least one valid column exists
@@ -343,7 +362,9 @@ function doCreate($msg = '')
 			$uniquekeys,
 			$primarykeys,
 			$partitionStrategy,
-			$partitionKeys
+			$partitionKeys,
+			$isGeneratedArr,
+			$generatedExprArr
 		);
 
 		if ($status == 0) {

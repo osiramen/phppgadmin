@@ -419,6 +419,20 @@ td[class^="opbutton"] img.icon {
 	background: #eee;
 }
 
+/* Generated column indicator */
+.generated-column {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 0.25em;
+}
+
+.generated-column em {
+	font-size: 0.85em;
+	color: #6c757d;
+	font-style: normal;
+	font-weight: 600;
+}
+
 .sql-editor,
 .sql-viewer {
 	font-size: 1em;
@@ -778,6 +792,11 @@ pre code.hljs {
 
 .log-level.log-warning {
 	color: #f57c00;
+	font-weight: bold;
+}
+
+.log-level.log-success {
+	color: #4caf50;
 	font-weight: bold;
 }
 

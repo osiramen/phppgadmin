@@ -431,10 +431,12 @@ async function startStreamUpload() {
 		}
 
 		// Upload completed successfully
-		logImport(
-			`Upload completed successfully (${totalRetries} total retries).`,
-		);
-		console.log("Upload completed successfully.");
+		let msg = "Upload completed successfully.";
+		if (totalRetries > 0) {
+			msg += ` (${totalRetries} total retries were needed)`;
+		}
+		logImport(msg, "success");
+		console.log(msg);
 	} catch (err) {
 		console.error("Upload failed:", err);
 		logImport(`Upload failed: ${err.message}`, "error");

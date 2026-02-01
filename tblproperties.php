@@ -326,17 +326,26 @@ function doSaveAddColumn()
 	$validColumns = [];
 	for ($i = 0; $i < $numColumns; $i++) {
 		if (isset($_POST['field'][$i]) && trim($_POST['field'][$i]) != '') {
-			// Determine the actual default value
+			// Check if this is a generated column
+			$isGenerated = isset($_POST['is_generated'][$i]);
+			
+			// Determine the actual default value or generation expression
 			$defaultValue = '';
-			if (isset($_POST['default_preset'][$i])) {
-				$preset = $_POST['default_preset'][$i];
-				if ($preset === 'custom') {
-					$defaultValue = isset($_POST['default'][$i]) ? $_POST['default'][$i] : '';
-				} elseif ($preset !== '') {
-					$defaultValue = $preset;
+			if ($isGenerated) {
+				// For generated columns, get expression from generated_expr field
+				$defaultValue = isset($_POST['generated_expr'][$i]) ? $_POST['generated_expr'][$i] : '';
+			} else {
+				// For regular columns, get default from default_preset/default fields
+				if (isset($_POST['default_preset'][$i])) {
+					$preset = $_POST['default_preset'][$i];
+					if ($preset === 'custom') {
+						$defaultValue = isset($_POST['default'][$i]) ? $_POST['default'][$i] : '';
+					} elseif ($preset !== '') {
+						$defaultValue = $preset;
+					}
+				} elseif (isset($_POST['default'][$i])) {
+					$defaultValue = $_POST['default'][$i];
 				}
-			} elseif (isset($_POST['default'][$i])) {
-				$defaultValue = $_POST['default'][$i];
 			}
 
 			$validColumns[] = [
@@ -347,7 +356,8 @@ function doSaveAddColumn()
 				'length' => isset($_POST['length'][$i]) ? $_POST['length'][$i] : '',
 				'notnull' => isset($_POST['notnull'][$i]),
 				'default' => $defaultValue,
-				'comment' => isset($_POST['comment'][$i]) ? $_POST['comment'][$i] : ''
+				'comment' => isset($_POST['comment'][$i]) ? $_POST['comment'][$i] : '',
+				'is_generated' => $isGenerated
 			];
 		}
 	}
@@ -379,7 +389,8 @@ function doSaveAddColumn()
 			$col['length'],
 			$col['notnull'],
 			$col['default'],
-			$col['comment']
+			$col['comment'],
+			$col['is_generated']
 		);
 
 		if ($status != 0) {
@@ -469,11 +480,31 @@ function doDefault($msg = '')
 
 	$attPre = function ($rowdata, $actions) {
 		$pg = AppContainer::getPostgres();
+		$lang = AppContainer::getLang();
 		$rowdata->fields['+type'] = $pg->formatType($rowdata->fields['type'], $rowdata->fields['atttypmod']);
 		$attname = $rowdata->fields['attname'];
 		$table = $_REQUEST['table'];
 		$pg->fieldClean($attname);
 		$pg->fieldClean($table);
+
+		// Pre-compute formatted default/generated value for display
+		$adsrc = $rowdata->fields['adsrc'] ?? null;
+		$attgenerated = $rowdata->fields['attgenerated'] ?? '';
+		if ($adsrc !== null && $adsrc !== '') {
+			$escaped = htmlspecialchars($adsrc);
+			if ($attgenerated === 's') {
+				// This is a generated column
+				$rowdata->fields['+default'] = '<span class="generated-column" title="' . htmlspecialchars($lang['strgeneratedcolumn']) . '">'
+					. '<em>GENERATED:</em> '
+					. '<span class="sql-viewer">' . $escaped . '</span>'
+					. '</span>';
+			} else {
+				// Regular default value
+				$rowdata->fields['+default'] = '<span class="sql-viewer">' . $escaped . '</span>';
+			}
+		} else {
+			$rowdata->fields['+default'] = '';
+		}
 
 		$actions['browse']['attr']['href']['urlvars']['query'] =
 			"SELECT \"{$attname}\", count(*) AS \"count\"
@@ -623,8 +654,8 @@ function doDefault($msg = '')
 		],
 		'default' => [
 			'title' => $lang['strdefault'],
-			'field' => field('adsrc'),
-			'type' => 'sql-viewer',
+			'field' => field('+default'),
+			'type' => 'verbatim',
 		],
 		'keyprop' => [
 			'title' => $lang['strconstraints'],

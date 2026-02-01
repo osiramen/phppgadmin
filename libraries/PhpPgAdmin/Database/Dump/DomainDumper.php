@@ -73,13 +73,16 @@ class DomainDumper extends ExportDumper
             );
         }
 
-        /*
+        $this->writeOwner(
+            "$schemaQuoted.$domainQuoted",
+            'DOMAIN',
+            $rs->fields['domowner']
+        );
         $this->writePrivileges(
             $domainName,
             'type',
             $rs->fields['domowner']
         );
-        */
     }
 
     /**

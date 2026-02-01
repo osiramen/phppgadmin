@@ -812,4 +812,22 @@ class Postgres extends PgBase
 		// Materialized views were introduced in PostgreSQL 9.3
 		return $this->major_version >= 9.3;
 	}
+
+	function hasGeneratedColumns()
+	{
+		// Generated columns were introduced in PostgreSQL 12
+		return $this->major_version >= 12;
+	}
+
+	function hasEditableGeneratedColumns()
+	{
+		// ALTER COLUMN ... SET EXPRESSION AS was introduced in PostgreSQL 17
+		return $this->major_version >= 17;
+	}
+
+	function hasDropGeneratedExpression()
+	{
+		// ALTER COLUMN ... DROP EXPRESSION was introduced in PostgreSQL 13
+		return $this->major_version >= 13;
+	}
 }

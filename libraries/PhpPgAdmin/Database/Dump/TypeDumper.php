@@ -62,9 +62,12 @@ class TypeDumper extends ExportDumper
                 }
             }
 
-            /*
+            $this->writeOwner(
+                "{$this->schemaQuoted}.{$this->typeQuoted}",
+                'TYPE',
+                $rs->fields['typowner']
+            );
             $this->writePrivileges($typeName, 'type', $rs->fields['typowner']);
-            */
         }
     }
 

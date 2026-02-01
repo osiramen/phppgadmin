@@ -19,16 +19,7 @@ class DumpFactory
      */
     public static function create($subject, Postgres $connection): ExportDumper
     {
-        /*
-        $className = __NAMESPACE__ . '\\' . ucfirst(strtolower($subject)) . 'Dumper';
-
-        if (class_exists($className)) {
-            return new $className($connection);
-        }
-        */
-
-        // Fallback for subjects that might have different naming or are handled by orchestrators
-        switch (strtolower($subject)) {
+        switch ($subject) {
             case 'aggregate':
                 return new AggregateDumper($connection);
             case 'database':
@@ -41,6 +32,12 @@ class DumpFactory
                 return new MaterializedViewDumper($connection);
             case 'operator':
                 return new OperatorDumper($connection);
+            case 'partition':
+                return new PartitionDumper($connection);
+            case 'partitioned_table':
+                return new PartitionedTableDumper($connection);
+            case 'sub_partitioned_table':
+                return new SubPartitionedTableDumper($connection);
             case 'role':
                 return new RoleDumper($connection);
             case 'schema':

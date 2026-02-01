@@ -11,6 +11,8 @@ class ServerDumper extends ExportDumper
 {
     public function dump($subject, array $params, array $options = [])
     {
+        $this->setDumpOptions($options);
+
         $this->writeHeader("Server Cluster");
 
         // Ensure psql halts on error for restores

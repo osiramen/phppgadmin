@@ -42,9 +42,9 @@ class ViewDumper extends ExportDumper
         $this->writeDrop('VIEW', "{$this->schemaQuoted}.{$this->viewQuoted}", $options);
 
         if (!empty($options['if_not_exists'])) {
-            $this->write("CREATE OR REPLACE VIEW {$this->schemaQuoted}.{$this->viewQuoted} AS\n{$rs->fields['vwdefinition']};\n");
+            $this->write("CREATE OR REPLACE VIEW {$this->schemaQuoted}.{$this->viewQuoted} AS\n" . rtrim($rs->fields['vwdefinition'], " \t\n\r\0\x0B;") . ";\n");
         } else {
-            $this->write("CREATE VIEW {$this->schemaQuoted}.{$this->viewQuoted} AS\n{$rs->fields['vwdefinition']};\n");
+            $this->write("CREATE VIEW {$this->schemaQuoted}.{$this->viewQuoted} AS\n" . rtrim($rs->fields['vwdefinition'], " \t\n\r\0\x0B;") . ";\n");
         }
 
         // Add comment if present and requested
@@ -58,6 +58,11 @@ class ViewDumper extends ExportDumper
         $this->deferRules($view, $schema, $options);
         $this->deferTriggers($view, $schema, $options);
 
+        $this->writeOwner(
+            "{$this->schemaQuoted}.{$this->viewQuoted}",
+            'VIEW',
+            $rs->fields['relowner']
+        );
         $this->writePrivileges($view, 'view', $rs->fields['relowner']);
     }
 

@@ -78,21 +78,21 @@ function doEditRow($confirm, $msg = '')
 		$whereParts = [];
 		foreach ($keyFields as $field => $value) {
 			if ($value === null || (is_string($value) && strcasecmp($value, 'NULL') === 0)) {
-				$whereParts[] = $pg->escapeIdentifier($field) . ' IS NULL';
+				$whereParts[] = $pg->quoteIdentifier($field) . ' IS NULL';
 			} else {
-				$whereParts[] = $pg->escapeIdentifier($field) . ' = ' . $pg->clean($value);
+				$whereParts[] = $pg->quoteIdentifier($field) . ' = ' . $pg->escapeLiteral($value);
 			}
 		}
 		$whereClause = implode(' AND ', $whereParts);
 
 		$sizeSelect = [];
 		foreach ($byteaColumns as $col) {
-			$escapedCol = $pg->escapeIdentifier($col);
+			$escapedCol = $pg->quoteIdentifier($col);
 			$sizeSelect[] = 'octet_length(' . $escapedCol . ') AS ' . $escapedCol;
 		}
 
 		$sizeSql = 'SELECT ' . implode(', ', $sizeSelect) .
-			' FROM ' . $pg->escapeIdentifier($schema) . '.' . $pg->escapeIdentifier($_REQUEST['table']) .
+			' FROM ' . $pg->quoteIdentifier($schema) . '.' . $pg->quoteIdentifier($_REQUEST['table']) .
 			' WHERE ' . $whereClause .
 			' LIMIT 1';
 
@@ -112,19 +112,19 @@ function doEditRow($confirm, $msg = '')
 		}
 
 		$selectParts = [];
-		if ($attrs && $attrs->recordCount() > 0) {
+		if (is_object($attrs) && $attrs->recordCount() > 0) {
 			while (!$attrs->EOF) {
 				$col = $attrs->fields['attname'];
 				$type = $attrs->fields['type'] ?? '';
 				if (strpos($type, 'bytea') === 0) {
 					$size = $byteaSizes[$col] ?? null;
 					if ($size !== null && $byteaInlineLimit > 0 && $size > $byteaInlineLimit) {
-						$selectParts[] = 'NULL AS ' . $pg->escapeIdentifier($col);
+						$selectParts[] = 'NULL AS ' . $pg->quoteIdentifier($col);
 					} else {
-						$selectParts[] = $pg->escapeIdentifier($col);
+						$selectParts[] = $pg->quoteIdentifier($col);
 					}
 				} else {
-					$selectParts[] = $pg->escapeIdentifier($col);
+					$selectParts[] = $pg->quoteIdentifier($col);
 				}
 				$attrs->moveNext();
 			}
@@ -135,14 +135,14 @@ function doEditRow($confirm, $msg = '')
 			$whereParts = [];
 			foreach ($keyFields as $field => $value) {
 				if ($value === null || (is_string($value) && strcasecmp($value, 'NULL') === 0)) {
-					$whereParts[] = $pg->escapeIdentifier($field) . ' IS NULL';
+					$whereParts[] = $pg->quoteIdentifier($field) . ' IS NULL';
 				} else {
-					$whereParts[] = $pg->escapeIdentifier($field) . ' = ' . $pg->clean($value);
+					$whereParts[] = $pg->quoteIdentifier($field) . ' = ' . $pg->escapeLiteral($value);
 				}
 			}
 			$whereClause = implode(' AND ', $whereParts);
 			$rowSql = 'SELECT ' . implode(', ', $selectParts) .
-				' FROM ' . $pg->escapeIdentifier($schema) . '.' . $pg->escapeIdentifier($_REQUEST['table']) .
+				' FROM ' . $pg->quoteIdentifier($schema) . '.' . $pg->quoteIdentifier($_REQUEST['table']) .
 				' WHERE ' . $whereClause .
 				' LIMIT 1';
 			$rs = $pg->selectSet($rowSql);
@@ -164,10 +164,28 @@ function doEditRow($confirm, $msg = '')
 
 		$fields = [];
 		$types = [];
+		$generatedColumns = [];
 		while (!$attrs->EOF) {
+			// Skip generated columns - they cannot be manually set
+			$isGenerated = isset($attrs->fields['attgenerated']) && $attrs->fields['attgenerated'] === 's';
+			if ($isGenerated) {
+				$generatedColumns[] = $attrs->fields['attname'];
+				$attrs->moveNext();
+				continue;
+			}
+
 			$fields[$attrs->fields['attnum']] = $attrs->fields['attname'];
 			$types[$attrs->fields['attname']] = $attrs->fields['type'];
 			$attrs->moveNext();
+		}
+
+		// Remove any values submitted for generated columns
+		if (!empty($generatedColumns)) {
+			foreach ($generatedColumns as $genCol) {
+				unset($_POST['values'][$genCol]);
+				unset($_POST['nulls'][$genCol]);
+				unset($_POST['expr'][$genCol]);
+			}
 		}
 
 		$byteaColumns = [];
@@ -357,6 +375,14 @@ function doEditRow($confirm, $msg = '')
 	while (!$attrs->EOF) {
 
 		$attrs->fields['attnotnull'] = $pg->phpBool($attrs->fields['attnotnull']);
+
+		// Skip generated columns - they are computed automatically
+		$isGenerated = ($attrs->fields['attgenerated'] ?? '') === 's';
+		if ($isGenerated) {
+			$attrs->moveNext();
+			continue;
+		}
+
 		$id = (($i & 1) == 0 ? '1' : '2');
 
 		// Initialise variables
@@ -911,6 +937,13 @@ function popupEdit()
 	if (strpos($type, 'bytea') === 0) {
 		header('HTTP/1.0 400 Bad Request');
 		echo 'Field type not supported for inline editing';
+		exit;
+	}
+
+	$isGenerated = ($fieldInfo['attgenerated'] ?? '') === 's';
+	if ($isGenerated) {
+		header('HTTP/1.0 400 Bad Request');
+		echo 'Generated columns cannot be edited';
 		exit;
 	}
 
