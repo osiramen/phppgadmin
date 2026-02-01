@@ -8,7 +8,7 @@
 **Modern web-based PostgreSQL administration tool** — Manage databases, schemas, tables, roles, queries, and backups through an intuitive web interface.
 
 [![License: GPL v2+](https://img.shields.io/badge/License-GPL%20v2+-blue.svg)](LICENSE)
-[![PHP Version](https://img.shields.io/badge/PHP-%3E%3D7.2-8892BF.svg)](https://php.net/)
+[![PHP Version](https://img.shields.io/badge/PHP-%3E%3D7.4-8892BF.svg)](https://php.net/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-%3E%3D9.0-336791.svg)](https://www.postgresql.org/)
 
 ---
@@ -20,7 +20,6 @@
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Configuration](#configuration)
-- [Development](#development)
 - [Security](#security)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
@@ -56,7 +55,7 @@ phpPgAdmin is a lightweight, web-based administration tool for PostgreSQL databa
 - **Database operations** - Create, drop, rename, and alter databases
 - **Schema management** - Full schema operations including creation, modification, and ownership changes
 - **Table operations** - Create, alter, drop, truncate tables with advanced options
-- **View management** - Create and manage views and materialized views
+- **View management** - Create and manage views and materialized views (create, alter, drop). Materialized views can be created and refreshed (including `CONCURRENTLY` where supported); view dependencies and definitions are shown and manageable.
 - **Sequence management** - Create, alter, and manage sequences
 - **Function management** - Create, edit, and execute PostgreSQL functions
 - **Trigger management** - Create and manage table triggers
@@ -107,6 +106,8 @@ phpPgAdmin is a lightweight, web-based administration tool for PostgreSQL databa
 - **Index management** - Create indexes with various types (B-tree, Hash, GiST, GIN, BRIN)
 - **Concurrent index creation** - Build indexes without blocking writes
 - **Constraint management** - Primary keys, foreign keys, unique, check constraints
+- **Generated columns** - Define and manage stored generated columns (PostgreSQL 12+): add, alter or drop generated columns and display generated values in the data browser.
+- **Partitioned tables** - Create and manage partitioned tables and partitions; attach/detach partitions and inspect partition hierarchies and partition constraints.
 - **Tablespace management** - Manage tablespace allocations
 - **Rule management** - Create and manage table rules
 - **Language management** - Install and manage procedural languages
@@ -145,7 +146,7 @@ phpPgAdmin is a lightweight, web-based administration tool for PostgreSQL databa
 
 ### Server Requirements
 
-- **PHP:** 7.2 or higher (7.4+ recommended)
+- **PHP:** 7.4 or higher (8.3+ recommended)
 - **PostgreSQL:** 9.0 or higher (12+ recommended)
 - **Web Server:** Apache, Nginx, or any PHP-capable web server
 
@@ -376,134 +377,6 @@ $conf['servers'][0]['pg_dumpall_path'] = '/usr/bin/pg_dumpall';
 
 ---
 
-## Development
-
-### Setting Up Development Environment
-
-1. **Clone repository:**
-
-    ```bash
-    git clone https://github.com/phppgadmin/phppgadmin.git
-    cd phppgadmin
-    ```
-
-2. **Install dependencies:**
-
-    ```bash
-    composer install
-    ```
-
-3. **Configure for development:**
-
-    ```bash
-    cp conf/config-dist.inc.php conf/config.inc.php
-    # Edit config.inc.php with your development database settings
-    ```
-
-4. **Run tests:**
-
-    ```bash
-    # Selenium tests (requires Selenium server)
-    cd tests/selenium
-    ./run-tests.sh
-
-    # SimpleTests (PHP unit tests)
-    cd tests/simpletests
-    php run-tests.php
-    ```
-
-### Development Workflow
-
-1. **Fork the repository** on GitHub
-2. **Add upstream remote:**
-    ```bash
-    git remote add upstream https://github.com/phppgadmin/phppgadmin.git
-    ```
-3. **Create feature branch:**
-    ```bash
-    git checkout master
-    git pull upstream master --rebase
-    git checkout -b describe_my_feature
-    ```
-4. **Make changes and test** thoroughly
-5. **Push to your fork:**
-    ```bash
-    git push origin describe_my_feature
-    ```
-6. **Submit Pull Request** with clear description
-
-See [DEVELOPERS](DEVELOPERS) for detailed development guidelines.
-
-### Coding Standards
-
-#### PHP
-
-- PSR-4 autoloading and namespaces
-- Extend `AppContext` for core functionality
-- Use camelCase for method names
-- Type hints and return types where possible
-- Prepared statements for all SQL queries
-
-Example:
-
-```php
-namespace PhpPgAdmin\Database\Actions;
-
-use PhpPgAdmin\Core\AppContext;
-
-class MyActions extends AppContext
-{
-    public function myMethod($param): bool
-    {
-        $data = $this->getDatabaseAccessor();
-        $sql = "SELECT * FROM table WHERE id = $1";
-        $result = $data->execute($sql, [$param]);
-        return $result !== false;
-    }
-}
-```
-
-#### JavaScript
-
-- IIFE to avoid global pollution
-- Vanilla JS - no jQuery
-- addEventListener, not inline handlers
-- Use existing utilities in `js/core/misc.js`
-
-Example:
-
-```javascript
-(function () {
-	"use strict";
-
-	function initializeComponent(element) {
-		element.addEventListener("click", function (e) {
-			// Handle click
-		});
-	}
-
-	window.myFunction = initializeComponent;
-})();
-```
-
-#### CSS
-
-- Semantic class names
-- BEM-like conventions
-- Import `global.css` for base styles
-- Use CSS custom properties for theming
-
-### Plugin Development
-
-Create custom plugins by:
-
-1. Create plugin directory in `plugins/MyPlugin/`
-2. Extend `PhpPgAdmin\Plugin` abstract class
-3. Register via `PluginManager`
-4. See `plugins/GuiControl/` and `plugins/Report/` for examples
-
----
-
 ## Security
 
 ### Security Best Practices
@@ -581,11 +454,11 @@ Create custom plugins by:
 
 ### Available Documentation
 
-- **[INSTALL](INSTALL)** - Installation instructions
-- **[FAQ](FAQ)** - Frequently asked questions
+- **[INSTALL](INSTALL.md)** - Installation instructions
+- **[FAQ](FAQ.md)** - Frequently asked questions
 - **[CHANGES](CHANGES.md)** - Version history and changelog
 - **[DEVELOPERS](DEVELOPERS)** - Development guidelines
-- **[TODO](TODO)** - Future development plans
+- **[TODO](TODO.md)** - Future development plans
 - **[LICENSE](LICENSE)** - GPL-2.0+ license text
 - **[CREDITS](CREDITS)** - Contributors and translators
 
@@ -632,17 +505,6 @@ We welcome contributions! phpPgAdmin is Free/Open Source software and relies on 
     - Add tutorials
     - Create examples
     - Document best practices
-
-### Areas Needing Help
-
-- PostgreSQL 13+ new features support
-- Modern PHP 8.x features adoption
-- Improved responsive design
-- Enhanced mobile support
-- Performance optimizations
-- Additional export formats
-- More comprehensive tests
-- Documentation improvements
 
 ### Community
 

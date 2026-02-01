@@ -69,12 +69,12 @@ class ImportFormRenderer extends AppContext
                 <div class="my-1 ml-1"><label><input type="checkbox" name="opt_allow_drops" checked />
                         <?= $lang['strimportallowdrops'] ?></label></div>
                 <div class="my-1 ml-1"><label><input type="checkbox" name="opt_ignore_connect" checked />
-                        <?= $lang['strimportignoreconnect'] ?? 'Ignore \\connect commands' ?></label></div>
+                        <?= $lang['strimportignoreconnect'] ?></label></div>
                 <div class="my-1 ml-1"><label><input type="checkbox" name="opt_stop_on_error" checked />
-                        <?= $lang['strimportstoponerror'] ?? 'Stop on error' ?>
+                        <?= $lang['strimportstoponerror'] ?>
                     </label></div>
                 <div class="my-1 ml-1"><label><input type="checkbox" name="opt_verbose" />
-                        <?= $lang['strimportverbose'] ?? 'Verbose logging (show each executed statement)' ?>
+                        <?= $lang['strimportverbose'] ?>
                     </label></div>
                 <?php if (function_exists('gzopen')): ?>
                     <div class="my-1 ml-1"><label><input type="checkbox" name="opt_compress_chunks" />
@@ -91,7 +91,7 @@ class ImportFormRenderer extends AppContext
         <div id="importUI" class="mt-3" style="display:none;">
             <h4><?= $lang['strimport'] ?>
                 <span id="importTitle" class="importTitle"></span> -
-                <?= $lang['strprogress'] ?? 'Progress' ?>
+                <?= $lang['strprogress'] ?>
             </h4>
             <progress id="importProgress" value="0" max="100" style="width:100%"></progress>
             <div id="importStatus" class="importStatus">
@@ -99,7 +99,7 @@ class ImportFormRenderer extends AppContext
             </div>
             <div class="mt-2">
                 <button id="importStopBtn" type="button" style="display:none">
-                    <?= $lang['strstop'] ?? 'Stop' ?>
+                    <?= $lang['strstop'] ?>
                 </button>
             </div>
             <pre id="importLog" class="importLog"></pre>
@@ -203,7 +203,7 @@ class ImportFormRenderer extends AppContext
             <fieldset>
                 <legend><?= $lang['stroptions'] ?></legend>
                 <div><label><input type="checkbox" name="use_header" value="1" checked />
-                        <?= $lang['strusefirstrowheaders'] ?? 'Use first row as column names' ?></label></div>
+                        <?= $lang['strusefirstrowheaders'] ?></label></div>
                 <div class="mt-1"><label><input type="checkbox" name="opt_truncate" value="1" />
                         <?= $lang['strtruncatebefore'] ?></label></div>
                 <?php if (function_exists('gzopen')): ?>
@@ -222,7 +222,7 @@ class ImportFormRenderer extends AppContext
 
         <div id="importUI" class="mt-3" style="display:none;">
             <h4><?= $lang['strimport'] ?> <span id="importTitle" class="importTitle"></span> -
-                <?= $lang['strprogress'] ?? 'Progress' ?>
+                <?= $lang['strprogress'] ?>
             </h4>
             <progress id="importProgress" value="0" max="100" style="width:100%"></progress>
             <div id="importStatus" class="importStatus">
@@ -230,7 +230,7 @@ class ImportFormRenderer extends AppContext
             </div>
             <div class="mt-2">
                 <button id="importStopBtn" type="button" style="display:none">
-                    <?= $lang['strstop'] ?? 'Stop' ?>
+                    <?= $lang['strstop'] ?>
                 </button>
             </div>
             <pre id="importLog" class="importLog"></pre>

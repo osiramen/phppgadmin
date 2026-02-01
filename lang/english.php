@@ -298,13 +298,16 @@ $lang['strselectallfields'] = 'Select all fields';
 $lang['strselectneedscol'] = 'You must show at least one column.';
 $lang['strselectunary'] = 'Unary operators cannot have values.';
 $lang['strcolumnaltered'] = 'Column altered.';
+$lang['strcolumnsaltered'] = '{count} Column(s) altered.';
 $lang['strcolumnalteredbad'] = 'Column alteration failed.';
-$lang['strconfdropcolumn'] = 'Are you sure you want to drop column "%s" from table "%s"?';
+$lang['strconfdropcolumn'] = 'Are you sure you want to drop column "{column}" from table "{table}"?';
 $lang['strcolumndropped'] = 'Column dropped.';
+$lang['strcolumnsddropped'] = '{count} Column(s) dropped.';
 $lang['strcolumndroppedbad'] = 'Column drop failed.';
 $lang['straddcolumn'] = 'Add column';
 $lang['straddmorecolumns'] = 'Add more columns';
 $lang['strcolumnadded'] = 'Column added.';
+$lang['strcolumnsadded'] = '{count} Column(s) added.';
 $lang['strcolumnaddedbad'] = 'Column add failed.';
 $lang['strcascade'] = 'CASCADE';
 $lang['strtablealtered'] = 'Table altered.';
@@ -337,6 +340,7 @@ $lang['strexecstats'] = 'Execution took {duration} seconds, affecting {rows:d} r
 // Columns
 $lang['strcolprop'] = 'Column properties';
 $lang['strnotableprovided'] = 'No table provided!';
+$lang['strgeneratedcolumnnoalter'] = 'Generated columns cannot be altered on this PostgreSQL version.';
 
 // Users
 $lang['struser'] = 'User';

@@ -74,11 +74,6 @@ $misc->printTabs('root', 'intro');
 	<li><a href="https://github.com/phppgadmin/phppgadmin/issues"
 			target="_blank"><?php echo $lang['strreportbug'] ?></a></li>
 	<li><a href="<?php echo $lang['strviewfaq_url'] ?>"><?php echo $lang['strviewfaq'] ?></a></li>
-	<!--
-	<li><a target="_top"
-			href="tests/selenium/selenium-lib/core/TestRunner.html?test=..%2F..%2FTestSuite.php&resultsUrl=..%2FpostResults">Selenium
-			tests</a></li>
-	-->
 </ul>
 
 <?php

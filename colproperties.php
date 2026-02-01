@@ -97,7 +97,7 @@ function doAlter($msg = '')
 		// For generated columns, don't show the standard alter form
 		// unless we're on older PG versions without SET/DROP EXPRESSION support
 		if (!$canEditExpression && !$canDropExpression) {
-			echo "<p><em>" . ($lang['strgeneratedcolumnnoalter'] ?? 'Generated columns cannot be altered on this PostgreSQL version.') . "</em></p>";
+			echo "<p><em>" . $lang['strgeneratedcolumnnoalter'] . "</em></p>";
 		}
 
 		return; // Don't show regular alter form for generated columns

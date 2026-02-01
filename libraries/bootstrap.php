@@ -407,7 +407,7 @@ if (empty($_ENV["SKIP_DB_CONNECTION"] ?? '')) {
 			// No credentials provided - send authentication challenge
 			header('WWW-Authenticate: Basic realm="' . addslashes($_server_info['desc']) . '"');
 			header('HTTP/1.0 401 Unauthorized');
-			echo $lang['strloginfailed'] ?? 'Authentication required';
+			echo $lang['strloginfailed'];
 			exit;
 		}
 

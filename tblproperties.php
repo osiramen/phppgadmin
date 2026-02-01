@@ -149,8 +149,9 @@ function doAlter($msg = '')
 					</th>
 					<td class="data1"><select name="owner">
 							<?php while (!$users->EOF):
-								$uname = $users->fields['usename']; ?>
-								<option value="<?= html_esc($uname) ?>" <?= ($uname == $_POST['owner']) ? ' selected="selected"' : '' ?>>
+								$uname = $users->fields['usename'];
+								$selectAtr = ($uname == $_POST['owner']) ? ' selected="selected"' : ''; ?>
+								<option value="<?= html_esc($uname) ?>" <?= $selectAtr ?>>
 									<?= html_esc($uname) ?>
 								</option>
 								<?php $users->moveNext(); endwhile; ?>
@@ -166,8 +167,9 @@ function doAlter($msg = '')
 					</th>
 					<td class="data1"><select name="newschema">
 							<?php while (!$schemas->EOF):
-								$schema = $schemas->fields['nspname']; ?>
-								<option value="<?= html_esc($schema) ?>" <?= ($schema == $_POST['newschema']) ? ' selected="selected"' : '' ?>>
+								$schema = $schemas->fields['nspname'];
+								$selectAtr = ($schema == $_POST['newschema']) ? ' selected="selected"' : ''; ?>
+								<option value="<?= html_esc($schema) ?>" <?= $selectAtr ?>>
 									<?= html_esc($schema) ?>
 								</option>
 								<?php $schemas->moveNext(); endwhile; ?>
@@ -184,9 +186,9 @@ function doAlter($msg = '')
 						<select name="tablespace">
 							<option value="" <?= ($_POST['tablespace'] == '') ? ' selected="selected"' : '' ?>></option>
 							<?php while (!$tablespaces->EOF):
-								$spcname = html_esc($tablespaces->fields['spcname']); ?>
-								<option value="<?= $spcname ?>" <?= ($spcname == $_POST['tablespace']) ? ' selected="selected"' : '' ?>
-									>
+								$spcname = html_esc($tablespaces->fields['spcname']);
+								$selectAtr = ($spcname == $_POST['tablespace']) ? ' selected="selected"' : ''; ?>
+								<option value="<?= $spcname ?>" <?= $selectAtr ?>>
 									<?= $spcname ?>
 								</option>
 								<?php $tablespaces->moveNext(); endwhile; ?>
@@ -328,7 +330,7 @@ function doSaveAddColumn()
 		if (isset($_POST['field'][$i]) && trim($_POST['field'][$i]) != '') {
 			// Check if this is a generated column
 			$isGenerated = isset($_POST['is_generated'][$i]);
-			
+
 			// Determine the actual default value or generation expression
 			$defaultValue = '';
 			if ($isGenerated) {
@@ -419,11 +421,13 @@ function doSaveAddColumn()
 
 	// Success
 	AppContainer::setShouldReloadTree(true);
-	if ($addedCount == 1) {
-		doDefault($lang['strcolumnadded']);
-	} else {
-		doDefault(sprintf('%d %s', $addedCount, $lang['strcolumnsadded'] ?? 'columns added'));
-	}
+	$msg = format_string(
+		$lang['strcolumnsadded'],
+		[
+			'count' => $addedCount
+		]
+	);
+	doDefault($msg);
 }
 
 /**
@@ -559,7 +563,7 @@ function doDefault($msg = '')
 
 	// Get table
 	$tdata = $tableActions->getTable($_REQUEST['table']);
-	
+
 	// Check if this is a partition or partitioned table (PG 10+)
 	$is_partition = ($tdata->fields['relispartition'] ?? '') === 't';
 	$is_partitioned = ($tdata->fields['relkind'] ?? 'r') === 'p';
@@ -1093,11 +1097,13 @@ function doEditColumns($confirm, $msg = '')
 
 		// Success
 		AppContainer::setShouldReloadTree(true);
-		if ($alteredCount == 1) {
-			doDefault($lang['strcolumnaltered']);
-		} else {
-			doDefault(sprintf('%d %s', $alteredCount, $lang['strcolumnsaltered'] ?? 'columns altered'));
-		}
+		$msg = format_string(
+			$lang['strcolumnsaltered'],
+			[
+				'count' => $alteredCount
+			]
+		);
+		doDefault($msg);
 	}
 }
 
@@ -1134,7 +1140,13 @@ function doDropMultiple($confirm)
 
 		?>
 		<p>
-			<?= sprintf($lang['strconfdropcolumns'] ?? 'Are you sure you want to drop the selected %d column(s) from table %s?', count($selectedColumns), $misc->formatVal($_REQUEST['table'])) ?>
+			<?= format_string(
+				$lang['strconfdropcolumns'],
+				[
+					'count' => count($selectedColumns),
+					'table' => $misc->formatVal($_REQUEST['table'])
+				]
+			) ?>
 		</p>
 		<ul>
 			<?php foreach ($selectedColumns as $colname): ?>
@@ -1183,11 +1195,13 @@ function doDropMultiple($confirm)
 			doDefault(sprintf($lang['strcolumndroppedbad'] . ' (%s)', implode(', ', $errors)));
 		} else {
 			AppContainer::setShouldReloadTree(true);
-			if ($droppedCount == 1) {
-				doDefault($lang['strcolumndropped']);
-			} else {
-				doDefault(sprintf('%d %s', $droppedCount, $lang['strcolumnsdropped'] ?? 'columns dropped'));
-			}
+			$msg = format_string(
+				$lang['strcolumnsdeleted'],
+				[
+					'count' => $droppedCount
+				]
+			);
+			doDefault($msg);
 		}
 	}
 }

@@ -6,7 +6,7 @@ This guide provides step-by-step instructions for installing and configuring php
 
 Before installing phpPgAdmin, ensure you have:
 
-- **PHP 7.2 or higher** (7.4+ recommended)
+- **PHP 7.4 or higher** (8.3+ recommended)
 - **PostgreSQL 9.0 or higher** (12+ recommended)
 - **PHP Extensions:**
     - `ext-pgsql` - PostgreSQL database functions
