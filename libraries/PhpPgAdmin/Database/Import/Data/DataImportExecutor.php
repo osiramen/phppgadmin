@@ -123,7 +123,7 @@ class DataImportExecutor
                 return new JsonRowParser();
             case 'xml':
                 return new XmlRowParser();
-            case 'tab':
+            case 'tsv':
                 return new CsvRowParser("\t", $useHeader);
             case 'csv':
             default:

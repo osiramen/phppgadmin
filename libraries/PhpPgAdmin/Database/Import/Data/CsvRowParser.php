@@ -30,7 +30,7 @@ class CsvRowParser implements RowStreamingParser
         fwrite($handle, $combined);
         rewind($handle);
 
-        while (($fields = fgetcsv($handle, 0, $this->delimiter)) !== false) {
+        while (($fields = fgetcsv($handle, 0, $this->delimiter, '"', '\\')) !== false) {
 
             // Skip empty trailing line
             if ($fields === [null] || $fields === false) {

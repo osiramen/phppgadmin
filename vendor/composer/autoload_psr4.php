@@ -8,6 +8,7 @@ $baseDir = dirname($vendorDir);
 return array(
     'PhpPgAdmin\\Tests\\' => array($baseDir . '/tests'),
     'PhpPgAdmin\\' => array($baseDir . '/libraries/PhpPgAdmin'),
+    'PhpParser\\' => array($vendorDir . '/nikic/php-parser/lib/PhpParser'),
     'Doctrine\\Instantiator\\' => array($vendorDir . '/doctrine/instantiator/src/Doctrine/Instantiator'),
     'DeepCopy\\' => array($vendorDir . '/myclabs/deep-copy/src/DeepCopy'),
 );
