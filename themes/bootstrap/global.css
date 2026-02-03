@@ -789,3 +789,7 @@ label .icon {
 .badge {
 	text-shadow: none;
 }
+
+th.empty {
+	background-color: #fff;
+}

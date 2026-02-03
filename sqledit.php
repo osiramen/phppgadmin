@@ -134,7 +134,7 @@ function doDefault()
 	let adjustPopupSqlFormMethod = function(form) {
 		const isValidReadQuery =
 			!form.script.value
-			&& isSqlReadQuery(form.query.value)
+			&& extractSqlQueries(form.query.value).every(stmt => isReadOnlyQuery(stmt))
 			&& form.query.value.length < {$conf['max_get_query_length']};
 		if (isValidReadQuery) {
 			form.method = 'get';

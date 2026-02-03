@@ -690,16 +690,21 @@ class Misc extends AppContext
 	 * @param array $tabs
 	 * @return ArrayRecordSet
 	 */
-	function adjustTabsForTree(&$tabs)
+	function adjustTabsForTree($tabs)
 	{
 		$adjustedTabs = [];
 
 		foreach ($tabs as $tabKey => $tab) {
-			if ((isset($tab['hide']) && $tab['hide'] === true) || (isset($tab['tree']) && $tab['tree'] === false)) {
+			$skip = ($tab['hide'] ?? false) === true ||
+				($tab['tree'] ?? true) === false;
+			if ($skip) {
 				continue;
 			}
 			// Preserve the tab key as the 'tabkey' field for semantic ID generation
 			$tab['tabkey'] = $tabKey;
+			// Decode HTML entities in the title for proper display in the tree
+			$tab['title'] = html_entity_decode($tab['title'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
 			$adjustedTabs[] = $tab;
 		}
 

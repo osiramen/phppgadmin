@@ -31,7 +31,7 @@ class TabsRenderer extends AppContext
         echo "<table class=\"tabs\"><tr>\n";
         foreach ($tabs as $tabId => $tab) {
             $active = ($tabId == $activeTab) ? ' active' : '';
-            if (isset($tab['hide']) && $tab['hide'] === true) {
+            if (($tab['hide'] ?? false) === true) {
                 continue;
             }
 

@@ -527,20 +527,20 @@ $lang['strerrordupfields'] = 'Fehler bei den doppelten Spalten';
 $lang['strviewaltered'] = 'Sicht geändert.';
 $lang['strviewalteredbad'] = 'Ändern der Sicht fehlgeschlagen.';
 $lang['strspecifyviewtodrop'] = 'Sie müssen mindestens eine Sicht angeben, die gelöscht werden soll.';
-$lang['strmaterializedview'] = 'Materialisierte Ansicht';
-$lang['strmaterializedviews'] = 'Materialisierte Ansichten';
-$lang['strcreatematerializedview'] = 'Materialisierte Ansicht erstellen';
+$lang['strmaterializedview'] = 'Materialisierte Sicht';
+$lang['strmaterializedviews'] = 'Materialisierte Sichten';
+$lang['strcreatematerializedview'] = 'Materialisierte Sicht erstellen';
 $lang['strviewtype'] = 'Sichttyp';
 $lang['strnormalview'] = 'Normale Sicht';
 $lang['strwithdata'] = 'Mit Daten';
 $lang['strwithnodata'] = 'Ohne Daten';
-$lang['strrefreshmaterializedview'] = 'Materialisierte Ansicht aktualisieren';
-$lang['strmaterializedviewrefreshed'] = 'Materialisierte Ansicht aktualisiert.';
+$lang['strrefreshmaterializedview'] = 'Materialisierte Sicht aktualisieren';
+$lang['strmaterializedviewrefreshed'] = 'Materialisierte Sicht aktualisiert.';
 $lang['strmaterializedviewrefreshedbad'] = 'Aktualisierung der materialisierten Ansicht fehlgeschlagen.';
 $lang['strconcurrently'] = 'parallel';
 $lang['strconcurrentlyrequiresunique'] = 'Für parallele Aktualisierung ist ein eindeutiger Index erforderlich.';
 $lang['strconcurrentlyneedsunique'] = 'Paralleles Aktualisieren ist nicht verfügbar (erfordert einen eindeutigen Index).';
-$lang['strconfrefreshmaterializedview'] = 'Sind Sie sicher, dass Sie die materialisierte Ansicht "%s" aktualisieren möchten?';
+$lang['strconfrefreshmaterializedview'] = 'Sind Sie sicher, dass Sie die Materialisierte Sicht "%s" aktualisieren möchten?';
 
 // Sequences
 $lang['strsequence'] = 'Sequenz';
@@ -723,7 +723,7 @@ $lang['strforeach'] = 'Für alle';
 
 // Types
 $lang['strtype'] = 'Datentyp';
-$lang['strtypes'] = 'Datentypen';
+$lang['strtypes'] = 'Daten&shy;typen';
 $lang['strshowalltypes'] = 'Alle Datentypen anzeigen';
 $lang['strnotype'] = 'Kein Datentyp gefunden.';
 $lang['strnotypes'] = 'Keine Datentypen gefunden.';
@@ -838,7 +838,7 @@ $lang['stroperatordropped'] = 'Operator gelöscht.';
 $lang['stroperatordroppedbad'] = 'Löschen des Operators fehlgeschlagen.';
 
 // Casts
-$lang['strcasts'] = 'Typumwandlungen';
+$lang['strcasts'] = 'Typ&shy;umwand&shy;lungen';
 $lang['strnocasts'] = 'Keine Typumwandlungen gefunden.';
 $lang['strsourcetype'] = 'Ursprungs-Datentyp';
 $lang['strtargettype'] = 'Ziel-Datentyp';
@@ -869,7 +869,7 @@ $lang['strsourceencoding'] = 'Ursprungs-Zeichenkodierung';
 $lang['strtargetencoding'] = 'Ziel-Zeichenkodierung';
 
 // Languages
-$lang['strlanguages'] = 'Programmiersprachen';
+$lang['strlanguages'] = 'Programmier&shy;sprachen';
 $lang['strnolanguages'] = 'Keine Sprachen gefunden.';
 $lang['strtrusted'] = 'Vertrauenswürdig';
 
@@ -881,7 +881,7 @@ $lang['strchildtables'] = 'Kindtabellen';
 
 // Aggregates
 $lang['straggregate'] = 'Aggregatsfunktion';
-$lang['straggregates'] = 'Aggregatsfunktionen';
+$lang['straggregates'] = 'Aggregats&shy;funktionen';
 $lang['strnoaggregates'] = 'Keine Aggregatsfunktionen gefunden.';
 $lang['stralltypes'] = '(Alle Typen)';
 $lang['strcreateaggregate'] = 'Aggregatsfunktion erstellen';
@@ -905,7 +905,7 @@ $lang['straggrcreatedbad'] = 'Erstellen der Aggregatsfunktion fehlgeschlagen.';
 $lang['straggrshowall'] = 'Alle Aggregatsfunktionen anzeigen';
 
 // Operator Classes
-$lang['stropclasses'] = 'Operatorklassen';
+$lang['stropclasses'] = 'Operator&shy;klassen';
 $lang['strnoopclasses'] = 'Keine Operatorklassen gefunden.';
 $lang['straccessmethod'] = 'Zugriffsmethode';
 
@@ -995,7 +995,7 @@ $lang['strxactid'] = 'Transaktions-ID';
 $lang['strgid'] = 'Globale ID';
 
 // Fulltext search
-$lang['strfulltext'] = 'Volltextsuche';
+$lang['strfulltext'] = 'Volltext&shy;suche';
 $lang['strftsconfig'] = 'Volltextsuch-Konfiguration';
 $lang['strftsconfigs'] = 'Konfigurationen';
 $lang['strftscreateconfig'] = 'Volltextsuch-Konfiguration erstellen';

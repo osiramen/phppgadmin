@@ -2,7 +2,9 @@
 
 namespace PhpPgAdmin\Gui;
 
+use PhpPgAdmin\Core\AppContainer;
 use PhpPgAdmin\Core\AppContext;
+use PhpPgAdmin\Database\Actions\ViewActions;
 
 /**
  * Trail rendering: breadcrumb navigation hierarchy
@@ -137,12 +139,16 @@ class TrailRenderer extends AppContext
                 'icon' => 'Table'
             ];
         } elseif (isset($_REQUEST['view']) && !$done) {
+            // TODO Maybe to cache this info in session to avoid extra query?
+            $viewActions = new ViewActions(AppContainer::getPostgres());
+            $rs = $viewActions->getView($_REQUEST['view']);
+            $icon = is_object($rs) && !$rs->EOF && $rs->fields['relkind'] === 'm' ? 'MaterializedView' : 'View';
             $trail['view'] = [
                 'title' => $lang['strview'],
                 'text' => $_REQUEST['view'],
                 'url' => $this->misc()->getHREFSubject('view'),
                 'help' => 'pg.view',
-                'icon' => 'View'
+                'icon' => $icon
             ];
         } elseif (isset($_REQUEST['ftscfg']) && !$done) {
             $trail['ftscfg'] = [

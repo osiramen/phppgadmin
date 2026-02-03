@@ -7,9 +7,68 @@ use ADORecordSet;
 
 class RowActions extends ActionsBase
 {
+	/**
+	 * Per-request cache for getRowIdentifier() results.
+	 *
+	 * Keyed by "schema\0table" to avoid collisions.
+	 *
+	 * @var array<string, array|int>
+	 */
+	private $rowIdentifierCache = [];
+
 	public $totalRowsFound = 0;
 	public $lastQueryLimit = 0;
 	public $lastQueryOffset = 0;
+
+	/**
+	 * Get the fields for uniquely identifying a row in a table or view
+	 * @param string $table The table or view for which to retrieve the identifier
+	 * @return array|int An array mapping attribute number to attribute name,
+	 * empty for no identifiers.
+	 * -1 on error
+	 */
+	public function getRowIdentifier($table)
+	{
+		$schema = $this->connection->_schema;
+		$cacheKey = $schema . "." . $table;
+		if (isset($this->rowIdentifierCache[$cacheKey])) {
+			return $this->rowIdentifierCache[$cacheKey];
+		}
+
+		$schemaEscaped = $this->connection->escapeLiteral($schema);
+		$tableEscaped = $this->connection->escapeLiteral($table);
+
+		$sql =
+			"SELECT relkind, oid
+			FROM pg_catalog.pg_class
+			WHERE relname = {$tableEscaped}
+			AND relnamespace = (
+				SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = {$schemaEscaped}
+			)";
+		$obj = $this->connection->selectSet($sql)->fields;
+
+		if (!$obj) {
+			return -1;
+		}
+
+		switch ($obj['relkind']) {
+			case 'r': // table
+			case 'p': // partitioned table
+			case 'm': // materialized view
+				$result = $this->getRowIdentifierForTable($table);
+				break;
+			case 'v': // view
+				$result = $this->getRowIdentifierForView($table);
+				break;
+			default:
+				$result = []; // unsupported object type
+				break;
+		}
+
+		$this->rowIdentifierCache[$cacheKey] = $result;
+		return $result;
+	}
+
 
 	/**
 	 * Get the fields for uniquely identifying a row in a table
@@ -18,27 +77,22 @@ class RowActions extends ActionsBase
 	 * empty for no identifiers.
 	 * -1 on error
 	 */
-	public function getRowIdentifier($table)
+	public function getRowIdentifierForTable($table)
 	{
-		$oldtable = $table;
-		$c_schema = $this->connection->_schema;
-		$this->connection->clean($c_schema);
-		$this->connection->clean($table);
-
-		$status = $this->connection->beginTransaction();
-		if ($status != 0)
-			return -1;
+		$schema = $this->connection->_schema;
+		$schemaEscaped = $this->connection->escapeLiteral($schema);
+		$tableEscaped = $this->connection->escapeLiteral($table);
 
 		// Get the first primary or unique index (sorting primary keys first) that
 		// is NOT a partial index.
-		$sql = "
-			SELECT indrelid, indkey
+		$sql =
+			"SELECT indrelid, indkey
 			FROM pg_catalog.pg_index
 			WHERE indisunique AND indrelid=(
 				SELECT oid FROM pg_catalog.pg_class
-				WHERE relname='{$table}' AND relnamespace=(
+				WHERE relname={$tableEscaped} AND relnamespace=(
 					SELECT oid FROM pg_catalog.pg_namespace
-					WHERE nspname='{$c_schema}'
+					WHERE nspname={$schemaEscaped}
 				)
 			) AND indpred IS NULL AND indexprs IS NULL
 			ORDER BY indisprimary DESC LIMIT 1";
@@ -53,23 +107,53 @@ class RowActions extends ActionsBase
 			if ($this->connection->hasObjectID($table)) {
 				$temp = ['oid'];
 			}
-			$this->connection->endTransaction();
 			return $temp;
 		} // Otherwise find the names of the keys
 		else {
 			$attnames = (new TableActions($this->connection))
 				->getAttributeNames(
-					$oldtable,
+					$table,
 					explode(' ', $rs->fields['indkey'])
 				);
 			if (!is_array($attnames)) {
-				$this->connection->rollbackTransaction();
 				return -1;
 			} else {
-				$this->connection->endTransaction();
 				return $attnames;
 			}
 		}
+	}
+
+	private function getRowIdentifierForView($view)
+	{
+
+		$schema = $this->connection->_schema;
+		$schemaEscaped = $this->connection->escapeLiteral($schema);
+		$viewEscaped = $this->connection->escapeLiteral($view);
+
+		// 1) Find the base table for the view
+		$sql =
+			"SELECT table_schema, table_name
+			FROM information_schema.view_table_usage
+			WHERE view_schema = $schemaEscaped AND view_name = $viewEscaped;";
+
+		$rs = $this->connection->selectSet($sql);
+		if (!is_object($rs)) {
+			return -1;
+		}
+
+		if ($rs->EOF) {
+			return [];
+		}
+
+		$baseSchema = $rs->fields['table_schema'];
+		$baseTable = $rs->fields['table_name'];
+
+		if ($baseSchema !== $this->connection->_schema) {
+			// Currently only tables in the same schema are supported
+			return [];
+		}
+
+		return $this->getRowIdentifierForTable($baseTable);
 	}
 
 	/**
@@ -183,37 +267,32 @@ class RowActions extends ActionsBase
 		$this->lastQueryLimit = $page_size;
 		$this->lastQueryOffset = ($page - 1) * $page_size;
 
+
+		$this->connection->conn->setFetchMode(ADODB_FETCH_NUM);
+
 		if (!$is_select) {
 			// Non-SELECT queries must run directly
 			$rs = $this->connection->selectSet($query);
-			if (is_int($rs)) {
-				$this->connection->rollbackTransaction();
-				return -1;
-			}
-			$this->connection->endTransaction();
-			$this->lastQueryLimit = $this->totalRowsFound = $rs->rowCount();
-			return $rs;
-		}
+			if (is_object($rs))
+				$this->lastQueryLimit = $this->totalRowsFound = $rs->rowCount();
+		} else {
 
-		// Set fetch mode to NUM so that duplicate field names are properly
-		// returned
-		//if ($type == 'QUERY')
-		$this->connection->conn->setFetchMode(ADODB_FETCH_NUM);
-
-		// Actually retrieve the rows, with offset and limit
-		$rs = $this->connection->selectSet(
-			"SELECT * FROM ({$query}) AS sub
+			// Actually retrieve the rows, with offset and limit
+			$rs = $this->connection->selectSet(
+				"SELECT * FROM ({$query}) AS sub
 			{$order_by}
 			LIMIT {$page_size} OFFSET {$this->lastQueryOffset}"
-		);
+			);
+
+		}
 
 		$this->connection->conn->setFetchMode(ADODB_FETCH_ASSOC);
 
-		$status = $this->connection->endTransaction();
-		if ($status != 0) {
+		if (is_int($rs)) {
 			$this->connection->rollbackTransaction();
 			return -1;
 		}
+		$this->connection->endTransaction();
 
 		return $rs;
 	}

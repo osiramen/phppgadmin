@@ -115,29 +115,28 @@ function replace($str, $params)
  */
 function value($var, $fields, $esc = null)
 {
-	if ($var instanceof Decorator) {
+	if ($var instanceof Decorator)
 		$val = $var->value($fields);
-	} else {
+	else
 		$val = $var;
+
+	if (!is_string($val)) {
+		return $val;
 	}
 
-	if (is_string($val)) {
-		switch ($esc) {
-			case 'xml':
-				return strtr($val, [
-					'&' => '&amp;',
-					"'" => '&apos;',
-					'"' => '&quot;',
-					'<' => '&lt;',
-					'>' => '&gt;'
-				]);
-			case 'html':
-				return htmlentities($val, ENT_COMPAT, 'UTF-8');
-			case 'url':
-				return urlencode($val);
-		}
+	switch ($esc) {
+		case 'xml':
+			return htmlspecialchars($val, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+
+		case 'html':
+			return htmlspecialchars($val, ENT_COMPAT, 'UTF-8');
+
+		case 'url':
+			return rawurlencode($val);
+
+		default:
+			return $val;
 	}
-	return $val;
 }
 
 /**

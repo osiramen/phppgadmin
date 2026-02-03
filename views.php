@@ -441,7 +441,7 @@ function doCreate($msg = '')
 	if (!isset($_REQUEST['formView']))
 		$_REQUEST['formView'] = '';
 	if (!isset($_REQUEST['formDefinition'])) {
-		if (isset($_SESSION['sqlquery']) && isSqlReadQuery($_SESSION['sqlquery']))
+		if (isset($_SESSION['sqlquery']) && is_result_set_query($_SESSION['sqlquery']))
 			$_REQUEST['formDefinition'] = $_SESSION['sqlquery'];
 		else
 			$_REQUEST['formDefinition'] = 'SELECT ';

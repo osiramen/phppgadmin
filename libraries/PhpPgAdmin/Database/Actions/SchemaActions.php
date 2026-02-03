@@ -96,6 +96,9 @@ class SchemaActions extends ActionsBase
         if (empty($schema)) {
             return -1;
         }
+        if ($this->connection->_schema == $schema) {
+            return 0;
+        }
         $search_path = $this->getSearchPath();
         $schema_by_key = array_flip($search_path);
         if (!isset($schema_by_key[$schema])) {

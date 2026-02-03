@@ -24,103 +24,703 @@
 	};
 
 	/**
-	 * SQL query extractor
+	 * SQL query extractor with multibyte-safe iteration and dollar-quoted strings
+	 *
 	 * @param {string} sql
 	 * @returns {string[]}
 	 */
 	window.extractSqlQueries = function (sql) {
 		const queries = [];
+		const len = sql.length;
 		let current = "";
-		let inString = false;
-		let stringChar = null;
-		let inLineComment = false;
-		let inBlockComment = false;
+		let i = 0;
 
-		for (let i = 0; i < sql.length; i++) {
-			const c = sql[i];
-			const n = sql[i + 1];
+		let inSingle = false; // '
+		let inDouble = false; // "
+		let inDollar = false; // $tag$ ... $tag$
+		let dollarTag = ""; // full tag like $tag$
+		let inLineComment = false; // --
+		let blockDepth = 0; // nested /* ... */
 
+		while (i < len) {
+			const ch = sql[i];
+			const next = i + 1 < len ? sql[i + 1] : null;
+
+			// ------------------------------
 			// Line comment --
-			if (!inString && !inBlockComment && c === "-" && n === "-") {
-				inLineComment = true;
-			}
-
-			// End line comment
-			if (inLineComment && c === "\n") {
-				inLineComment = false;
-			}
-
-			// Block comment /*
-			if (!inString && !inLineComment && c === "/" && n === "*") {
-				inBlockComment = true;
-			}
-
-			// End block comment */
-			if (inBlockComment && c === "*" && n === "/") {
-				inBlockComment = false;
+			// ------------------------------
+			if (inLineComment) {
+				current += ch;
+				if (ch === "\n" || ch === "\r") {
+					inLineComment = false;
+				}
 				i++;
 				continue;
 			}
 
-			// Strings '...' or "..."
-			if (!inLineComment && !inBlockComment) {
-				if (!inString && (c === "'" || c === '"')) {
-					inString = true;
-					stringChar = c;
-				} else if (inString && c === stringChar) {
-					inString = false;
+			// ------------------------------
+			// Block comment /* ... */
+			// ------------------------------
+			if (blockDepth > 0) {
+				if (ch === "/" && next === "*") {
+					blockDepth++;
+					current += "/*";
+					i += 2;
+					continue;
 				}
-			}
-
-			// Semicolon ends query
-			if (!inString && !inLineComment && !inBlockComment && c === ";") {
-				if (current.trim().length > 0) {
-					queries.push(current.trim());
+				if (ch === "*" && next === "/") {
+					blockDepth--;
+					current += "*/";
+					i += 2;
+					continue;
 				}
-				current = "";
+				current += ch;
+				i++;
 				continue;
 			}
 
-			current += c;
+			// ------------------------------
+			// Dollar-quoted string
+			// ------------------------------
+			if (inDollar) {
+				const tagLen = dollarTag.length;
+				const substr = sql.substring(i, i + tagLen);
+				if (substr === dollarTag) {
+					current += dollarTag;
+					i += tagLen;
+					inDollar = false;
+					dollarTag = "";
+					continue;
+				}
+				current += ch;
+				i++;
+				continue;
+			}
+
+			// ------------------------------
+			// Single-quoted string
+			// ------------------------------
+			if (inSingle) {
+				if (ch === "'" && next === "'") {
+					current += "''";
+					i += 2;
+					continue;
+				}
+				if (ch === "'") {
+					inSingle = false;
+					current += ch;
+					i++;
+					continue;
+				}
+				current += ch;
+				i++;
+				continue;
+			}
+
+			// ------------------------------
+			// Double-quoted identifier
+			// ------------------------------
+			if (inDouble) {
+				if (ch === '"' && next === '"') {
+					current += '""';
+					i += 2;
+					continue;
+				}
+				if (ch === '"') {
+					inDouble = false;
+					current += ch;
+					i++;
+					continue;
+				}
+				current += ch;
+				i++;
+				continue;
+			}
+
+			// ------------------------------
+			// Detect starts (not inside string/comment/dollar)
+			// ------------------------------
+
+			// line comment --
+			if (ch === "-" && next === "-") {
+				inLineComment = true;
+				current += "--";
+				i += 2;
+				continue;
+			}
+
+			// block comment /*
+			if (ch === "/" && next === "*") {
+				blockDepth = 1;
+				current += "/*";
+				i += 2;
+				continue;
+			}
+
+			// dollar-quote start: $tag$
+			if (ch === "$") {
+				const rest = sql.substring(i);
+				const m = rest.match(/^\$[A-Za-z0-9_]*\$/);
+				if (m) {
+					dollarTag = m[0];
+					inDollar = true;
+					current += dollarTag;
+					i += dollarTag.length;
+					continue;
+				}
+			}
+
+			// single quote start
+			if (ch === "'") {
+				inSingle = true;
+				current += ch;
+				i++;
+				continue;
+			}
+
+			// double quote start
+			if (ch === '"') {
+				inDouble = true;
+				current += ch;
+				i++;
+				continue;
+			}
+
+			// semicolon ends statement
+			if (ch === ";") {
+				const trimmed = current.trim();
+				if (trimmed !== "") {
+					queries.push(trimmed);
+				}
+				current = "";
+				i++;
+				continue;
+			}
+
+			// normal char
+			current += ch;
+			i++;
 		}
 
-		if (current.trim().length > 0) {
-			queries.push(current.trim());
+		const trimmed = current.trim();
+		if (trimmed !== "") {
+			queries.push(trimmed);
 		}
 
 		return queries;
 	};
 
-	window.isSqlReadQuery = function (sql) {
-		const statements = extractSqlQueries(sql);
-		//console.log("Extracted statements:", statements);
-		if (statements.length === 0) {
-			return false;
+	/**
+	 * Check if SQL query returns a result set
+	 * @param {string} sql
+	 * @returns {boolean}
+	 */
+	window.isResultSetQuery = function (sql) {
+		let s = sql.trim();
+		if (s === "") return false;
+
+		// remove leading single-line and block comments
+		s = s.replace(/^\s*(--[^\n]*\n|\/\*.*?\*\/\s*)+/s, "");
+		let stmt = s.trim();
+		if (stmt === "") return false;
+
+		// EXPLAIN always returns a resultset
+		if (/^\s*EXPLAIN\b/i.test(stmt)) {
+			return true;
 		}
 
-		for (const stmt of statements) {
-			const upper = stmt.toUpperCase();
+		// always-resultset starters
+		const always = ["SELECT", "VALUES", "TABLE", "SHOW", "FETCH", "MOVE"];
+		for (const kw of always) {
+			const re = new RegExp("^\\s*" + kw + "\\b", "i");
+			if (re.test(stmt)) return true;
+		}
 
-			if (
-				upper.startsWith("SELECT") ||
-				upper.startsWith("WITH") ||
-				upper.startsWith("SET") ||
-				upper.startsWith("SHOW")
-			) {
-				continue; // ok
-			}
+		// COPY ... TO => resultset
+		if (/^\s*COPY\b.+\bTO\b/i.test(stmt)) return true;
+		// COPY ... FROM => no resultset
+		if (/^\s*COPY\b.+\bFROM\b/i.test(stmt)) return false;
 
-			if (upper.startsWith("EXPLAIN")) {
-				const rest = upper.slice(7).trim();
-				if (rest.startsWith("SELECT")) {
-					continue; // ok
+		// RETURNING anywhere (heuristic)
+		if (/\bRETURNING\b/i.test(stmt)) return true;
+
+		// WITH ... parse CTE list
+		if (/^\s*WITH\b/i.test(stmt)) {
+			const len = stmt.length;
+			let pos = 0;
+
+			const mWith = stmt.match(/^\s*WITH\b/i);
+			if (mWith) pos = mWith[0].length;
+
+			let depth = 0;
+			let inSingle = false;
+			let inDouble = false;
+			let inDollar = false;
+			let dollarTag = "";
+			let lastClose = -1;
+
+			for (let i = pos; i < len; i++) {
+				const ch = stmt[i];
+				const next = stmt[i + 1];
+
+				// dollar quoting
+				if (!inSingle && !inDouble && ch === "$") {
+					const rest = stmt.slice(i);
+					const m = rest.match(/^\$([A-Za-z0-9_]*)\$/);
+					if (m) {
+						const tag = m[1];
+						const tagFull = "$" + tag + "$";
+						if (!inDollar) {
+							inDollar = true;
+							dollarTag = tagFull;
+							i += tagFull.length - 1;
+							continue;
+						} else {
+							if (tagFull === dollarTag) {
+								inDollar = false;
+								dollarTag = "";
+								i += tagFull.length - 1;
+								continue;
+							}
+						}
+					}
+				}
+				if (inDollar) continue;
+
+				// single-quoted string
+				if (ch === "'" && !inDouble) {
+					inSingle = !inSingle;
+					continue;
+				}
+				// double-quoted identifier
+				if (ch === '"' && !inSingle) {
+					inDouble = !inDouble;
+					continue;
+				}
+				if (inSingle || inDouble) continue;
+
+				// parentheses
+				if (ch === "(") {
+					depth++;
+					continue;
+				}
+				if (ch === ")") {
+					if (depth > 0) depth--;
+					lastClose = i;
+					continue;
+				}
+
+				// semicolon ends
+				if (ch === ";" && depth === 0) break;
+
+				// detect main query token after CTEs
+				if (
+					depth === 0 &&
+					ch !== " " &&
+					ch !== "\t" &&
+					ch !== "\n" &&
+					ch !== ","
+				) {
+					const rest = stmt.slice(i);
+					const m2 = rest.match(
+						/^\s*(SELECT|VALUES|TABLE|INSERT|UPDATE|DELETE|MERGE|SHOW|EXPLAIN|COPY|FETCH|MOVE)\b/i,
+					);
+					if (m2) {
+						const mainToken = m2[1].toUpperCase();
+
+						if (always.includes(mainToken)) return true;
+
+						if (mainToken === "COPY") {
+							return /^\s*COPY\b.+\bTO\b/i.test(rest);
+						}
+
+						if (mainToken === "EXPLAIN") {
+							return true;
+						}
+
+						// INSERT/UPDATE/DELETE/MERGE -> only with RETURNING
+						return /\bRETURNING\b/i.test(rest);
+					}
 				}
 			}
 
+			// fallback
+			if (/\bSELECT\b/i.test(stmt)) return true;
+			if (/\bRETURNING\b/i.test(stmt)) return true;
 			return false;
 		}
 
-		return true;
+		// INSERT/UPDATE/DELETE/MERGE without RETURNING -> no resultset
+		if (/^\s*(INSERT|UPDATE|DELETE|MERGE)\b/i.test(stmt)) {
+			return /\bRETURNING\b/i.test(stmt);
+		}
+
+		// DDL, SET, RESET, VACUUM, ANALYZE, DO, CALL, LOCK etc.
+		if (
+			/^\s*(CREATE|ALTER|DROP|TRUNCATE|SET|RESET|VACUUM|ANALYZE|DO|CALL|LOCK|GRANT|REVOKE)\b/i.test(
+				stmt,
+			)
+		) {
+			return false;
+		}
+
+		// fallback: check first token
+		const mTok = stmt.match(/^\s*([A-Z_]+)/i);
+		if (mTok) {
+			const tok = mTok[1].toUpperCase();
+			return always.includes(tok) || tok === "EXPLAIN";
+		}
+
+		return false;
+	};
+
+	/**
+	 * Return true if the given single SQL statement is read-only
+	 * (no DB modifications / side effects).
+	 * Conservative: returns false when unsure.
+	 *
+	 * @param {string} sql
+	 * @returns {boolean}
+	 */
+	window.isReadOnlyQuery = function (sql) {
+		if (!sql || typeof sql !== "string") return false;
+
+		// trim and remove leading comments (single-line and block)
+		let s = sql.trim();
+		if (s === "") return false;
+		s = s.replace(/^\s*(--[^\n]*\n|\/\*[\s\S]*?\*\/\s*)+/s, "").trim();
+		if (s === "") return false;
+
+		const firstToken = (str) => {
+			const m = str.trim().match(/^([A-Za-z_]+)/);
+			return m ? m[1].toUpperCase() : "";
+		};
+
+		// helper: determine if a statement is SELECT-like
+		// (SELECT, VALUES, TABLE or WITH whose main is SELECT-like)
+		const isSelectLike = (stmt) => {
+			if (!stmt || typeof stmt !== "string") return false;
+			const t = stmt.trim();
+			if (/^\s*(SELECT|VALUES|TABLE)\b/i.test(t)) return true;
+
+			// handle WITH ... find main token after CTE list
+			// (simple but robust)
+			if (/^\s*WITH\b/i.test(t)) {
+				// try to find the main token after the CTE list by
+				// scanning parentheses and quotes/dollar
+				const len = t.length;
+				let i = 0;
+				const mWith = t.match(/^\s*WITH\b/i);
+				if (mWith) i = mWith[0].length;
+				let depth = 0;
+				let inSingle = false,
+					inDouble = false,
+					inDollar = false;
+				let dollarTag = "";
+				for (; i < len; i++) {
+					const ch = t[i];
+					// dollar-quote handling
+					if (!inSingle && !inDouble && ch === "$") {
+						const rest = t.slice(i);
+						const m = rest.match(/^\$[A-Za-z0-9_]*\$/);
+						if (m) {
+							const tag = m[0];
+							if (!inDollar) {
+								inDollar = true;
+								dollarTag = tag;
+								i += tag.length - 1;
+								continue;
+							} else if (tag === dollarTag) {
+								inDollar = false;
+								dollarTag = "";
+								i += tag.length - 1;
+								continue;
+							}
+						}
+					}
+					if (inDollar) continue;
+					if (ch === "'" && !inDouble) {
+						inSingle = !inSingle;
+						continue;
+					}
+					if (ch === '"' && !inSingle) {
+						inDouble = !inDouble;
+						continue;
+					}
+					if (inSingle || inDouble) continue;
+					if (ch === "(") {
+						depth++;
+						continue;
+					}
+					if (ch === ")") {
+						if (depth > 0) depth--;
+						continue;
+					}
+					if (ch === ";" && depth === 0) break;
+					if (
+						depth === 0 &&
+						ch !== " " &&
+						ch !== "\t" &&
+						ch !== "\n" &&
+						ch !== ","
+					) {
+						const rest = t.slice(i);
+						const m2 = rest.match(
+							/^\s*(SELECT|VALUES|TABLE|INSERT|UPDATE|DELETE|MERGE|SHOW|EXPLAIN|COPY|FETCH|MOVE)\b/i,
+						);
+						if (m2) {
+							const main = m2[1].toUpperCase();
+							return /^(SELECT|VALUES|TABLE)$/i.test(main);
+						}
+					}
+				}
+				// fallback: if SELECT appears anywhere, assume select-like
+				if (/\bSELECT\b/i.test(t)) return true;
+				return false;
+			}
+			return false;
+		};
+
+		// EXPLAIN handling:
+		// - EXPLAIN (with or without options) is read-only
+		// - EXPLAIN ANALYZE executes the inner statement; treat as
+		// read-only only if inner is SELECT-like
+		if (/^\s*EXPLAIN\b/i.test(s)) {
+			// detect ANALYZE presence (either as keyword or inside
+			// parentheses options)
+			const hasAnalyze =
+				/\bANALYZE\b/i.test(s) ||
+				/^\s*EXPLAIN\s*\([^\)]*\banalyze\b/i.test(s);
+			if (!hasAnalyze) return true;
+
+			// has ANALYZE -> extract inner statement after EXPLAIN and its options
+			// remove leading EXPLAIN and any parenthesized options or keyword options
+			// pattern: EXPLAIN ( ... ) <rest>  OR EXPLAIN <word> <word> ... <rest>
+			let rest = s.replace(/^\s*EXPLAIN\b/i, "").trim();
+
+			// if starts with '(' then strip the parenthesized options block
+			if (rest.startsWith("(")) {
+				// find matching closing parenthesis (no full parser, but handle nested and quotes/dollar)
+				let idx = 0,
+					depth = 0;
+				let inS = false,
+					inD = false,
+					inDol = false;
+				let dolTag = "";
+				for (let j = 0; j < rest.length; j++) {
+					const ch = rest[j];
+					if (!inS && !inD && ch === "$") {
+						const sub = rest.slice(j);
+						const mm = sub.match(/^\$[A-Za-z0-9_]*\$/);
+						if (mm) {
+							const tag = mm[0];
+							if (!inDol) {
+								inDol = true;
+								dolTag = tag;
+								j += tag.length - 1;
+								continue;
+							} else if (tag === dolTag) {
+								inDol = false;
+								dolTag = "";
+								j += tag.length - 1;
+								continue;
+							}
+						}
+					}
+					if (inDol) continue;
+					if (ch === "'" && !inD) {
+						inS = !inS;
+						continue;
+					}
+					if (ch === '"' && !inS) {
+						inD = !inD;
+						continue;
+					}
+					if (inS || inD) continue;
+					if (ch === "(") {
+						depth++;
+					} else if (ch === ")") {
+						depth--;
+						if (depth === 0) {
+							idx = j + 1;
+							break;
+						}
+					}
+				}
+				rest = rest.slice(idx).trim();
+			} else {
+				// strip leading option keywords like ANALYZE, VERBOSE, COSTS, BUFFERS, TIMING, FORMAT, SUMMARY etc.
+				// stop at first token that looks like a statement starter
+				const tokens = rest.split(/\s+/);
+				let k = 0;
+				for (; k < tokens.length; k++) {
+					const tk = tokens[k].toUpperCase();
+					if (
+						/^(ANALYZE|VERBOSE|COSTS|BUFFERS|TIMING|SUMMARY|FORMAT|SETTINGS|SILENT|COSTS|BUFFERS)$/i.test(
+							tk,
+						)
+					)
+						continue;
+					break;
+				}
+				rest = tokens.slice(k).join(" ").trim();
+			}
+
+			// now rest should start with the inner statement; check if it's SELECT-like
+			if (isSelectLike(rest)) return true;
+			return false;
+		}
+
+		// Always read-only starters
+		if (/^\s*(SELECT|VALUES|TABLE|SHOW|FETCH|MOVE)\b/i.test(s)) return true;
+
+		// COPY TO is read-only (reads DB), COPY FROM is not
+		if (/^\s*COPY\b[\s\S]*\bTO\b/i.test(s)) return true;
+		if (/^\s*COPY\b[\s\S]*\bFROM\b/i.test(s)) return false;
+
+		// DECLARE CURSOR ... READ ONLY
+		if (/^\s*DECLARE\b/i.test(s)) {
+			if (/\bCURSOR\b/i.test(s) && /\bREAD\s+ONLY\b/i.test(s))
+				return true;
+			return false;
+		}
+
+		// Top-level DML that modifies data -> not read-only
+		if (/^\s*(INSERT|UPDATE|DELETE|MERGE|TRUNCATE)\b/i.test(s))
+			return false;
+
+		// DDL / utility / session commands -> not read-only
+		if (
+			/^\s*(CREATE|ALTER|DROP|SET|RESET|VACUUM|ANALYZE|DO|CALL|LOCK|GRANT|REVOKE|CHECKPOINT)\b/i.test(
+				s,
+			)
+		) {
+			return false;
+		}
+
+		// If statement contains RETURNING it's modifying -> not read-only
+		if (/\bRETURNING\b/i.test(s)) return false;
+
+		// WITH ... need to ensure CTE bodies and main query are read-only
+		if (/^\s*WITH\b/i.test(s)) {
+			// simple scan: if any CTE body or main token is a write operation, return false
+			// reuse isSelectLike for main detection; but also check CTE bodies for write tokens
+			// crude extraction of CTE bodies: find all "AS ( ... )" occurrences at top-level
+			const bodies = [];
+			let i = 0,
+				len = s.length;
+			const mWith = s.match(/^\s*WITH\b/i);
+			if (mWith) i = mWith[0].length;
+			let depth = 0,
+				inSingle = false,
+				inDouble = false,
+				inDollar = false,
+				dollarTag = "";
+			while (i < len) {
+				const ch = s[i];
+				// dollar handling
+				if (!inSingle && !inDouble && ch === "$") {
+					const rest = s.slice(i);
+					const m = rest.match(/^\$[A-Za-z0-9_]*\$/);
+					if (m) {
+						inDollar = !inDollar;
+						dollarTag = inDollar ? m[0] : "";
+						i += m[0].length;
+						continue;
+					}
+				}
+				if (inDollar) {
+					i++;
+					continue;
+				}
+				if (ch === "'" && !inDouble) {
+					inSingle = !inSingle;
+					i++;
+					continue;
+				}
+				if (ch === '"' && !inSingle) {
+					inDouble = !inDouble;
+					i++;
+					continue;
+				}
+				if (inSingle || inDouble) {
+					i++;
+					continue;
+				}
+				// detect AS (
+				if (s.slice(i).match(/^\s*AS\s*\(/i)) {
+					// move to '('
+					const asMatch = s.slice(i).match(/^\s*AS\s*\(/i);
+					i += asMatch[0].length - 1; // position at '('
+					// find matching ')'
+					let j = i,
+						pDepth = 0,
+						inS = false,
+						inD = false,
+						inDol = false,
+						dolTag = "";
+					for (; j < len; j++) {
+						const ch2 = s[j];
+						if (!inS && !inD && ch2 === "$") {
+							const rest2 = s.slice(j);
+							const mm = rest2.match(/^\$[A-Za-z0-9_]*\$/);
+							if (mm) {
+								inDol = !inDol;
+								dolTag = inDol ? mm[0] : "";
+								j += mm[0].length - 1;
+								continue;
+							}
+						}
+						if (inDol) continue;
+						if (ch2 === "'" && !inD) {
+							inS = !inS;
+							continue;
+						}
+						if (ch2 === '"' && !inS) {
+							inD = !inD;
+							continue;
+						}
+						if (inS || inD) continue;
+						if (ch2 === "(") {
+							pDepth++;
+							continue;
+						}
+						if (ch2 === ")") {
+							if (pDepth === 0) {
+								// body between i+1 and j-1
+								const body = s.slice(i + 1, j);
+								bodies.push(body);
+								i = j + 1;
+								break;
+							} else pDepth--;
+						}
+					}
+					continue;
+				}
+				// if we reach a token that likely starts main query, break
+				if (!/\s/.test(ch) && ch !== ",") break;
+				i++;
+			}
+
+			// check CTE bodies for writes
+			for (const b of bodies) {
+				if (/^\s*(INSERT|UPDATE|DELETE|MERGE|TRUNCATE)\b/i.test(b))
+					return false;
+				if (/^\s*COPY\b/i.test(b) && /\bFROM\b/i.test(b)) return false;
+				if (/^\s*EXPLAIN\b/i.test(b) && /\bANALYZE\b/i.test(b))
+					return false;
+				if (/\bRETURNING\b/i.test(b)) return false;
+			}
+
+			// check main query: if select-like -> read-only, else not
+			// find main token after last CTE closing ) by searching for first statement token
+			const afterCTEs = s.slice(i).trim();
+			if (isSelectLike(afterCTEs)) return true;
+			return false;
+		}
+
+		// default: not read-only
+		return false;
 	};
 
 	/**

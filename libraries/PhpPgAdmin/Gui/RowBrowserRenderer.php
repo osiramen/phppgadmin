@@ -3,6 +3,7 @@
 namespace PhpPgAdmin\Gui;
 
 use PhpPgAdmin\Database\Actions\TypeActions;
+use PhpPgAdmin\Database\Actions\ViewActions;
 use PhpPgAdmin\Database\Import\SqlParser;
 use PhpPgAdmin\Database\Postgres;
 use PHPSQLParser\PHPSQLParser;
@@ -18,30 +19,503 @@ use PhpPgAdmin\Database\Actions\ConstraintActions;
 class RowBrowserRenderer extends AppContext
 {
 
+    /** @var \PhpPgAdmin\Database\Postgres|null */
+    private $pg = null;
+
+    /** @var array|null */
+    private $conf = null;
+
+    /** @var mixed|null */
+    private $misc = null;
+
+    /** @var array|null */
+    private $lang = null;
+
+    /** @var \PhpPgAdmin\Database\Actions\RowActions|null */
+    private $rowActions = null;
+
+    /** @var \PhpPgAdmin\Database\Actions\TypeActions|null */
+    private $typeActions = null;
+
+    /** @var \PhpPgAdmin\Database\Actions\ConstraintActions|null */
+    private $constraintActions = null;
+
+    /** @var \PhpPgAdmin\Database\Actions\SchemaActions|null */
+    private $schemaActions = null;
+
+    /** @var \PHPSQLParser\PHPSQLParser|null */
+    private $sqlParser = null;
+
+    /** @var array<string, array> */
+    private $typesMetaCache = [];
+
+    /** @var array<int, int> */
+    private $fieldCountCache = [];
+
     /** @var array<int, array<string, list<int>>> */
     private $fieldNameIndexMapCache = [];
 
+    /** @var \ADORecordSet|null */
+    private $currentRecordSet = null;
+
+    /** @var array<string, list<int>> */
+    private $currentNameIndexMap = [];
+
+    /** @var array */
+    private $currentFkInformation = [];
+
+    /** @var bool */
+    private $currentWithOid = false;
+
+    /** @var array|false */
+    private $currentHeaderArgs = false;
+
+    /** @var bool */
+    private $currentEditable = false;
+
+    /** @var array */
+    private $currentByteaCols = [];
+
+    private $byteaColumns = null;
+
+
+    private function getPg()
+    {
+        if ($this->pg === null) {
+            $this->pg = AppContainer::getPostgres();
+        }
+        return $this->pg;
+    }
+
+    private function getConf(): array
+    {
+        if ($this->conf === null) {
+            $this->conf = AppContainer::getConf();
+        }
+        return $this->conf;
+    }
+
+    private function getMisc()
+    {
+        if ($this->misc === null) {
+            $this->misc = AppContainer::getMisc();
+        }
+        return $this->misc;
+    }
+
+    private function getLang(): array
+    {
+        if ($this->lang === null) {
+            $this->lang = AppContainer::getLang();
+        }
+        return $this->lang;
+    }
+
+    private function getRowActions(): RowActions
+    {
+        if ($this->rowActions === null) {
+            $this->rowActions = new RowActions($this->getPg());
+        }
+        return $this->rowActions;
+    }
+
+    private function getTypeActions(): TypeActions
+    {
+        if ($this->typeActions === null) {
+            $this->typeActions = new TypeActions($this->getPg());
+        }
+        return $this->typeActions;
+    }
+
+    private function getConstraintActions(): ConstraintActions
+    {
+        if ($this->constraintActions === null) {
+            $this->constraintActions = new ConstraintActions($this->getPg());
+        }
+        return $this->constraintActions;
+    }
+
+    private function getSchemaActions(): SchemaActions
+    {
+        if ($this->schemaActions === null) {
+            $this->schemaActions = new SchemaActions($this->getPg());
+        }
+        return $this->schemaActions;
+    }
+
+    private function getSqlParser(): PHPSQLParser
+    {
+        if ($this->sqlParser === null) {
+            $this->sqlParser = new PHPSQLParser();
+        }
+        return $this->sqlParser;
+    }
+
+
+    private function setCurrentBrowseContext($rs, array $nameIndexMap, array $fkeyInformation, bool $withOid, $headerArgs): void
+    {
+        $this->currentRecordSet = $rs;
+        $this->currentNameIndexMap = $nameIndexMap;
+        $this->currentFkInformation = $fkeyInformation;
+        $this->currentWithOid = $withOid;
+        $this->currentHeaderArgs = $headerArgs;
+        $this->currentByteaCols = $this->byteaColumns ?? [];
+    }
+
+    private function setCurrentRowEditable(bool $editable): void
+    {
+        $this->currentEditable = $editable;
+    }
+
+    private function printCurrentHeaderCells(): void
+    {
+        if ($this->currentRecordSet === null) {
+            return;
+        }
+
+        $this->printTableHeaderCells($this->currentRecordSet, $this->currentHeaderArgs, $this->currentWithOid);
+    }
+
+    private function printCurrentRowCells(): void
+    {
+        if ($this->currentRecordSet === null) {
+            return;
+        }
+
+        $this->printTableRowCells($this->currentRecordSet, $this->currentFkInformation, $this->currentWithOid, $this->currentEditable);
+    }
+
+    /**
+     * Displays requested data
+     */
+    function doBrowse($msg = '')
+    {
+        $pg = $this->getPg();
+        $conf = $this->getConf();
+        $misc = $this->getMisc();
+        $lang = $this->getLang();
+
+        //$pg->setDebug(true);
+
+        if (
+            !$this->prepareBrowseRequest(
+                $subject,
+                $table_name,
+                $query,
+                $parsed,
+                $key_fields_early
+            )
+        ) {
+            return;
+        }
+
+        $isCatalogSchema = $misc->isCatalogSchema();
+
+        $misc->printTrail($subject ?? 'database');
+        $misc->printTabs($subject, 'browse');
+
+        $misc->printMsg($msg);
+
+        $this->initBrowseRequestDefaults($conf);
+
+        $key_fields = $this->resolveKeyFields($table_name ?? null, $key_fields_early);
+
+        $this->applyOrderByFromRequest($query, $parsed, $orderBySet);
+
+        [$displayQuery, $execQuery] = $this->prepareExecQuery($query);
+
+        $query = $displayQuery;
+        $_REQUEST['query'] = $displayQuery;
+        $_SESSION['sqlquery'] = $displayQuery;
+
+        // Retrieve page from query.  $max_pages is returned by reference.
+        $rowActions = $this->getRowActions();
+        $rs = $rowActions->browseQuery(
+            'SELECT',
+            $table_name ?? null,
+            $execQuery,
+            $orderBySet ? [] : $_REQUEST['orderby'],
+            $_REQUEST['page'],
+            $_REQUEST['max_rows'],
+            $max_pages
+        );
+
+        // Generate status line
+        $status_line = format_string($lang['strbrowsestatistics'], [
+            'count' => \is_object($rs) ? $rs->rowCount() : 0,
+            'first' => \is_object($rs) && $rs->rowCount() > 0 ? $rowActions->lastQueryOffset + 1 : 0,
+            'last' => min($rowActions->totalRowsFound, $rowActions->lastQueryOffset + $rowActions->lastQueryLimit),
+            'total' => $rowActions->totalRowsFound,
+            'duration' => round($pg->lastQueryTime, 5),
+        ]);
+
+        // Get foreign key information for the current table
+        $fkey_information = $this->getFKInfo();
+
+        // Build strings for GETs in array
+        $_gets = $this->buildBrowseGets($subject, $table_name, $conf);
+
+        if (!empty($key_fields) && $subject === 'view') {
+            // Find out if the view is updatable
+            $viewQuoted = $pg->quoteIdentifier($pg->_schema)
+                . "." . $pg->quoteIdentifier($table_name);
+            $column = reset($key_fields);
+            AppContainer::set('quiet_sql_error_handling', true);
+            $error = $pg->execute(
+                "EXPLAIN UPDATE $viewQuoted
+                SET $column = $column
+                WHERE false;"
+            );
+            AppContainer::set('quiet_sql_error_handling', false);
+            if ($error !== 0) {
+                // Clear FK info for views
+                $key_fields = [];
+            }
+        }
+
+        $_sub_params = $_gets;
+        unset($_sub_params['query']);
+        unset($_sub_params['orderby']);
+        unset($_sub_params['orderby_clear']);
+
+        $this->renderQueryForm($query, $_sub_params, $lang);
+
+        echo '<div class="query-result-line">', htmlspecialchars($status_line), '</div>', "\n";
+
+        if (strlen($query) > $conf['max_get_query_length']) {
+            // Use query from session if too long for GET
+            unset($_gets['query']);
+        }
+
+        if (is_object($rs) && $rs->recordCount() > 0) {
+            // Show page navigation
+            $misc->printPageNavigation($_REQUEST['page'], $max_pages, $_gets, 'display.php');
+
+            $nameIndexMap = $this->buildFieldNameIndexMap($rs);
+
+            // Store browse context on the instance to avoid parameter threading
+            $this->setCurrentBrowseContext($rs, $nameIndexMap, $fkey_information, isset($table_name), $_gets);
+
+            $key_fields = $this->filterKeyFieldsToThoseInResult(
+                $key_fields,
+                $nameIndexMap
+            );
+
+            [$actions, $edit_params, $delete_params, $colspan] = $this->prepareBrowseActionButtons($_gets);
+
+            if ($isCatalogSchema) {
+                // Disable edit/delete buttons in catalog schema
+                $colspan = 0;
+                unset($actions['actionbuttons']);
+            }
+
+            $table_data = "";
+            if (!empty($key_fields)) {
+                $table_data .= " data-schema=\"" . htmlspecialchars($_gets['schema']) . "\"";
+                $table_data .= " data-table=\"" . htmlspecialchars($_gets['table'] ?? $_gets['view']) . "\"";
+            }
+
+            echo "<table id=\"data\" class=\"query-result\"{$table_data}>\n";
+            echo "<thead class=\"sticky-thead\">\n";
+            echo "<tr data-orderby-desc=\"", htmlspecialchars($lang['strorderbyhelp']), "\">\n";
+
+            //var_dump($key_fields);
+            if ($colspan > 0 and count($key_fields) > 0) {
+                $collapsed = $_REQUEST['strings'] === 'collapsed';
+                echo "<th colspan=\"{$colspan}\" class=\"data\">";
+                //echo $lang['stractions'];
+                $link = [
+                    'attr' => [
+                        'href' => [
+                            'url' => 'display.php',
+                            'urlvars' => array_merge(
+                                $_gets,
+                                [
+                                    'strings' => $collapsed ? 'expanded' : 'collapsed',
+                                    'page' => $_REQUEST['page']
+                                ]
+                            )
+                        ]
+                    ],
+                    'icon' => $misc->icon($collapsed ? 'TextExpand' : 'TextShrink'),
+                    'content' => $collapsed ? $lang['strexpand'] : $lang['strcollapse'],
+                ];
+                $misc->printLink($link);
+                echo "</th>\n";
+            }
+
+            /* we show OIDs only if we are in TABLE or SELECT type browsing */
+            $this->printCurrentHeaderCells();
+
+            echo "</tr>\n";
+            echo "</thead>\n";
+            echo "<tbody>\n";
+
+            $i = 0;
+            reset($rs->fields);
+            while (!$rs->EOF) {
+                $id = (($i & 1) == 0 ? '1' : '2');
+                $editable = $this->printRowStartWithActions(
+                    $rs,
+                    $nameIndexMap,
+                    $key_fields,
+                    $colspan,
+                    $actions,
+                    $edit_params,
+                    $delete_params,
+                    $id,
+                    $misc
+                );
+
+                $this->setCurrentRowEditable($editable);
+                $this->printCurrentRowCells();
+
+                echo "</tr>\n";
+                $rs->moveNext();
+                $i++;
+            }
+            echo "</tbody>\n";
+            echo "</table>\n";
+            //echo "</div>\n";
+
+            //echo "<p>", $rs->recordCount(), " {$lang['strrows']}</p>\n";
+            // Show page navigation
+            $misc->printPageNavigation($_REQUEST['page'], $max_pages, $_gets, 'display.php');
+        } else {
+            echo "<p class=\"nodata\">{$lang['strnodata']}</p>\n";
+        }
+
+        $fields = [
+            'server' => $_REQUEST['server'],
+            'database' => $_REQUEST['database'],
+        ];
+
+        if (isset($_REQUEST['schema'])) {
+            $fields['schema'] = $_REQUEST['schema'];
+        }
+
+        $navlinks = $this->buildBrowseNavLinks($table_name ?? null, $subject ?? null, $_gets, $rs, $fields, $lang);
+
+        if ($isCatalogSchema) {
+            // Disable edit/delete buttons in catalog schema
+            unset($navlinks['insert']);
+        }
+
+        $misc->printNavLinks($navlinks, 'display-browse', get_defined_vars());
+
+        $this->printAutoCompleteData();
+        $this->printScripts();
+    }
+
+    private function printRowStartWithActions(
+        $rs,
+        array $nameIndexMap,
+        array $keyFields,
+        int $colspan,
+        array $actions,
+        array $editParams,
+        array $deleteParams,
+        string $id,
+        $misc
+    ): bool {
+        $editable = $colspan > 0 && !empty($keyFields);
+        if (!$editable) {
+            echo "<tr class=\"data{$id} data-row\">\n";
+            return false;
+        }
+
+        $keysArray = [];
+        $keysHash = [];
+        $keysComplete = true;
+        foreach ($keyFields as $fieldName) {
+            $keyVal = $this->getFieldValueByName($rs, $nameIndexMap, (string) $fieldName);
+            if ($keyVal === null) {
+                $keysComplete = false;
+                $editable = false;
+                break;
+            }
+            $keysArray["key[{$fieldName}]"] = $keyVal;
+            $keysHash[$fieldName] = $keyVal;
+        }
+
+        $trData = '';
+        $rowButtons = $actions['actionbuttons'] ?? [];
+
+        if ($keysComplete) {
+            if (isset($rowButtons['edit'])) {
+                $rowButtons['edit'] = $editParams;
+                $rowButtons['edit']['attr']['href']['urlvars'] = array_merge(
+                    $rowButtons['edit']['attr']['href']['urlvars'],
+                    $keysArray
+                );
+            } else {
+                $editable = false;
+            }
+
+            if (isset($rowButtons['delete'])) {
+                $rowButtons['delete'] = $deleteParams;
+                $rowButtons['delete']['attr']['href']['urlvars'] = array_merge(
+                    $rowButtons['delete']['attr']['href']['urlvars'],
+                    $keysArray
+                );
+            }
+
+            if ($editable) {
+                $trData .= " data-keys='" . htmlspecialchars(json_encode($keysHash)) . "'";
+            }
+        }
+
+        echo "<tr class=\"data{$id} data-row\"{$trData}>\n";
+
+        if ($keysComplete) {
+            echo "<td class=\"action-buttons\">";
+            foreach ($rowButtons as $action) {
+                echo "<span class=\"opbutton{$id} op-button\">";
+                $misc->printLink($action);
+                echo "</span>\n";
+            }
+            echo "</td>\n";
+        } else {
+            echo "<td colspan=\"{$colspan}\">&nbsp;</td>\n";
+        }
+
+        return $editable;
+    }
+
     private function getFieldCount($rs): int
     {
-        return is_array($rs->fields) ? count($rs->fields) : 0;
+        $cacheKey = is_object($rs) ? spl_object_id($rs) : null;
+        if ($cacheKey !== null && isset($this->fieldCountCache[$cacheKey])) {
+            return $this->fieldCountCache[$cacheKey];
+        }
+
+        $count = is_array($rs->fields) ? count($rs->fields) : 0;
+        if ($cacheKey !== null) {
+            $this->fieldCountCache[$cacheKey] = $count;
+        }
+
+        return $count;
     }
 
     private function shouldSkipOidColumn($finfo, bool $withOid): bool
     {
-        $pg = AppContainer::getPostgres();
-        $conf = AppContainer::getConf();
+        $pg = $this->getPg();
+        $conf = $this->getConf();
 
         return ($finfo->name === $pg->id) && (!($withOid && $conf['show_oids']));
     }
 
-    private function getByteaColumnsForCurrentQuery(): array
+    private function renderForeignKeyLinks(string $fieldName): bool
     {
-        return $this->byteaColumns ?? [];
-    }
+        $misc = $this->getMisc();
 
-    private function renderForeignKeyLinks($rs, array $nameIndexMap, array $fkey_information, string $fieldName): bool
-    {
-        $misc = AppContainer::getMisc();
+        $rs = $this->currentRecordSet;
+        if ($rs === null) {
+            return false;
+        }
+
+        $nameIndexMap = $this->currentNameIndexMap;
+        $fkey_information = $this->currentFkInformation;
 
         if (!isset($fkey_information['byfield'][$fieldName])) {
             return false;
@@ -81,15 +555,23 @@ class RowBrowserRenderer extends AppContext
         return $renderedAny;
     }
 
-    private function renderByteaCellValue($rs, array $nameIndexMap, $finfo, $value, array $valParams, array $byteaCols): bool
+    private function renderByteaCellValue($finfo, $value, array $valParams): bool
     {
+        $rs = $this->currentRecordSet;
+        if ($rs === null) {
+            return false;
+        }
+
+        $nameIndexMap = $this->currentNameIndexMap;
+        $byteaCols = $this->currentByteaCols;
+
         if (empty($byteaCols) || !isset($byteaCols[$finfo->name]) || !is_array($byteaCols[$finfo->name])) {
             return false;
         }
 
-        $pg = AppContainer::getPostgres();
-        $misc = AppContainer::getMisc();
-        $lang = AppContainer::getLang();
+        $pg = $this->getPg();
+        $misc = $this->getMisc();
+        $lang = $this->getLang();
 
         $meta = $byteaCols[$finfo->name];
         $schema = $meta['schema'] ?? ($_REQUEST['schema'] ?? $pg->_schema);
@@ -176,7 +658,6 @@ class RowBrowserRenderer extends AppContext
 
     protected function getTypesMetaForRecordSet($rs): array
     {
-        $pg = AppContainer::getPostgres();
         $typeNames = [];
         $fieldCount = $this->getFieldCount($rs);
         for ($i = 0; $i < $fieldCount; $i++) {
@@ -186,17 +667,23 @@ class RowBrowserRenderer extends AppContext
             }
         }
 
-        $typeActions = new TypeActions($pg);
-        return $typeActions->getTypeMetasByNames($typeNames);
+        $cacheKey = implode(":", $typeNames);
+        if (isset($this->typesMetaCache[$cacheKey])) {
+            return $this->typesMetaCache[$cacheKey];
+        }
+
+        $metas = $this->getTypeActions()->getTypeMetasByNames($typeNames);
+        $this->typesMetaCache[$cacheKey] = $metas;
+
+        return $metas;
     }
 
     /* build & return the FK information data structure
      * used when deciding if a field should have a FK link or not*/
     function getFKInfo()
     {
-        $pg = AppContainer::getPostgres();
-        $misc = AppContainer::getMisc();
-        $constraintActions = new ConstraintActions($pg);
+        $misc = $this->getMisc();
+        $constraintActions = $this->getConstraintActions();
 
         // Get the foreign key(s) information from the current table
         $fkey_information = ['byconstr' => [], 'byfield' => []];
@@ -249,9 +736,8 @@ class RowBrowserRenderer extends AppContext
      **/
     function printTableHeaderCells($rs, $args, $withOid)
     {
-        $pg = AppContainer::getPostgres();
-        $misc = AppContainer::getMisc();
-        $typeActions = new TypeActions($pg);
+        $misc = $this->getMisc();
+        $typeActions = $this->getTypeActions();
         $metas = $this->getTypesMetaForRecordSet($rs);
         $keys = array_keys($_REQUEST['orderby'] ?? []);
 
@@ -310,18 +796,21 @@ class RowBrowserRenderer extends AppContext
      */
     function printTableRowCells($rs, $fkey_information, $withOid, $editable = false)
     {
-        $pg = AppContainer::getPostgres();
-        $misc = AppContainer::getMisc();
-        $conf = AppContainer::getConf();
-        $lang = AppContainer::getLang();
+        $misc = $this->getMisc();
+        $conf = $this->getConf();
+        $lang = $this->getLang();
         $j = 0;
 
         $nameIndexMap = $this->buildFieldNameIndexMap($rs);
+
+        // Prime instance state for helper methods (FK links, bytea download links)
+        $this->setCurrentBrowseContext($rs, $nameIndexMap, is_array($fkey_information) ? $fkey_information : [], (bool) $withOid, $this->currentHeaderArgs);
+        $this->setCurrentRowEditable((bool) $editable);
+
         $collapsed = ($_REQUEST['strings'] ?? 'collapsed') === 'collapsed';
+        $byteaCols = $this->currentByteaCols;
 
-        $byteaCols = $this->getByteaColumnsForCurrentQuery();
-
-        $editClass = $editable ? "editable" : "";
+        $editClass = $this->currentEditable ? "editable" : "";
 
         $fieldCount = $this->getFieldCount($rs);
         for ($j = 0; $j < $fieldCount; $j++) {
@@ -365,26 +854,14 @@ class RowBrowserRenderer extends AppContext
                 'clip' => $collapsed,
             ];
             if ($v !== null) {
-                $is_fk = $this->renderForeignKeyLinks(
-                    $rs,
-                    $nameIndexMap,
-                    $fkey_information,
-                    (string) $finfo->name
-                );
+                $is_fk = $this->renderForeignKeyLinks((string) $finfo->name);
                 if ($is_fk) {
                     $valParams['class'] = 'fk_value';
                 }
             }
 
             // If this is a modified bytea column, show size + download link
-            $is_bytea = $this->renderByteaCellValue(
-                $rs,
-                $nameIndexMap,
-                $finfo,
-                $v,
-                $valParams,
-                $byteaCols
-            );
+            $is_bytea = $this->renderByteaCellValue($finfo, $v, $valParams);
             if (!$is_bytea) {
                 echo "<div class=\"wrapper d-inline-block\">";
                 echo $misc->formatVal($v, $finfo->type, $valParams);
@@ -396,9 +873,9 @@ class RowBrowserRenderer extends AppContext
 
     private function executeNonReadQuery($query, $save_history)
     {
-        $pg = AppContainer::getPostgres();
-        $misc = AppContainer::getMisc();
-        $lang = AppContainer::getLang();
+        $pg = $this->getPg();
+        $misc = $this->getMisc();
+        $lang = $this->getLang();
 
         $query = trim($query);
         $succeded = $pg->execute($query) === 0;
@@ -472,13 +949,13 @@ class RowBrowserRenderer extends AppContext
         }
     }
 
-    private function resolveKeyFields(RowActions $rowActions, $table_name, array $key_fields_early): array
+    private function resolveKeyFields($table_name, array $key_fields_early): array
     {
         if (!empty($key_fields_early)) {
             return $key_fields_early;
         }
         if (isset($table_name)) {
-            return $rowActions->getRowIdentifier($table_name);
+            return $this->getRowActions()->getRowIdentifier($table_name);
         }
         return [];
     }
@@ -498,9 +975,11 @@ class RowBrowserRenderer extends AppContext
         return $key_fields;
     }
 
-    private function prepareBrowseActionButtons(array $_gets, $plugin_manager, array $lang): array
+    private function prepareBrowseActionButtons(array $_gets): array
     {
-        $misc = AppContainer::getMisc();
+        $misc = $this->getMisc();
+        $lang = $this->getLang();
+        $plugin_manager = AppContainer::getPluginManager();
 
         $buttons = [
             'edit' => [
@@ -558,7 +1037,7 @@ class RowBrowserRenderer extends AppContext
 
     private function buildBrowseNavLinks($table_name, $subject, array $_gets, $rs, array $fields, array $lang): array
     {
-        $misc = AppContainer::getMisc();
+        $misc = $this->getMisc();
 
         // Navigation links
         $navlinks = [];
@@ -708,289 +1187,20 @@ class RowBrowserRenderer extends AppContext
         return $navlinks;
     }
 
-    /**
-     * Displays requested data
-     */
-    function doBrowse($msg = '')
-    {
-        $pg = AppContainer::getPostgres();
-        $conf = AppContainer::getConf();
-        $misc = AppContainer::getMisc();
-        $lang = AppContainer::getLang();
-        $tableActions = new TableActions($pg);
-        $rowActions = new RowActions($pg);
-        $schemaActions = new SchemaActions($pg);
-        $plugin_manager = AppContainer::getPluginManager();
-
-        $parser = new PHPSQLParser();
-        if (
-            !$this->prepareBrowseRequest(
-                $pg,
-                $conf,
-                $tableActions,
-                $rowActions,
-                $schemaActions,
-                $parser,
-                $subject,
-                $table_name,
-                $query,
-                $parsed,
-                $key_fields_early
-            )
-        ) {
-            return;
-        }
-
-        $isCatalogSchema = $misc->isCatalogSchema();
-
-        $misc->printTrail($subject ?? 'database');
-        $misc->printTabs($subject, 'browse');
-
-        $misc->printMsg($msg);
-
-        $this->initBrowseRequestDefaults($conf);
-
-        $key_fields = $this->resolveKeyFields($rowActions, $table_name ?? null, $key_fields_early);
-
-        $this->applyOrderByFromRequest($query, $parsed, $orderBySet);
-
-        [$displayQuery, $execQuery] = $this->prepareExecQuery($query, $parser, $rowActions, $pg);
-
-        $query = $displayQuery;
-        $_REQUEST['query'] = $displayQuery;
-        $_SESSION['sqlquery'] = $displayQuery;
-
-        // Retrieve page from query.  $max_pages is returned by reference.
-        $rs = $rowActions->browseQuery(
-            'SELECT',
-            $table_name ?? null,
-            $execQuery,
-            $orderBySet ? [] : $_REQUEST['orderby'],
-            $_REQUEST['page'],
-            $_REQUEST['max_rows'],
-            $max_pages
-        );
-
-        // Generate status line
-        $status_line = format_string($lang['strbrowsestatistics'], [
-            'count' => is_object($rs) ? $rs->rowCount() : 0,
-            'first' => is_object($rs) && $rs->rowCount() > 0 ? $rowActions->lastQueryOffset + 1 : 0,
-            'last' => min($rowActions->totalRowsFound, $rowActions->lastQueryOffset + $rowActions->lastQueryLimit),
-            'total' => $rowActions->totalRowsFound,
-            'duration' => round($pg->lastQueryTime, 5),
-        ]);
-
-        // Get foreign key information for the current table
-        $fkey_information = $this->getFKInfo();
-
-        // Build strings for GETs in array
-        $_gets = $this->buildBrowseGets($subject, $table_name, $conf);
-
-        if ($subject === 'view') {
-            // Clear FK info for views
-            $fkey_information = [];
-            $key_fields = [];
-        }
-
-        $_sub_params = $_gets;
-        unset($_sub_params['query']);
-        unset($_sub_params['orderby']);
-        unset($_sub_params['orderby_clear']);
-
-        $this->renderQueryForm($query, $_sub_params, $lang);
-
-        echo '<div class="query-result-line">', htmlspecialchars($status_line), '</div>', "\n";
-
-        if (strlen($query) > $conf['max_get_query_length']) {
-            // Use query from session if too long for GET
-            unset($_gets['query']);
-        }
-
-        if (is_object($rs) && $rs->recordCount() > 0) {
-            // Show page navigation
-            $misc->printPageNavigation($_REQUEST['page'], $max_pages, $_gets, 'display.php');
-
-            $nameIndexMap = $this->buildFieldNameIndexMap($rs);
-
-            $key_fields = $this->filterKeyFieldsToThoseInResult($key_fields, $nameIndexMap);
-
-            [$actions, $edit_params, $delete_params, $colspan] = $this->prepareBrowseActionButtons(
-                $_gets,
-                $plugin_manager,
-                $lang
-            );
-
-            if ($isCatalogSchema) {
-                // Disable edit/delete buttons in catalog schema
-                $colspan = 0;
-                unset($actions['actionbuttons']);
-            }
-
-            $table_data = "";
-            if (!empty($key_fields)) {
-                $table_data .= " data-schema=\"" . htmlspecialchars($_gets['schema']) . "\"";
-                $table_data .= " data-table=\"" . htmlspecialchars($_gets['table']) . "\"";
-            }
-
-            echo "<table id=\"data\" class=\"query-result\"{$table_data}>\n";
-            echo "<thead class=\"sticky-thead\">\n";
-            echo "<tr data-orderby-desc=\"", htmlspecialchars($lang['strorderbyhelp']), "\">\n";
-
-            //var_dump($key_fields);
-            if ($colspan > 0 and count($key_fields) > 0) {
-                $collapsed = $_REQUEST['strings'] === 'collapsed';
-                echo "<th colspan=\"{$colspan}\" class=\"data\">";
-                //echo $lang['stractions'];
-                $link = [
-                    'attr' => [
-                        'href' => [
-                            'url' => 'display.php',
-                            'urlvars' => array_merge(
-                                $_gets,
-                                [
-                                    'strings' => $collapsed ? 'expanded' : 'collapsed',
-                                    'page' => $_REQUEST['page']
-                                ]
-                            )
-                        ]
-                    ],
-                    'icon' => $misc->icon($collapsed ? 'TextExpand' : 'TextShrink'),
-                    'content' => $collapsed ? $lang['strexpand'] : $lang['strcollapse'],
-                ];
-                $misc->printLink($link);
-                echo "</th>\n";
-            }
-
-            /* we show OIDs only if we are in TABLE or SELECT type browsing */
-            $this->printTableHeaderCells($rs, $_gets, isset($table_name));
-
-            echo "</tr>\n";
-            echo "</thead>\n";
-            echo "<tbody>\n";
-
-            $i = 0;
-            reset($rs->fields);
-            while (!$rs->EOF) {
-                $id = (($i % 2) == 0 ? '1' : '2');
-                // Display edit and delete links if we have a key
-                $editable = $colspan > 0 && !empty($key_fields);
-                if ($editable) {
-                    $keys_array = [];
-                    $keys_hash = [];
-                    $keys_complete = true;
-                    foreach ($key_fields as $v) {
-                        $keyVal = $this->getFieldValueByName(
-                            $rs,
-                            $nameIndexMap,
-                            (string) $v
-                        );
-                        if ($keyVal === null) {
-                            $keys_complete = false;
-                            $editable = false;
-                            break;
-                        }
-                        $keys_array["key[{$v}]"] = $keyVal;
-                        $keys_hash[$v] = $keyVal;
-                    }
-
-                    $tr_data = "";
-
-                    if ($keys_complete) {
-
-                        if (isset($actions['actionbuttons']['edit'])) {
-                            $actions['actionbuttons']['edit'] = $edit_params;
-                            $actions['actionbuttons']['edit']['attr']['href']['urlvars'] = array_merge(
-                                $actions['actionbuttons']['edit']['attr']['href']['urlvars'],
-                                $keys_array
-                            );
-                        } else {
-                            $editable = false;
-                        }
-
-                        if (isset($actions['actionbuttons']['delete'])) {
-                            $actions['actionbuttons']['delete'] = $delete_params;
-                            $actions['actionbuttons']['delete']['attr']['href']['urlvars'] = array_merge(
-                                $actions['actionbuttons']['delete']['attr']['href']['urlvars'],
-                                $keys_array
-                            );
-                        }
-
-                        if ($editable) {
-                            $tr_data .= " data-keys='" . htmlspecialchars(json_encode($keys_hash)) . "'";
-                        }
-                    }
-
-                    echo "<tr class=\"data{$id} data-row\"{$tr_data}>\n";
-
-                    if ($keys_complete) {
-                        echo "<td class=\"action-buttons\">";
-                        foreach ($actions['actionbuttons'] as $action) {
-                            echo "<span class=\"opbutton{$id} op-button\">";
-                            $misc->printLink($action);
-                            echo "</span>\n";
-                        }
-                        echo "</td>\n";
-                    } else {
-                        echo "<td colspan=\"{$colspan}\">&nbsp;</td>\n";
-                    }
-                } else {
-                    echo "<tr class=\"data{$id} data-row\">\n";
-                }
-
-                $this->printTableRowCells($rs, $fkey_information, isset($table_name), $editable);
-
-                echo "</tr>\n";
-                $rs->moveNext();
-                $i++;
-            }
-            echo "</tbody>\n";
-            echo "</table>\n";
-            //echo "</div>\n";
-
-            //echo "<p>", $rs->recordCount(), " {$lang['strrows']}</p>\n";
-            // Show page navigation
-            $misc->printPageNavigation($_REQUEST['page'], $max_pages, $_gets, 'display.php');
-        } else {
-            echo "<p class=\"nodata\">{$lang['strnodata']}</p>\n";
-        }
-
-        $fields = [
-            'server' => $_REQUEST['server'],
-            'database' => $_REQUEST['database'],
-        ];
-
-        if (isset($_REQUEST['schema'])) {
-            $fields['schema'] = $_REQUEST['schema'];
-        }
-
-        $navlinks = $this->buildBrowseNavLinks($table_name ?? null, $subject ?? null, $_gets, $rs, $fields, $lang);
-
-        if ($isCatalogSchema) {
-            // Disable edit/delete buttons in catalog schema
-            unset($navlinks['insert']);
-        }
-
-        $misc->printNavLinks($navlinks, 'display-browse', get_defined_vars());
-
-        $this->printAutoCompleteData();
-        $this->printScripts();
-    }
-
     private function prepareBrowseRequest(
-        Postgres $pg,
-        $conf,
-        TableActions $tableActions,
-        RowActions $rowActions,
-        SchemaActions $schemaActions,
-        PHPSQLParser $parser,
         &$subject,
         &$table_name,
         &$query,
         &$parsed,
         &$key_fields_early
     ): bool {
-        $misc = AppContainer::getMisc();
-        $lang = AppContainer::getLang();
+        $pg = $this->getPg();
+        $misc = $this->getMisc();
+        $lang = $this->getLang();
+        $tableActions = new TableActions($pg);
+        $rowActions = $this->getRowActions();
+        $schemaActions = $this->getSchemaActions();
+        $parser = $this->getSqlParser();
 
         if (!isset($_REQUEST['schema']))
             $_REQUEST['schema'] = $pg->_schema;
@@ -1034,7 +1244,7 @@ class RowBrowserRenderer extends AppContext
                 'content'
             );
             foreach ($statements as $index => $stmt) {
-                if (isSqlReadQuery($stmt, false)) {
+                if (is_result_set_query($stmt)) {
                     // Stop at the first read query
                     $query = $stmt;
                     $hasReadQuery = true;
@@ -1199,17 +1409,19 @@ class RowBrowserRenderer extends AppContext
         }
     }
 
-    private $byteaColumns = null;
-
-    private function prepareExecQuery($query, PHPSQLParser $parser, RowActions $rowActions, $pg): array
+    private function prepareExecQuery($query): array
     {
+        $pg = $this->getPg();
+        $rowActions = $this->getRowActions();
+        $parser = $this->getSqlParser();
+
         $displayQuery = $query;
         $execQuery = $displayQuery;
 
         $execParsed = $parser->parse($execQuery);
         if (!empty($execParsed['SELECT']) && !empty($execParsed['FROM']) && is_array($execParsed['FROM'])) {
             $keyFieldsByAlias = [];
-            $schemaActionsForKeys = new SchemaActions($pg);
+            $schemaActionsForKeys = $this->getSchemaActions();
             foreach ($execParsed['FROM'] as $from) {
                 if (($from['expr_type'] ?? '') !== 'table') {
                     $keyFieldsByAlias = [];
@@ -1340,7 +1552,7 @@ class RowBrowserRenderer extends AppContext
 
     function printAutoCompleteData()
     {
-        $pg = AppContainer::getPostgres();
+        $pg = $this->getPg();
         $rs = (new SchemaActions($pg))->getSchemaTablesAndColumns(
             $_REQUEST['schema'] ?? $pg->_schema
         );
@@ -1370,8 +1582,8 @@ class RowBrowserRenderer extends AppContext
 
     function printScripts()
     {
-        $lang = AppContainer::getLang();
-        $conf = AppContainer::getConf();
+        $lang = $this->getLang();
+        $conf = $this->getConf();
         ?>
         <script src="js/display.js" defer type="text/javascript"></script>
         <script type="text/javascript">
@@ -1384,8 +1596,7 @@ class RowBrowserRenderer extends AppContext
             // is small enough for a GET request.
             function adjustQueryFormMethod(form) {
                 const isValidReadQuery =
-                    form.query.value.length <= <?= $conf['max_get_query_length'] ?> &&
-                    isSqlReadQuery(form.query.value);
+                    form.query.value.length <= <?= $conf['max_get_query_length'] ?> && extractSqlQueries(form.query.value).every(stmt => isReadOnlyQuery(stmt));
                 if (isValidReadQuery) {
                     form.method = 'get';
                 } else {

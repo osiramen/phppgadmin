@@ -85,7 +85,7 @@ class TableRenderer extends AppContext
 
             // Display column headings
             if ($has_ma)
-                echo "<th></th>";
+                echo "<th class=\"empty\"></th>";
             foreach ($columns as $column_id => $column) {
 
                 $class = $column['class'] ?? '';

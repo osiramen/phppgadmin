@@ -298,14 +298,18 @@ class StreamChunkProcessor
         $copyHeaderPattern = '/^\s*(COPY\b[^\n]*FROM\s+stdin\b[^\n]*;\s*\r?\n)/i';
 
         if ($inCopy) {
+            // If terminator present in this chunk, finish COPY and parse rest normally
             if (preg_match($copyTermPattern, $this->decoded, $m, PREG_OFFSET_CAPTURE)) {
                 $pos = $m[0][1];
+                // data lines up to newline before terminator
                 $before = substr($this->decoded, 0, $pos);
+                // Build a complete COPY for this chunk
                 $dataSend = $before;
                 if ($dataSend !== '' && substr($dataSend, -1) !== "\n") {
                     $dataSend .= "\n";
                 }
                 $this->streamCopyData($copyHeader, $dataSend);
+                // Clear COPY state and continue with remainder after terminator
                 $this->streamState['copy_active'] = false;
                 $this->streamState['copy_header'] = '';
                 $after = substr($this->decoded, $pos + strlen($m[0][0]));
@@ -314,8 +318,10 @@ class StreamChunkProcessor
                 $this->remainder = $split['remainder'];
                 $this->streamState['standard_conforming_strings'] = !empty($split['standard_conforming_strings']);
             } else {
+                // No terminator yet: send only complete lines in this chunk
                 $lastNl = strrpos($this->decoded, "\n");
                 if ($lastNl === false) {
+                    // Keep all as remainder for next chunk
                     $this->remainder = $this->decoded;
                 } else {
                     $dataSend = substr($this->decoded, 0, $lastNl + 1);
@@ -325,20 +331,24 @@ class StreamChunkProcessor
                 }
             }
         } else {
+            // Check if this chunk starts a COPY ... FROM stdin block without terminator present
             if (preg_match($copyHeaderPattern, $this->decoded, $hm, PREG_OFFSET_CAPTURE)) {
                 $header = $hm[1][0];
                 $headerEnd = $hm[1][1] + strlen($hm[1][0]);
                 $rest = substr($this->decoded, $headerEnd);
                 if (preg_match($copyTermPattern, $rest, $m, PREG_OFFSET_CAPTURE)) {
+                    // Header and terminator both present in same chunk; let parser handle it fully
                     $split = SqlParser::parseFromString($this->decoded, '', false, !empty($this->streamState['standard_conforming_strings']));
                     $this->items = $split['items'];
                     $this->remainder = $split['remainder'];
                     $this->streamState['standard_conforming_strings'] = !empty($split['standard_conforming_strings']);
                 } else {
+                    // Activate COPY streaming and send complete lines from rest
                     $this->streamState['copy_active'] = true;
                     $this->streamState['copy_header'] = $header;
                     $lastNl = strrpos($rest, "\n");
                     if ($lastNl === false) {
+                        // no full line yet
                         $this->remainder = $rest;
                     } else {
                         $dataSend = substr($rest, 0, $lastNl + 1);
@@ -348,10 +358,13 @@ class StreamChunkProcessor
                     }
                 }
             } else {
+                // Normal path: Parse statements using SqlParser with COPY and comment/meta handling
                 $split = SqlParser::parseFromString($this->decoded, '', false, !empty($this->streamState['standard_conforming_strings']));
                 $this->items = $split['items'];
                 $this->remainder = $split['remainder'];
                 $this->streamState['standard_conforming_strings'] = !empty($split['standard_conforming_strings']);
+                // Note: If remainder starts with COPY, streaming will be activated AFTER statements in $items are executed
+                // (see code after the foreach loop)
             }
         }
 
@@ -386,6 +399,7 @@ class StreamChunkProcessor
             }
 
             if ($item['type'] === 'meta') {
+                // Process meta-command immediately
                 $this->processMetaCommand($item['content']);
                 $this->itemsProcessed++;
                 continue;
@@ -395,20 +409,26 @@ class StreamChunkProcessor
                 continue;
             }
 
+            // COPY blocks must be executed using the COPY protocol (pg_put_line/pg_end_copy).
+            // If we see a complete COPY ... FROM stdin block, handle it here instead of pg->execute().
             if ($this->processCopyStatement($item['content'])) {
                 $this->itemsProcessed++;
                 continue;
             }
 
+            // Check if there's a pending database switch from meta-command
             if (!empty($this->streamState['pending_database']) && $this->streamState['active_database'] !== $this->streamState['pending_database']) {
                 if (!$this->switchDatabase($this->streamState['pending_database'])) {
                     $this->shouldStop = true;
                     $this->logCollector->addFatal('Import stopped: failed to switch database to "' . $this->streamState['pending_database'] . '"');
                     break;
                 }
+                // Clear after switch
                 $this->streamState['pending_database'] = '';
             }
 
+            // Collect settings from this statement before executing
+            // Returns false if statement should be skipped (unknown/unsupported SET command)
             $shouldExecute = $this->settingsApplier->collectFromStatement($item['content'], $this->streamState);
 
             if ($shouldExecute) {
@@ -426,6 +446,7 @@ class StreamChunkProcessor
             }
         }
 
+        // Check if errors occurred and stop_on_error is enabled
         if ($this->options['stop_on_error'] && $this->errors > $errorsBefore) {
             $this->shouldStop = true;
             $errorCount = $this->errors - $errorsBefore;
@@ -436,6 +457,7 @@ class StreamChunkProcessor
     private function processMetaCommand(string $metaLine): void
     {
         if (empty($this->options['ignore_connect'])) {
+            // Handle \connect (unless ignored by option)
             $connDb = $this->parseConnectMeta($metaLine);
             if ($connDb !== null) {
                 $this->streamState['current_database'] = $connDb;
@@ -449,6 +471,7 @@ class StreamChunkProcessor
             }
         }
 
+        // Handle \encoding
         $enc = $this->parseEncodingMeta($metaLine);
         if ($enc !== null) {
             $this->streamState['encoding'] = $enc;
@@ -492,13 +515,16 @@ class StreamChunkProcessor
         $headerEnd = $copyMatch[1][1] + strlen($copyMatch[1][0]);
         $rest = substr($this->remainder, $headerEnd);
 
+        // Check if terminator is present in remainder
         if (preg_match($copyTermPattern, $rest, $m, PREG_OFFSET_CAPTURE)) {
+            // Complete COPY block is present in remainder: execute it now and parse what's after it.
             $dataSend = substr($rest, 0, $m[0][1]);
             if ($dataSend !== '' && substr($dataSend, -1) !== "\n") {
                 $dataSend .= "\n";
             }
             $this->streamCopyData($header, $dataSend);
 
+            // Continue parsing/executing any SQL after the terminator.
             if (!$this->shouldStop) {
                 $after = substr($rest, $m[0][1] + strlen($m[0][0]));
                 $split = SqlParser::parseFromString($after, '', false, !empty($this->streamState['standard_conforming_strings']));
@@ -510,10 +536,12 @@ class StreamChunkProcessor
                 $this->remainder = $split['remainder'];
             }
         } else {
+            // Activate COPY streaming and send complete lines
             $this->streamState['copy_active'] = true;
             $this->streamState['copy_header'] = $header;
             $lastNl = strrpos($rest, "\n");
             if ($lastNl === false) {
+                // no full line yet
                 $this->remainder = $rest;
             } else {
                 $dataSend = substr($rest, 0, $lastNl + 1);
@@ -526,6 +554,7 @@ class StreamChunkProcessor
 
     private function finalizeOnEof(): void
     {
+        // If client indicates EOF: either drop ignorable tail or surface a clear error.
         if ($this->eof && !empty($this->remainder) && empty($this->streamState['copy_active'])) {
             if ($this->isIgnorableTail($this->remainder)) {
                 $this->remainder = '';
@@ -535,6 +564,7 @@ class StreamChunkProcessor
             }
         }
 
+        // On EOF, flush any remaining deferred statements for the last database.
         if ($this->eof && empty($this->streamState['copy_active'])) {
             $this->executeDeferred();
             $this->executeQueuedStatements();
@@ -589,6 +619,7 @@ class StreamChunkProcessor
         $scope = $this->request['scope'] ?? 'database';
         $scopeIdent = $this->request['scope_ident'] ?? '';
         $optsToPass = $this->options;
+        // Force execution of self-affecting statements now.
         $optsToPass['defer_self'] = false;
 
         $execState = [
@@ -620,6 +651,9 @@ class StreamChunkProcessor
         AppContainer::set('quiet_sql_error_handling', false);
     }
 
+    /**
+     * Execute queued ownership and rights statements (called on EOF)
+     */
     private function executeQueuedStatements(): void
     {
         $ownershipQueue = $this->streamState['ownership_queue'] ?? [];
@@ -631,6 +665,7 @@ class StreamChunkProcessor
 
         AppContainer::set('quiet_sql_error_handling', true);
 
+        // Execute ownership statements first
         if (!empty($ownershipQueue)) {
             $this->logCollector->addInfo('Executing ' . count($ownershipQueue) . ' queued ownership statements');
             foreach ($ownershipQueue as $stmt) {
@@ -651,6 +686,7 @@ class StreamChunkProcessor
             $this->streamState['ownership_queue'] = [];
         }
 
+        // Execute rights statements
         if (!empty($rightsQueue)) {
             $this->logCollector->addInfo('Executing ' . count($rightsQueue) . ' queued rights statements');
             foreach ($rightsQueue as $stmt) {
@@ -707,9 +743,12 @@ class StreamChunkProcessor
     private function switchDatabase(string $dbName): bool
     {
         if ($this->streamState['active_database'] === $dbName) {
+            // Already on this database
             return true;
         }
 
+        // Execute deferred self-affecting statements before leaving
+        // current database
         $this->executeDeferred();
 
         try {
@@ -719,6 +758,7 @@ class StreamChunkProcessor
                 AppContainer::setPostgres($this->pg);
                 $this->streamState['active_database'] = $dbName;
 
+                // Re-apply cached settings to new connection
                 if (!empty($this->streamState['cached_settings'])) {
                     $this->errors += $this->settingsApplier->applySettings($this->pg);
                     $this->logCollector->addInfo('Re-applied ' . count($this->streamState['cached_settings']) . ' cached settings to database: ' . $dbName);
@@ -768,11 +808,14 @@ class StreamChunkProcessor
         $i = 0;
         while ($i < $len) {
             $ch = $tail[$i];
+
+            // whitespace
             if ($ch === ' ' || $ch === "\t" || $ch === "\r" || $ch === "\n" || $ch === "\f") {
                 $i++;
                 continue;
             }
 
+            // line comment
             if ($ch === '-' && ($i + 1) < $len && $tail[$i + 1] === '-') {
                 $nl = strpos($tail, "\n", $i + 2);
                 if ($nl === false) {
@@ -782,6 +825,7 @@ class StreamChunkProcessor
                 continue;
             }
 
+            // block comment
             if ($ch === '/' && ($i + 1) < $len && $tail[$i + 1] === '*') {
                 $end = strpos($tail, '*/', $i + 2);
                 if ($end === false) {
@@ -791,6 +835,7 @@ class StreamChunkProcessor
                 continue;
             }
 
+            // Anything else is meaningful SQL
             return false;
         }
 
@@ -799,6 +844,9 @@ class StreamChunkProcessor
 
     private function getAbsoluteOffset(): int
     {
+        // Compute offset advance based on source bytes read, not executed 
+        // statements. New bytes read = payload length minus client-prepended 
+        // remainder.
         $payloadLen = strlen($this->decoded);
         $newBytesRead = $payloadLen - $this->remainderLen;
         if ($newBytesRead < 0) {
@@ -812,6 +860,11 @@ class StreamChunkProcessor
      */
     private function buildResponse(): array
     {
+        // Return the *actual* remainder string.
+        // The remainder is not guaranteed to be a literal suffix of the 
+        // uploaded payload (SqlParser may normalize/trim while streaming 
+        // INSERT ... VALUES), so returning only remainder_len and
+        // reconstructing client-side is not reliable.
         return [
             'offset' => $this->getAbsoluteOffset(),
             'remainder_len' => strlen($this->remainder),

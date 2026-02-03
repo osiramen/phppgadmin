@@ -7,11 +7,11 @@ phpPgAdmin is a web-based PostgreSQL administration tool designed to manage data
 **Version**: 8.0.rc1  
 **License**: GPL-2.0+  
 **PostgreSQL Minimum Version**: 9.0  
-**PHP Minimum Version**: 7.2
+**PHP Minimum Version**: 7.4
 
 ## Technology Stack
 
-- **Backend**: PHP 7.2+ with PostgreSQL extension (ext-pgsql)
+- **Backend**: PHP 7.4+ with PostgreSQL extension (ext-pgsql)
 - **Database**: PostgreSQL 9.0+
 - **Database Library**: ADOdb (custom-modified version)
 - **Frontend**: Vanilla JavaScript (ES5/ES6), jQuery-free

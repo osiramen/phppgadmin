@@ -182,7 +182,7 @@ if (!$isUpload) {
 	);
 	$readQueryCount = 0;
 	foreach ($statements as $stmt) {
-		if (isSqlReadQuery($stmt, false)) {
+		if (is_result_set_query($stmt)) {
 			$readQueryCount++;
 		} else {
 			$hasNonReadQueries = true;
@@ -190,7 +190,6 @@ if (!$isUpload) {
 	}
 	$canPaginate = ($readQueryCount === 1);
 }
-//$isReadQuery = !$isUpload && isSqlReadQuery($_SESSION['sqlquery']);
 
 // Pagination maybe set by a get link that has it as FALSE,
 // if that's the case, unset the variable.

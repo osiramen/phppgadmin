@@ -219,72 +219,184 @@ function format_string($template, $data)
 }
 
 /**
- * SQL query extractor with multibyte string support
+ * SQL query extractor with multibyte string support and dollar-quoted strings
+ *
  * @param string $sql
  * @return string[]
  */
-function extractSqlQueries($sql)
+function extract_sql_queries(string $sql): array
 {
 	$queries = [];
-	$current = "";
-	$inString = false;
-	$stringChar = null;
-	$inLineComment = false;
-	$inBlockComment = false;
-
 	$len = mb_strlen($sql);
+	$current = '';
+	$i = 0;
 
-	for ($i = 0; $i < $len; $i++) {
-		$c = mb_substr($sql, $i, 1);
-		$n = ($i + 1 < $len) ? mb_substr($sql, $i + 1, 1) : null;
+	$inSingle = false;   // '
+	$inDouble = false;   // "
+	$inDollar = false;   // $tag$ ... $tag$
+	$dollarTag = '';     // full tag like $tag$
+	$inLineComment = false; // --
+	$blockDepth = 0;        // nested /* ... */
+	while ($i < $len) {
+		$ch = mb_substr($sql, $i, 1);
+		$next = ($i + 1 < $len) ? mb_substr($sql, $i + 1, 1) : null;
 
-		// Line comment --
-		if (!$inString && !$inBlockComment && $c === "-" && $n === "-") {
-			$inLineComment = true;
-		}
-
-		// End line comment
-		if ($inLineComment && $c === "\n") {
-			$inLineComment = false;
-		}
-
-		// Block comment /*
-		if (!$inString && !$inLineComment && $c === "/" && $n === "*") {
-			$inBlockComment = true;
-		}
-
-		// End block comment */
-		if ($inBlockComment && $c === "*" && $n === "/") {
-			$inBlockComment = false;
+		// handle end of line comment
+		if ($inLineComment) {
+			$current .= $ch;
+			if ($ch === "\n" || $ch === "\r") {
+				$inLineComment = false;
+			}
 			$i++;
 			continue;
 		}
 
-		// Strings '...' or "..."
-		if (!$inLineComment && !$inBlockComment) {
-			if (!$inString && ($c === "'" || $c === '"')) {
-				$inString = true;
-				$stringChar = $c;
-			} elseif ($inString && $c === $stringChar) {
-				$inString = false;
+		// handle block comments nesting
+		if ($blockDepth > 0) {
+			// detect start of nested block
+			if ($ch === '/' && $next === '*') {
+				$blockDepth++;
+				$current .= '/*';
+				$i += 2;
+				continue;
 			}
-		}
-
-		// Semicolon ends query
-		if (!$inString && !$inLineComment && !$inBlockComment && $c === ";") {
-			$trimmed = trim($current);
-			if ($trimmed !== "") {
-				$queries[] = $trimmed;
+			// detect end of block
+			if ($ch === '*' && $next === '/') {
+				$blockDepth--;
+				$current .= '*/';
+				$i += 2;
+				continue;
 			}
-			$current = "";
+			// otherwise consume
+			$current .= $ch;
+			$i++;
 			continue;
 		}
 
-		$current .= $c;
+		// if currently in dollar-quote
+		if ($inDollar) {
+			// try to match closing tag at current position
+			$tagLen = mb_strlen($dollarTag);
+			$substr = mb_substr($sql, $i, $tagLen);
+			if ($substr === $dollarTag) {
+				$current .= $dollarTag;
+				$i += $tagLen;
+				$inDollar = false;
+				$dollarTag = '';
+				continue;
+			}
+			// otherwise consume one char
+			$current .= $ch;
+			$i++;
+			continue;
+		}
+
+		// if in single-quoted string
+		if ($inSingle) {
+			// handle escaped single quote '' -> consume both and stay in string
+			if ($ch === "'" && $next === "'") {
+				$current .= "''";
+				$i += 2;
+				continue;
+			}
+			// end of single-quoted string
+			if ($ch === "'") {
+				$inSingle = false;
+				$current .= $ch;
+				$i++;
+				continue;
+			}
+			// otherwise consume
+			$current .= $ch;
+			$i++;
+			continue;
+		}
+
+		// if in double-quoted identifier
+		if ($inDouble) {
+			// escaped double quote ""
+			if ($ch === '"' && $next === '"') {
+				$current .= '""';
+				$i += 2;
+				continue;
+			}
+			if ($ch === '"') {
+				$inDouble = false;
+				$current .= $ch;
+				$i++;
+				continue;
+			}
+			$current .= $ch;
+			$i++;
+			continue;
+		}
+
+		// Not inside any string/comment/dollar: detect starts
+
+		// line comment --
+		if ($ch === '-' && $next === '-') {
+			$inLineComment = true;
+			$current .= '--';
+			$i += 2;
+			continue;
+		}
+
+		// block comment start /*
+		if ($ch === '/' && $next === '*') {
+			$blockDepth = 1;
+			$current .= '/*';
+			$i += 2;
+			continue;
+		}
+
+		// dollar-quote start: match $tag$
+		if ($ch === '$') {
+			// try to match $tag$ at this position
+			$rest = mb_substr($sql, $i);
+			if (preg_match('/^\$[A-Za-z0-9_]*\$/u', $rest, $m)) {
+				$dollarTag = $m[0]; // e.g. $tag$
+				$inDollar = true;
+				$current .= $dollarTag;
+				$i += mb_strlen($dollarTag);
+				continue;
+			}
+			// if not a tag, treat as normal char
+		}
+
+		// single-quote start
+		if ($ch === "'") {
+			$inSingle = true;
+			$current .= $ch;
+			$i++;
+			continue;
+		}
+
+		// double-quote start
+		if ($ch === '"') {
+			$inDouble = true;
+			$current .= $ch;
+			$i++;
+			continue;
+		}
+
+		// semicolon ends statement (only when not in any string/comment/dollar)
+		if ($ch === ';') {
+			$trimmed = trim($current);
+			if ($trimmed !== '') {
+				$queries[] = $trimmed;
+			}
+			$current = '';
+			$i++;
+			continue;
+		}
+
+		// normal char
+		$current .= $ch;
+		$i++;
 	}
 
 	$trimmed = trim($current);
-	if ($trimmed !== "") {
+	if ($trimmed !== '') {
 		$queries[] = $trimmed;
 	}
 
@@ -292,54 +404,162 @@ function extractSqlQueries($sql)
 }
 
 /**
- * Check if SQL contains only read-only queries
+ * Check if SQL query returns a result set
  * @param string $sql
  * @return bool
  */
-function isSqlReadQuery($sql, $doExtract = true): bool
+function is_result_set_query(string $sql): bool
 {
-	if ($doExtract) {
-		$statements = extractSqlQueries($sql);
-	} elseif (!empty($sql)) {
-		$statements = [$sql];
-	} else {
-		$statements = [];
-	}
-	if (count($statements) === 0) {
+	$s = trim($sql);
+	if ($s === '')
 		return false;
+
+	// remove leading single-line and block comments
+	$s = preg_replace('/^\s*(--[^\n]*\n|\/\*.*?\*\/\s*)+/s', '', $s);
+	if ($s === null)
+		return false;
+	$stmt = trim($s);
+
+	if ($stmt === '')
+		return false;
+
+	// EXPLAIN always returns a resultset
+	if (preg_match('/^\s*EXPLAIN\b/i', $stmt)) {
+		return true;
 	}
 
-	foreach ($statements as $stmt) {
-		$upper = strtoupper($stmt);
+	// quick checks for always-resultset starters
+	$always = ['SELECT', 'VALUES', 'TABLE', 'SHOW', 'FETCH', 'MOVE'];
+	foreach ($always as $kw) {
+		if (preg_match('/^\s*' . $kw . '\b/i', $stmt))
+			return true;
+	}
 
-		if (strlen($upper) < 7) {
-			return false;
+	// COPY ... TO  => resultset (stream)
+	if (preg_match('/^\s*COPY\b.+\bTO\b/i', $stmt))
+		return true;
+	// COPY ... FROM => no resultset
+	if (preg_match('/^\s*COPY\b.+\bFROM\b/i', $stmt))
+		return false;
+
+	// If statement contains RETURNING at top-level -> returns rows
+	// This is a heuristic: matches RETURNING outside of quotes/dollar; good for most cases.
+	if (preg_match('/\bRETURNING\b/i', $stmt))
+		return true;
+
+	// WITH ... need to find the main query token after CTE list
+	if (preg_match('/^\s*WITH\b/i', $stmt)) {
+		// parse CTE list to find position after last CTE closing parenthesis at depth 0
+		$len = strlen($stmt);
+		$pos = 0;
+		// skip 'WITH'
+		if (preg_match('/^\s*WITH\b/i', $stmt, $m, PREG_OFFSET_CAPTURE)) {
+			$pos = $m[0][1] + strlen($m[0][0]);
 		}
-
-		$isRead = str_starts_with($upper, "SELECT") ||
-			str_starts_with($upper, "WITH") ||
-			str_starts_with($upper, "SET") ||
-			str_starts_with($upper, "SHOW");
-
-		if ($isRead) {
-			continue;
-		}
-
-		$isRead = str_starts_with($upper, "EXPLAIN");
-		if ($isRead) {
-			$rest = trim(substr($upper, 7));
-			$isRead = str_starts_with($rest, "SELECT") ||
-				str_starts_with($rest, "WITH");
-			if ($isRead) {
+		$depth = 0;
+		$inSingle = $inDouble = $inDollar = false;
+		$dollarTag = '';
+		$i = $pos;
+		$lastClose = -1;
+		for (; $i < $len; $i++) {
+			$ch = $stmt[$i];
+			// dollar quoting
+			if (!$inSingle && !$inDouble && $ch === '$') {
+				if (preg_match('/\G\$([A-Za-z0-9_]*)\$/A', $stmt, $m, 0, $i)) {
+					$tag = $m[1];
+					$tagFull = '$' . $tag . '$';
+					if (!$inDollar) {
+						$inDollar = true;
+						$dollarTag = $tagFull;
+						$i += strlen($tagFull) - 1;
+						continue;
+					} else {
+						if ($tagFull === $dollarTag) {
+							$inDollar = false;
+							$dollarTag = '';
+							$i += strlen($tagFull) - 1;
+							continue;
+						}
+					}
+				}
+			}
+			if ($inDollar)
 				continue;
+
+			if ($ch === "'" && !$inDouble) {
+				$inSingle = !$inSingle;
+				continue;
+			}
+			if ($ch === '"' && !$inSingle) {
+				$inDouble = !$inDouble;
+				continue;
+			}
+			if ($inSingle || $inDouble)
+				continue;
+
+			if ($ch === '(') {
+				$depth++;
+				continue;
+			}
+			if ($ch === ')') {
+				if ($depth > 0)
+					$depth--;
+				$lastClose = $i;
+				continue;
+			}
+			// if we hit a semicolon at depth 0, stop
+			if ($ch === ';' && $depth === 0)
+				break;
+			// if we see a token after CTEs (depth 0) that is not comma, assume main query starts here
+			if ($depth === 0 && $ch !== ' ' && $ch !== "\t" && $ch !== "\n" && $ch !== ',') {
+				// check substring from here for a known main token
+				$rest = substr($stmt, $i);
+				if (preg_match('/^\s*(SELECT|VALUES|TABLE|INSERT|UPDATE|DELETE|MERGE|SHOW|EXPLAIN|COPY|FETCH|MOVE)\b/i', $rest, $mm)) {
+					$mainToken = strtoupper($mm[1]);
+					if (in_array($mainToken, ['SELECT', 'VALUES', 'TABLE', 'SHOW', 'FETCH', 'MOVE'], true))
+						return true;
+					if ($mainToken === 'COPY') {
+						return (bool) preg_match('/^\s*COPY\b.+\bTO\b/i', $rest);
+					}
+					if ($mainToken === 'EXPLAIN') {
+						// reuse EXPLAIN logic
+						return true;
+					}
+					// INSERT/UPDATE/DELETE/MERGE -> only resultset if RETURNING present
+					if (preg_match('/\bRETURNING\b/i', $rest))
+						return true;
+					return false;
+				}
 			}
 		}
 
+		// fallback: if we couldn't reliably find main token, be conservative and check for RETURNING or SELECT inside
+		if (preg_match('/\bSELECT\b/i', $stmt))
+			return true;
+		if (preg_match('/\bRETURNING\b/i', $stmt))
+			return true;
 		return false;
 	}
 
-	return true;
+	// For top-level INSERT/UPDATE/DELETE/MERGE without RETURNING -> no resultset
+	if (preg_match('/^\s*(INSERT|UPDATE|DELETE|MERGE)\b/i', $stmt)) {
+		return (bool) preg_match('/\bRETURNING\b/i', $stmt);
+	}
+
+	// DDL, SET, RESET, VACUUM, ANALYZE, DO, CALL, LOCK etc. -> no resultset
+	if (preg_match('/^\s*(CREATE|ALTER|DROP|TRUNCATE|SET|RESET|VACUUM|ANALYZE|DO|CALL|LOCK|GRANT|REVOKE)\b/i', $stmt)) {
+		return false;
+	}
+
+	// conservative fallback: if first token is an identifier-like token, check common resultset tokens
+	if (preg_match('/^\s*([A-Z_]+)/i', $stmt, $m)) {
+		$tok = strtoupper($m[1]);
+		return in_array($tok, ['SELECT', 'VALUES', 'TABLE', 'SHOW', 'EXPLAIN', 'FETCH', 'MOVE'], true);
+	}
+
+	return false;
 }
+
 
 // ------------------------------------------------------------
 // str_starts_with
