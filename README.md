@@ -8,8 +8,8 @@
 **Modern web-based PostgreSQL administration tool** — Manage databases, schemas, tables, roles, queries, and backups through an intuitive web interface.
 
 [![License: GPL v2+](https://img.shields.io/badge/License-GPL%20v2+-blue.svg)](LICENSE)
-[![PHP Version](https://img.shields.io/badge/PHP-%3E%3D7.4-8892BF.svg)](https://php.net/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-%3E%3D9.0-336791.svg)](https://www.postgresql.org/)
+[![PHP Version](https://img.shields.io/badge/PHP-%3E%3D7.4-7774d4.svg)](https://php.net/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-%3E%3D9.0-468bc4.svg)](https://www.postgresql.org/)
 
 ---
 
