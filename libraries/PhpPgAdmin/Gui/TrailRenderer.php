@@ -2,9 +2,10 @@
 
 namespace PhpPgAdmin\Gui;
 
-use PhpPgAdmin\Core\AppContainer;
 use PhpPgAdmin\Core\AppContext;
+use PhpPgAdmin\Core\AppContainer;
 use PhpPgAdmin\Database\Actions\ViewActions;
+use PhpPgAdmin\Database\Actions\TableActions;
 
 /**
  * Trail rendering: breadcrumb navigation hierarchy
@@ -131,18 +132,25 @@ class TrailRenderer extends AppContext
             $done = true;
 
         if (isset($_REQUEST['table']) && !$done) {
+            $tableActions = new TableActions($this->postgres());
+            $tableType = $tableActions->getTableType(
+                $this->postgres()->_schema,
+                $_REQUEST['table'],
+                true
+            );
             $trail['table'] = [
                 'title' => $lang['strtable'],
                 'text' => $_REQUEST['table'],
                 'url' => $this->misc()->getHREFSubject('table'),
                 'help' => 'pg.table',
-                'icon' => 'Table'
+                'icon' => $tableType === 'partitioned_table' ? 'PartitionedTable' : 'Table'
             ];
         } elseif (isset($_REQUEST['view']) && !$done) {
-            // TODO Maybe to cache this info in session to avoid extra query?
-            $viewActions = new ViewActions(AppContainer::getPostgres());
-            $rs = $viewActions->getView($_REQUEST['view']);
-            $icon = is_object($rs) && !$rs->EOF && $rs->fields['relkind'] === 'm' ? 'MaterializedView' : 'View';
+            $viewActions = new ViewActions($this->postgres());
+            $isMaterialized = $viewActions->isMaterializedView(
+                $_REQUEST['view']
+            );
+            $icon = $isMaterialized ? 'MaterializedView' : 'View';
             $trail['view'] = [
                 'title' => $lang['strview'],
                 'text' => $_REQUEST['view'],
@@ -207,6 +215,12 @@ class TrailRenderer extends AppContext
                                 break;
                             case 'trigger':
                                 $icon = 'Trigger';
+                                break;
+                            case 'index':
+                                $icon = 'Index';
+                                break;
+                            case 'constraint':
+                                $icon = 'Constraint';
                                 break;
                             default:
                                 $icon = null;

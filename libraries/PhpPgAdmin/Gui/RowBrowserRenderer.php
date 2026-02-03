@@ -6,6 +6,7 @@ use PhpPgAdmin\Database\Actions\TypeActions;
 use PhpPgAdmin\Database\Actions\ViewActions;
 use PhpPgAdmin\Database\Import\SqlParser;
 use PhpPgAdmin\Database\Postgres;
+use PhpPgAdmin\Misc;
 use PHPSQLParser\PHPSQLParser;
 use PhpPgAdmin\Core\AppContainer;
 use PhpPgAdmin\Core\AppContext;
@@ -25,7 +26,7 @@ class RowBrowserRenderer extends AppContext
     /** @var array|null */
     private $conf = null;
 
-    /** @var mixed|null */
+    /** @var Misc|null */
     private $misc = null;
 
     /** @var array|null */
@@ -79,7 +80,7 @@ class RowBrowserRenderer extends AppContext
     private $byteaColumns = null;
 
 
-    private function getPg()
+    private function getPg(): ?Postgres
     {
         if ($this->pg === null) {
             $this->pg = AppContainer::getPostgres();
@@ -95,7 +96,7 @@ class RowBrowserRenderer extends AppContext
         return $this->conf;
     }
 
-    private function getMisc()
+    private function getMisc(): ?Misc
     {
         if ($this->misc === null) {
             $this->misc = AppContainer::getMisc();
@@ -1290,33 +1291,34 @@ class RowBrowserRenderer extends AppContext
 
         $parsed = $parser->parse($query);
 
+        $parse_table = $parse_table && !empty($parsed['SELECT']) &&
+            ($parsed['FROM'][0]['expr_type'] ?? '') == 'table';
         if ($parse_table) {
-            if (!empty($parsed['SELECT']) && ($parsed['FROM'][0]['expr_type'] ?? '') == 'table') {
-                $parts = $parsed['FROM'][0]['no_quotes']['parts'] ?? [];
-                $changed = false;
-                if (\count($parts) === 2) {
-                    [$schema, $table] = $parts;
-                    $changed = $_REQUEST['schema'] != $schema || $table_name != $table;
-                } else {
-                    [$table] = $parts;
-                    $schema = $_REQUEST['schema'] ?? $pg->_schema;
-                    if (empty($schema)) {
-                        $schema = $tableActions->findTableSchema($table) ?? '';
-                        if (!empty($schema)) {
-                            $misc->setCurrentSchema($schema);
-                        }
+            $parts = $parsed['FROM'][0]['no_quotes']['parts'] ?? [];
+            $changed = false;
+            if (\count($parts) === 2) {
+                [$schema, $table] = $parts;
+                $changed = $_REQUEST['schema'] != $schema || $table_name != $table;
+            } else {
+                [$table] = $parts;
+                $schema = $_REQUEST['schema'] ?? $pg->_schema;
+                if (empty($schema)) {
+                    $schema = $tableActions->findTableSchema($table) ?? '';
+                    if (!empty($schema)) {
+                        $misc->setCurrentSchema($schema);
                     }
-                    $changed = $table_name != $table && !empty($schema);
                 }
-                if ($changed) {
-                    $misc->setCurrentSchema($schema);
-                    $table_name = $table;
-                    unset($_REQUEST[$subject]);
-                    $subject = $tableActions->getTableType($schema, $table) ?? '';
-                    if (!empty($subject)) {
-                        $_REQUEST['subject'] = $subject;
-                        $_REQUEST[$subject] = $table;
-                    }
+                $changed = $table_name != $table && !empty($schema);
+            }
+            if ($changed) {
+                $misc->setCurrentSchema($schema);
+                $_REQUEST['schema'] = $schema;
+                $table_name = $table;
+                unset($_REQUEST[$subject]);
+                $subject = $tableActions->getTableType($schema, $table) ?? '';
+                if (!empty($subject)) {
+                    $_REQUEST['subject'] = $subject;
+                    $_REQUEST[$subject] = $table;
                 }
             }
         }
@@ -1538,14 +1540,43 @@ class RowBrowserRenderer extends AppContext
 
     private function renderQueryForm($query, $_sub_params, $lang): void
     {
+        unset($_sub_params['query'], $_sub_params['strings']);
         ?>
         <form method="get" id="query-form" onsubmit="adjustQueryFormMethod(this)"
             action="display.php?<?= http_build_query($_sub_params) ?>">
             <div>
-                <textarea name="query" id="query-editor" class="sql-editor frame resizable auto-expand" width="90%" rows="5"
-                    cols="100" resizable="true"><?= html_esc($query) ?></textarea>
+                <textarea name="query" id="query-editor" class="sql-editor frame resizable auto-expand _small" width="90%"
+                    rows="5" cols="100" resizable="true"><?= html_esc($query) ?></textarea>
             </div>
-            <div><input type="submit" value="<?= $lang['strquerysubmit'] ?>" /></div>
+            <div class="flex-row align-items-center">
+                <input type="submit" value="<?= $lang['strquerysubmit'] ?>" />
+                <div class="query-explain-frame flex-row align-items-center ml-2">
+                    <input type="button" id="explain-query" value="<?= $lang['strexplain'] ?>" class="" />
+                    <label class="ml-1">
+                        <input type="checkbox" id="explain-analyze" />
+                        <?= $lang['stranalyze'] ?>
+                    </label>
+                    <label class="ml-1">
+                        <input type="checkbox" id="explain-verbose" />
+                        <?= $lang['strverbose'] ?>
+                    </label>
+                    <label class="ml-1">
+                        <input type="checkbox" id="explain-buffers" />
+                        <?= $lang['strbuffers'] ?>
+                    </label>
+                    <select id="explain-format" class="w-auto ml-1">
+                        <option value=""><?= htmlspecialchars($lang['strformat']) ?></option>
+                        <option value="TEXT">Text</option>
+                        <option value="XML">Xml</option>
+                        <option value="JSON">Json</option>
+                        <option value="YAML">Yaml</option>
+                    </select>
+                </div>
+                <label class="ml-2">
+                    <input type="checkbox" id="expand-strings" name="strings" value="expanded" <?= ($_REQUEST['strings'] ?? '') === 'expanded' ? 'checked' : '' ?> />
+                    <?= $lang['strexpand'] ?>
+                </label>
+            </div>
         </form>
         <?php
     }

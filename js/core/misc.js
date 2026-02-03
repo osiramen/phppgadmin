@@ -1,4 +1,6 @@
 (function () {
+	//#region Miscellaneous Functions
+
 	// Multi-form toggle
 	window.toggleAllMf = function (bool) {
 		var inputs = document
@@ -208,170 +210,6 @@
 		}
 
 		return queries;
-	};
-
-	/**
-	 * Check if SQL query returns a result set
-	 * @param {string} sql
-	 * @returns {boolean}
-	 */
-	window.isResultSetQuery = function (sql) {
-		let s = sql.trim();
-		if (s === "") return false;
-
-		// remove leading single-line and block comments
-		s = s.replace(/^\s*(--[^\n]*\n|\/\*.*?\*\/\s*)+/s, "");
-		let stmt = s.trim();
-		if (stmt === "") return false;
-
-		// EXPLAIN always returns a resultset
-		if (/^\s*EXPLAIN\b/i.test(stmt)) {
-			return true;
-		}
-
-		// always-resultset starters
-		const always = ["SELECT", "VALUES", "TABLE", "SHOW", "FETCH", "MOVE"];
-		for (const kw of always) {
-			const re = new RegExp("^\\s*" + kw + "\\b", "i");
-			if (re.test(stmt)) return true;
-		}
-
-		// COPY ... TO => resultset
-		if (/^\s*COPY\b.+\bTO\b/i.test(stmt)) return true;
-		// COPY ... FROM => no resultset
-		if (/^\s*COPY\b.+\bFROM\b/i.test(stmt)) return false;
-
-		// RETURNING anywhere (heuristic)
-		if (/\bRETURNING\b/i.test(stmt)) return true;
-
-		// WITH ... parse CTE list
-		if (/^\s*WITH\b/i.test(stmt)) {
-			const len = stmt.length;
-			let pos = 0;
-
-			const mWith = stmt.match(/^\s*WITH\b/i);
-			if (mWith) pos = mWith[0].length;
-
-			let depth = 0;
-			let inSingle = false;
-			let inDouble = false;
-			let inDollar = false;
-			let dollarTag = "";
-			let lastClose = -1;
-
-			for (let i = pos; i < len; i++) {
-				const ch = stmt[i];
-				const next = stmt[i + 1];
-
-				// dollar quoting
-				if (!inSingle && !inDouble && ch === "$") {
-					const rest = stmt.slice(i);
-					const m = rest.match(/^\$([A-Za-z0-9_]*)\$/);
-					if (m) {
-						const tag = m[1];
-						const tagFull = "$" + tag + "$";
-						if (!inDollar) {
-							inDollar = true;
-							dollarTag = tagFull;
-							i += tagFull.length - 1;
-							continue;
-						} else {
-							if (tagFull === dollarTag) {
-								inDollar = false;
-								dollarTag = "";
-								i += tagFull.length - 1;
-								continue;
-							}
-						}
-					}
-				}
-				if (inDollar) continue;
-
-				// single-quoted string
-				if (ch === "'" && !inDouble) {
-					inSingle = !inSingle;
-					continue;
-				}
-				// double-quoted identifier
-				if (ch === '"' && !inSingle) {
-					inDouble = !inDouble;
-					continue;
-				}
-				if (inSingle || inDouble) continue;
-
-				// parentheses
-				if (ch === "(") {
-					depth++;
-					continue;
-				}
-				if (ch === ")") {
-					if (depth > 0) depth--;
-					lastClose = i;
-					continue;
-				}
-
-				// semicolon ends
-				if (ch === ";" && depth === 0) break;
-
-				// detect main query token after CTEs
-				if (
-					depth === 0 &&
-					ch !== " " &&
-					ch !== "\t" &&
-					ch !== "\n" &&
-					ch !== ","
-				) {
-					const rest = stmt.slice(i);
-					const m2 = rest.match(
-						/^\s*(SELECT|VALUES|TABLE|INSERT|UPDATE|DELETE|MERGE|SHOW|EXPLAIN|COPY|FETCH|MOVE)\b/i,
-					);
-					if (m2) {
-						const mainToken = m2[1].toUpperCase();
-
-						if (always.includes(mainToken)) return true;
-
-						if (mainToken === "COPY") {
-							return /^\s*COPY\b.+\bTO\b/i.test(rest);
-						}
-
-						if (mainToken === "EXPLAIN") {
-							return true;
-						}
-
-						// INSERT/UPDATE/DELETE/MERGE -> only with RETURNING
-						return /\bRETURNING\b/i.test(rest);
-					}
-				}
-			}
-
-			// fallback
-			if (/\bSELECT\b/i.test(stmt)) return true;
-			if (/\bRETURNING\b/i.test(stmt)) return true;
-			return false;
-		}
-
-		// INSERT/UPDATE/DELETE/MERGE without RETURNING -> no resultset
-		if (/^\s*(INSERT|UPDATE|DELETE|MERGE)\b/i.test(stmt)) {
-			return /\bRETURNING\b/i.test(stmt);
-		}
-
-		// DDL, SET, RESET, VACUUM, ANALYZE, DO, CALL, LOCK etc.
-		if (
-			/^\s*(CREATE|ALTER|DROP|TRUNCATE|SET|RESET|VACUUM|ANALYZE|DO|CALL|LOCK|GRANT|REVOKE)\b/i.test(
-				stmt,
-			)
-		) {
-			return false;
-		}
-
-		// fallback: check first token
-		const mTok = stmt.match(/^\s*([A-Z_]+)/i);
-		if (mTok) {
-			const tok = mTok[1].toUpperCase();
-			return always.includes(tok) || tok === "EXPLAIN";
-		}
-
-		return false;
 	};
 
 	/**
@@ -723,6 +561,10 @@
 		return false;
 	};
 
+	//#endregion
+
+	//#region Date/Time Picker Functions
+
 	/**
 	 * @param {HTMLElement} element
 	 * @param {Object} options
@@ -944,6 +786,10 @@
 		createDateTimePickerInternal(element, options);
 	};
 
+	//#endregion
+
+	//#region SQL Editor / Viewer Functions
+
 	/**
 	 * @param {HTMLElement} element
 	 */
@@ -1000,19 +846,19 @@
 
 		editor.session.on("change", function () {
 			hidden.value = editor.getValue();
-			if (hidden.onchange) {
-				hidden.onchange();
-			}
+			hidden.dispatchEvent(new Event("change"));
 		});
 
 		editor.on("blur", () => {
 			editor.setHighlightActiveLine(false);
 			editor.renderer.$cursorLayer.element.style.display = "none";
+			hidden.dispatchEvent(new Event("blur"));
 		});
 
 		editor.on("focus", () => {
 			editor.setHighlightActiveLine(true);
 			editor.renderer.$cursorLayer.element.style.display = "";
+			hidden.dispatchEvent(new Event("focus"));
 		});
 
 		hidden.id = element.id;
@@ -1165,7 +1011,9 @@
 		});
 	}
 
-	// Tooltips
+	//#endregion
+
+	//#region Tooltip Functions
 
 	const tooltip = document.getElementById("tooltip");
 	const tooltipContent = document.getElementById("tooltip-content");
@@ -1198,14 +1046,7 @@
 		}
 	};
 
-	// Virtual Frame Event
-
-	document.addEventListener("frameLoaded", function (e) {
-		console.log("Frame loaded:", e.detail.url);
-		createSqlEditors(e.target);
-		createDateAndTimePickers(e.target);
-		highlightDataFields(e.target);
-	});
+	//#endregion
 
 	// Helper to process elements in idle time
 
@@ -1232,7 +1073,14 @@
 		scheduleIdleWork(run);
 	}
 
-	// Initialization
+	//#region Initialization
+
+	document.addEventListener("frameLoaded", function (e) {
+		console.log("Frame loaded:", e.detail.url);
+		createSqlEditors(e.target);
+		createDateAndTimePickers(e.target);
+		highlightDataFields(e.target);
+	});
 
 	flatpickr.localize(flatpickr.l10ns.default);
 	window.createSqlEditor = createSqlEditor;
@@ -1266,4 +1114,6 @@
 
 		return newGrammar;
 	});
+
+	//#endregion
 })();

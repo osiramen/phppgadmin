@@ -364,9 +364,9 @@ function doAnalyzeAll()
     $status = $partitionActions->analyzeAllPartitions($_REQUEST['table']);
 
     if ($status == 0) {
-        doDefault($lang['stranalyzed']);
+        doDefault($lang['strpartitionsanalyzed']);
     } else {
-        doDefault($lang['stranalyzebad']);
+        doDefault($lang['strpartitionsanalyzebad']);
     }
 }
 

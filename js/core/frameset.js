@@ -262,7 +262,7 @@ function frameSetHandler(postCacheDB) {
 
 	// Link and Form interception
 
-	function setContent(html, opts = {}) {
+	async function setContent(html, opts = {}) {
 		const { restoreFormStates = false, formStates = null } = opts;
 		content.innerHTML = html;
 
@@ -306,24 +306,23 @@ function frameSetHandler(postCacheDB) {
 		});
 
 		// Wait for all external scripts to load, then execute inline scripts
-		Promise.all(scriptPromises)
-			.then(() => {
-				// Now execute inline scripts in order
-				inlineScripts.forEach((oldScript) => {
-					const newScript = document.createElement("script");
-					newScript.textContent = oldScript.textContent;
-					content.appendChild(newScript);
-				});
-			})
-			.catch((err) => {
-				console.error("Failed to load external script:", err);
-				// Execute inline scripts anyway to avoid breaking the page
-				inlineScripts.forEach((oldScript) => {
-					const newScript = document.createElement("script");
-					newScript.textContent = oldScript.textContent;
-					content.appendChild(newScript);
-				});
+		try {
+			await Promise.all(scriptPromises);
+			// Now execute inline scripts in order
+			inlineScripts.forEach((oldScript) => {
+				const newScript = document.createElement("script");
+				newScript.textContent = oldScript.textContent;
+				content.appendChild(newScript);
 			});
+		} catch (err) {
+			console.error("Failed to load external script:", err);
+			// Execute inline scripts anyway to avoid breaking the page
+			inlineScripts.forEach((oldScript) => {
+				const newScript = document.createElement("script");
+				newScript.textContent = oldScript.textContent;
+				content.appendChild(newScript);
+			});
+		}
 	}
 
 	/**
@@ -564,12 +563,12 @@ function frameSetHandler(postCacheDB) {
 			// Render content
 			if (contentType.includes("text/plain")) {
 				// For plain text (dumps/exports), wrap in <pre> tag
-				setContent(`<pre>${escapeHtml(responseText)}</pre>`, {
+				await setContent(`<pre>${escapeHtml(responseText)}</pre>`, {
 					restoreFormStates: !addToHistory,
 				});
 			} else {
 				// For HTML, parse as normal
-				setContent(responseText, {
+				await setContent(responseText, {
 					restoreFormStates: !addToHistory,
 				});
 			}
@@ -738,10 +737,13 @@ function frameSetHandler(postCacheDB) {
 
 		if (htmlLz) {
 			const cachedHtml = LZString.decompressFromUTF16(htmlLz);
-			setContent(cachedHtml, {
+			await setContent(cachedHtml, {
 				restoreFormStates: true,
 				formStates: e.state?.formStates,
 			});
+			// Scroll back to the top
+			contentContainer.scrollTo(0, 0);
+			// Dispatch frame loaded event
 			const event = new CustomEvent("frameLoaded", {
 				detail: { url: url },
 				target: content,
@@ -751,7 +753,7 @@ function frameSetHandler(postCacheDB) {
 		}
 
 		// No cached content, fetch fresh (for GET requests)
-		loadContent(url, {}, false);
+		await loadContent(url, {}, false);
 	});
 
 	window.addEventListener("message", (event) => {

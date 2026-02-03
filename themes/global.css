@@ -455,6 +455,11 @@ td[class^="opbutton"] img.icon {
 	height: 200px;
 }
 
+.sql-editor.small {
+	height: 90px;
+	font-size: inherit;
+}
+
 .sql-editor.medium {
 	height: 150px;
 }
@@ -948,4 +953,12 @@ td.auto-wrap.no-line-break pre {
 	white-space: pre-wrap;
 	word-break: break-word;
 	overflow-wrap: anywhere;
+}
+
+.query-explain-frame {
+	border: 1px solid #ccc;
+	border-radius: 7px;
+	padding: 0em 0.33em;
+	border-bottom-color: transparent;
+	border-top-color: transparent;
 }

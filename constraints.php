@@ -140,6 +140,7 @@ function addForeignKey($stage, $msg = '')
 
 		echo "<p><input type=\"hidden\" name=\"action\" value=\"save_add_foreign_key\" />\n";
 		echo $misc->form;
+		echo "<input type=\"hidden\" name=\"subject\" value=\"table\" />\n";
 		echo "<input type=\"hidden\" name=\"table\" value=\"", html_esc($_REQUEST['table']), "\" />\n";
 		echo "<input type=\"hidden\" name=\"name\" value=\"", html_esc($_REQUEST['name']), "\" />\n";
 		echo "<input type=\"hidden\" name=\"target\" value=\"", html_esc(serialize($_REQUEST['target'])), "\" />\n";
@@ -265,6 +266,9 @@ function addPrimaryOrUniqueKey($type, $confirm, $msg = '')
 	$tableSpaceActions = new TablespaceActions($pg);
 	$constraintActions = new ConstraintActions($pg);
 
+	$subject = $_REQUEST['subject'] ?? 'table';
+	$table = $_REQUEST[$subject];
+
 	if (!isset($_POST['name']))
 		$_POST['name'] = '';
 
@@ -274,14 +278,16 @@ function addPrimaryOrUniqueKey($type, $confirm, $msg = '')
 		if (!isset($_POST['tablespace']))
 			$_POST['tablespace'] = '';
 
-		$misc->printTrail('table');
+		$misc->printTrail($subject);
 
 		switch ($type) {
 			case 'primary':
 				$misc->printTitle($lang['straddpk'], 'pg.constraint.primary_key');
+				$suffix = 'pkey';
 				break;
 			case 'unique':
 				$misc->printTitle($lang['stradduniq'], 'pg.constraint.unique_key');
+				$suffix = 'unique';
 				break;
 			default:
 				doDefault($lang['strinvalidparam']);
@@ -290,7 +296,7 @@ function addPrimaryOrUniqueKey($type, $confirm, $msg = '')
 
 		$misc->printMsg($msg);
 
-		$attrs = $tableActions->getTableAttributes($_REQUEST['table']);
+		$attrs = $tableActions->getTableAttributes($table);
 		// Fetch all tablespaces from the database
 		if ($pg->hasTablespaces())
 			$tablespaces = $tableSpaceActions->getTablespaces();
@@ -318,42 +324,59 @@ function addPrimaryOrUniqueKey($type, $confirm, $msg = '')
 		$buttonRemove->set_attribute('type', 'button');
 
 		echo "<form onsubmit=\"doSelectAll();\" name=\"formIndex\" action=\"constraints.php\" method=\"post\">\n";
+		?>
 
-		echo "<table>\n";
-		echo "<tr><th class=\"data\" colspan=\"3\">{$lang['strname']}</th></tr>";
-		echo "<tr>";
-		echo "<td class=\"data1\" colspan=\"3\"><input type=\"text\" name=\"name\" value=\"", html_esc($_POST['name']),
-			"\" size=\"32\" maxlength=\"{$pg->_maxNameLen}\" /></td></tr>";
-		echo "<tr><th class=\"data\">{$lang['strtablecolumnlist']}</th><th class=\"data\">&nbsp;</th><th class=\"data required\">{$lang['strindexcolumnlist']}</th></tr>\n";
-		echo "<tr><td class=\"data1\">" . $selColumns->fetch() . "</td>\n";
-		echo "<td class=\"data1\" style=\"text-align: center\">" . $buttonRemove->fetch() . $buttonAdd->fetch() . "</td>";
-		echo "<td class=data1>" . $selIndex->fetch() . "</td></tr>\n";
+		<table>
+			<tr>
+				<th class="data" colspan="3"><?= $lang['strname']; ?></th>
+			</tr>
+			<tr>
+				<td class="data1" colspan="3">
+					<input type="text" name="name" value="<?= html_esc($_POST['name']); ?>" id="formIndexName" size="32"
+						data-suffix="<?= $suffix ?>" maxlength="<?= $pg->_maxNameLen; ?>" />
+				</td>
+			</tr>
+			<tr>
+				<th class="data"><?= $lang['strtablecolumnlist']; ?></th>
+				<th class="data">&nbsp;</th>
+				<th class="data required"><?= $lang['strindexcolumnlist']; ?></th>
+			</tr>
+			<tr>
+				<td class="data1"><?= $selColumns->fetch(); ?></td>
+				<td class="data1" style="text-align: center"><?= $buttonRemove->fetch() . $buttonAdd->fetch(); ?>
+				</td>
+				<td class="data1"><?= $selIndex->fetch(); ?></td>
+			</tr>
 
-		// Tablespace (if there are any)
-		if ($pg->hasTablespaces() && $tablespaces->recordCount() > 0) {
-			echo "<tr><th class=\"data\" colspan=\"3\">{$lang['strtablespace']}</th></tr>";
-			echo "<tr><td class=\"data1\" colspan=\"3\"><select name=\"tablespace\">\n";
-			// Always offer the default (empty) option
-			echo "\t\t\t\t<option value=\"\"",
-				($_POST['tablespace'] == '') ? ' selected="selected"' : '', "></option>\n";
-			// Display all other tablespaces
-			while (!$tablespaces->EOF) {
-				$spcname = html_esc($tablespaces->fields['spcname']);
-				echo "\t\t\t\t<option value=\"{$spcname}\"",
-					($spcname == $_POST['tablespace']) ? ' selected="selected"' : '', ">{$spcname}</option>\n";
-				$tablespaces->moveNext();
-			}
-			echo "</select></td></tr>\n";
-		}
+			<?php if ($pg->hasTablespaces() && $tablespaces->recordCount() > 0): ?>
+				<tr>
+					<th class="data" colspan="3"><?= $lang['strtablespace']; ?></th>
+				</tr>
+				<tr>
+					<td class="data1" colspan="3"><select name="tablespace">
+							<option value="" <?= ($_POST['tablespace'] == '') ? ' selected="selected"' : ''; ?>></option>
+							<?php while (!$tablespaces->EOF):
+								$spcname = html_esc($tablespaces->fields['spcname']); ?>
+								<option value="<?= $spcname; ?>" <?= ($spcname == $_POST['tablespace']) ? ' selected="selected"' : ''; ?>>
+									<?= $spcname; ?>
+								</option>
+								<?php $tablespaces->moveNext(); endwhile; ?>
+						</select></td>
+				</tr>
+			<?php endif; ?>
 
-		echo "</table>\n";
+		</table>
 
-		echo "<p><input type=\"hidden\" name=\"action\" value=\"save_add_primary_key\" />\n";
-		echo $misc->form;
-		echo "<input type=\"hidden\" name=\"table\" value=\"", html_esc($_REQUEST['table']), "\" />\n";
-		echo "<input type=\"hidden\" name=\"type\" value=\"", html_esc($type), "\" />\n";
-		echo "<input type=\"submit\" value=\"{$lang['stradd']}\" />\n";
-		echo "<input type=\"submit\" name=\"cancel\" value=\"{$lang['strcancel']}\" /></p>\n";
+		<p><input type="hidden" name="action" value="save_add_primary_key" />
+			<?= $misc->form; ?>
+			<input type="hidden" name="subject" value="<?= htmlspecialchars($subject); ?>" />
+			<input type="hidden" name="<?= htmlspecialchars($subject); ?>" value="<?= htmlspecialchars($table); ?>" />
+			<input type="hidden" name="type" value="<?= html_esc($type); ?>" />
+			<input type="submit" value="<?= $lang['stradd']; ?>" />
+			<input type="submit" name="cancel" value="<?= $lang['strcancel']; ?>" />
+		</p>
+
+		<?php
 		echo "</form>\n";
 	} else {
 		// Default tablespace to empty if it isn't set
@@ -369,7 +392,7 @@ function addPrimaryOrUniqueKey($type, $confirm, $msg = '')
 				addPrimaryOrUniqueKey($_POST['type'], true, $lang['strpkneedscols']);
 			else {
 				$status = $constraintActions->addPrimaryKey(
-					$_POST['table'],
+					$table,
 					$_POST['IndexColumnList'],
 					$_POST['name'],
 					$_POST['tablespace']
@@ -388,7 +411,7 @@ function addPrimaryOrUniqueKey($type, $confirm, $msg = '')
 				addPrimaryOrUniqueKey($_POST['type'], true, $lang['struniqneedscols']);
 			else {
 				$status = $constraintActions->addUniqueKey(
-					$_POST['table'],
+					$table,
 					$_POST['IndexColumnList'],
 					$_POST['name'],
 					$_POST['tablespace']
@@ -413,13 +436,16 @@ function addCheck($confirm, $msg = '')
 	$lang = AppContainer::getLang();
 	$constraintActions = new ConstraintActions($pg);
 
+	$subject = $_REQUEST['subject'] ?? 'table';
+	$table = $_REQUEST[$subject];
+
 	if (!isset($_POST['name']))
 		$_POST['name'] = '';
 	if (!isset($_POST['definition']))
 		$_POST['definition'] = '';
 
 	if ($confirm) {
-		$misc->printTrail('table');
+		$misc->printTrail($subject);
 		$misc->printTitle($lang['straddcheck'], 'pg.constraint.check');
 		$misc->printMsg($msg);
 
@@ -436,7 +462,8 @@ function addCheck($confirm, $msg = '')
 		echo "</table>\n";
 
 		echo "<input type=\"hidden\" name=\"action\" value=\"save_add_check\" />\n";
-		echo "<input type=\"hidden\" name=\"table\" value=\"", html_esc($_REQUEST['table']), "\" />\n";
+		echo "<input type=\"hidden\" name=\"subject\" value=\"", htmlspecialchars($subject), "\" />\n";
+		echo "<input type=\"hidden\" name=\"", htmlspecialchars($subject), "\" value=\"", htmlspecialchars($table), "\" />\n";
 		echo $misc->form;
 		echo "<p><input type=\"submit\" name=\"ok\" value=\"{$lang['stradd']}\" />\n";
 		echo "<input type=\"submit\" name=\"cancel\" value=\"{$lang['strcancel']}\" /></p>\n";
@@ -447,7 +474,7 @@ function addCheck($confirm, $msg = '')
 			addCheck(true, $lang['strcheckneedsdefinition']);
 		else {
 			$status = $constraintActions->addCheckConstraint(
-				$_POST['table'],
+				$table,
 				$_POST['definition'],
 				$_POST['name']
 			);
@@ -469,6 +496,9 @@ function doDrop($confirm)
 	$lang = AppContainer::getLang();
 	$constraintActions = new ConstraintActions($pg);
 
+	$subject = $_REQUEST['subject'] ?? 'table';
+	$table = $_REQUEST[$subject];
+
 	if ($confirm) {
 		$misc->printTrail('constraint');
 		$misc->printTitle($lang['strdrop'], 'pg.constraint.drop');
@@ -476,12 +506,13 @@ function doDrop($confirm)
 		echo "<p>", sprintf(
 			$lang['strconfdropconstraint'],
 			$misc->formatVal($_REQUEST['constraint']),
-			$misc->formatVal($_REQUEST['table'])
+			$misc->formatVal($table)
 		), "</p>\n";
 
 		echo "<form action=\"constraints.php\" method=\"post\">\n";
 		echo "<input type=\"hidden\" name=\"action\" value=\"drop\" />\n";
-		echo "<input type=\"hidden\" name=\"table\" value=\"", html_esc($_REQUEST['table']), "\" />\n";
+		echo "<input type=\"hidden\" name=\"subject\" value=\"", html_esc($subject), "\" />\n";
+		echo "<input type=\"hidden\" name=\"", html_esc($subject), "\" value=\"", html_esc($table), "\" />\n";
 		echo "<input type=\"hidden\" name=\"constraint\" value=\"", html_esc($_REQUEST['constraint']), "\" />\n";
 		echo "<input type=\"hidden\" name=\"type\" value=\"", html_esc($_REQUEST['type']), "\" />\n";
 		echo $misc->form;
@@ -492,7 +523,7 @@ function doDrop($confirm)
 	} else {
 		$status = $constraintActions->dropConstraint(
 			$_POST['constraint'],
-			$_POST['table'],
+			$subject,
 			$_POST['type'],
 			isset($_POST['cascade'])
 		);
@@ -515,9 +546,12 @@ function doDefault($msg = '')
 	$partitionActions = new PartitionActions($pg);
 	$constraintActions = new ConstraintActions($pg);
 
-	$cnPre = function (&$rowdata) use ($tableActions, $pg, $lang) {
+	$subject = $_REQUEST['subject'] ?? 'table';
+	$table = $_REQUEST[$subject];
+
+	$cnPre = function (&$rowdata) use ($tableActions, $pg, $lang, $table) {
 		if (is_null($rowdata->fields['consrc'])) {
-			$atts = $tableActions->getAttributeNames($_REQUEST['table'], explode(' ', $rowdata->fields['indkey']));
+			$atts = $tableActions->getAttributeNames($table, explode(' ', $rowdata->fields['indkey']));
 			$rowdata->fields['+definition'] = ($rowdata->fields['contype'] == 'u' ? "UNIQUE (" : "PRIMARY KEY (") . join(',', $atts) . ')';
 		} else {
 			$rowdata->fields['+definition'] = $rowdata->fields['consrc'];
@@ -539,47 +573,49 @@ function doDefault($msg = '')
 		}
 	};
 
-	$misc->printTrail('table');
-	$misc->printTabs('table', 'constraints');
+	$misc->printTrail($subject);
+	$misc->printTabs($subject, 'constraints');
 	$misc->printMsg($msg);
 
-	$constraints = $constraintActions->getConstraints($_REQUEST['table']);
+	$constraints = $constraintActions->getConstraints($table);
 
 	// Check if this is a partition (PG 10+)
-	$is_partition = $partitionActions->isPartition($_REQUEST['table']);
+	$is_partition = $partitionActions->isPartition($table);
 
 	// Add filter controls for partitions
 	if ($is_partition && $constraints->recordCount() > 0) {
-		echo "<div class=\"constraint-filter\" style=\"margin-bottom: 10px;\">\n";
-		echo "<strong>{$lang['strfilter']}:</strong> ";
-		echo "<button type=\"button\" onclick=\"filterConstraints('all')\" id=\"filter-all\">{$lang['strshowall']}</button> ";
-		echo "<button type=\"button\" onclick=\"filterConstraints('inherited')\" id=\"filter-inherited\">{$lang['strshowinherited']}</button> ";
-		echo "<button type=\"button\" onclick=\"filterConstraints('local')\" id=\"filter-local\">{$lang['strshowlocal']}</button>\n";
-		echo "</div>\n";
+		?>
+		<div class="constraint-filter" style="margin-bottom: 10px;">
+			<strong><?= $lang['strfilter']; ?>:</strong>
+			<button type="button" onclick="filterConstraints('all')" id="filter-all"><?= $lang['strshowall']; ?></button>
+			<button type="button" onclick="filterConstraints('inherited')"
+				id="filter-inherited"><?= $lang['strshowinherited']; ?></button>
+			<button type="button" onclick="filterConstraints('local')" id="filter-local"><?= $lang['strshowlocal']; ?></button>
+		</div>
 
-		// Add JavaScript for filtering
-		echo "<script type=\"text/javascript\">\n";
-		echo "(function() {\n";
-		echo "  function filterConstraints(type) {\n";
-		echo "    var rows = document.querySelectorAll('.constraints-constraints tbody tr');\n";
-		echo "    for (var i = 0; i < rows.length; i++) {\n";
-		echo "      var scopeCell = rows[i].cells[2];\n"; // Assuming Scope is 3rd column
-		echo "      if (!scopeCell) continue;\n";
-		echo "      var scopeText = scopeCell.textContent.trim().toLowerCase();\n";
-		echo "      if (type === 'all') {\n";
-		echo "        rows[i].style.display = '';\n";
-		echo "      } else if (type === 'inherited' && scopeText.indexOf('inherited') >= 0) {\n";
-		echo "        rows[i].style.display = '';\n";
-		echo "      } else if (type === 'local' && scopeText.indexOf('local') >= 0) {\n";
-		echo "        rows[i].style.display = '';\n";
-		echo "      } else {\n";
-		echo "        rows[i].style.display = 'none';\n";
-		echo "      }\n";
-		echo "    }\n";
-		echo "  }\n";
-		echo "  window.filterConstraints = filterConstraints;\n";
-		echo "})();\n";
-		echo "</script>\n";
+		<script type="text/javascript">
+			(function () {
+				function filterConstraints(type) {
+					var rows = document.querySelectorAll('.constraints-constraints tbody tr');
+					for (var i = 0; i < rows.length; i++) {
+						var scopeCell = rows[i].cells[2]; // Assuming Scope is 3rd column
+						if (!scopeCell) continue;
+						var scopeText = scopeCell.textContent.trim().toLowerCase();
+						if (type === 'all') {
+							rows[i].style.display = '';
+						} else if (type === 'inherited' && scopeText.indexOf('inherited') >= 0) {
+							rows[i].style.display = '';
+						} else if (type === 'local' && scopeText.indexOf('local') >= 0) {
+							rows[i].style.display = '';
+						} else {
+							rows[i].style.display = 'none';
+						}
+					}
+				}
+				window.filterConstraints = filterConstraints;
+			})();
+		</script>
+		<?php
 	}
 
 	$columns = [
@@ -620,7 +656,8 @@ function doDefault($msg = '')
 					'url' => 'constraints.php',
 					'urlvars' => [
 						'action' => 'confirm_drop',
-						'table' => $_REQUEST['table'],
+						'subject' => $subject,
+						$subject => $table,
 						'constraint' => field('conname'),
 						'type' => field('contype')
 					]
@@ -654,7 +691,8 @@ function doDefault($msg = '')
 						'server' => $_REQUEST['server'],
 						'database' => $_REQUEST['database'],
 						'schema' => $_REQUEST['schema'],
-						'table' => $_REQUEST['table']
+						'subject' => $subject,
+						$subject => $table,
 					]
 				]
 			],
@@ -670,7 +708,8 @@ function doDefault($msg = '')
 						'server' => $_REQUEST['server'],
 						'database' => $_REQUEST['database'],
 						'schema' => $_REQUEST['schema'],
-						'table' => $_REQUEST['table']
+						'subject' => $subject,
+						$subject => $table,
 					]
 				]
 			],
@@ -686,7 +725,8 @@ function doDefault($msg = '')
 						'server' => $_REQUEST['server'],
 						'database' => $_REQUEST['database'],
 						'schema' => $_REQUEST['schema'],
-						'table' => $_REQUEST['table']
+						'subject' => $subject,
+						$subject => $table,
 					]
 				]
 			],
@@ -702,7 +742,8 @@ function doDefault($msg = '')
 						'server' => $_REQUEST['server'],
 						'database' => $_REQUEST['database'],
 						'schema' => $_REQUEST['schema'],
-						'table' => $_REQUEST['table']
+						'subject' => $subject,
+						$subject => $table,
 					]
 				]
 			],
@@ -710,6 +751,12 @@ function doDefault($msg = '')
 			'content' => $lang['straddfk']
 		]
 	];
+
+	if ($subject == 'view') {
+		// Remove add foreign key link for views
+		unset($navlinks['addfk']);
+	}
+
 	$misc->printNavLinks($navlinks, 'constraints-constraints', get_defined_vars());
 }
 
@@ -719,7 +766,9 @@ function doTree()
 	$pg = AppContainer::getPostgres();
 	$constraintActions = new ConstraintActions($pg);
 
-	$constraints = $constraintActions->getConstraints($_REQUEST['table']);
+	$table = $_REQUEST['table'] ?? $_REQUEST['view'] ?? '';
+
+	$constraints = $constraintActions->getConstraints($table);
 
 	//$reqvars = $misc->getRequestVars('schema');
 
@@ -763,11 +812,13 @@ $lang = AppContainer::getLang();
 
 $action = $_REQUEST['action'] ?? '';
 
+$table = $_REQUEST['table'] ?? $_REQUEST['view'] ?? '';
+
 if ($action == 'tree')
 	doTree();
 
 $misc->printHeader(
-	$lang['strtables'] . ' - ' . $_REQUEST['table'] . ' - ' . $lang['strconstraints'],
+	$table . ' - ' . $lang['strconstraints'],
 	"<script defer src=\"js/indexes.js\" type=\"text/javascript\"></script>"
 );
 

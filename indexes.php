@@ -30,6 +30,9 @@ function doClusterIndex($confirm)
 	$indexActions = new IndexActions($pg);
 	$adminActions = new AdminActions($pg);
 
+	$subject = $_REQUEST['subject'] ?? 'table';
+	$table = $_REQUEST[$subject];
+
 	if ($confirm) {
 		// Default analyze to on
 		$_REQUEST['analyze'] = true;
@@ -45,7 +48,8 @@ function doClusterIndex($confirm)
 				<label for="analyze"><?= $lang['stranalyze'] ?></label>
 			</p>
 			<input type="hidden" name="action" value="cluster_index" />
-			<input type="hidden" name="table" value="<?= html_esc($_REQUEST['table']) ?>" />
+			<input type="hidden" name="subject" value="<?= htmlspecialchars($subject) ?>" />
+			<input type="hidden" name="<?= htmlspecialchars($subject) ?>" value="<?= htmlspecialchars($table) ?>" />
 			<input type="hidden" name="index" value="<?= html_esc($_REQUEST['index']) ?>" />
 			<?= $misc->form ?>
 			<input type="submit" name="cluster" value="<?= $lang['strclusterindex'] ?>" />
@@ -53,10 +57,10 @@ function doClusterIndex($confirm)
 		</form>
 		<?php
 	} else {
-		$status = $indexActions->clusterIndex($_POST['table'], $_POST['index']);
+		$status = $indexActions->clusterIndex($table, $_POST['index']);
 		if ($status == 0)
 			if (isset($_POST['analyze'])) {
-				$status = $adminActions->analyzeDB($_POST['table']);
+				$status = $adminActions->analyzeDB($table);
 				if ($status == 0)
 					doDefault($lang['strclusteredgood'] . ' ' . $lang['stranalyzegood']);
 				else
@@ -93,6 +97,9 @@ function doCreateIndex($msg = '')
 	$tableActions = new TableActions($pg);
 	$tableSpaceActions = new TablespaceActions($pg);
 
+	$subject = $_REQUEST['subject'] ?? 'table';
+	$table = $_REQUEST[$subject];
+
 	if (!isset($_POST['formIndexName']))
 		$_POST['formIndexName'] = '';
 	if (!isset($_POST['formIndexType']))
@@ -104,12 +111,12 @@ function doCreateIndex($msg = '')
 	if (!isset($_POST['formSpc']))
 		$_POST['formSpc'] = '';
 
-	$attrs = $tableActions->getTableAttributes($_REQUEST['table']);
+	$attrs = $tableActions->getTableAttributes($table);
 	// Fetch all tablespaces from the database
 	if ($pg->hasTablespaces())
 		$tablespaces = $tableSpaceActions->getTablespaces();
 
-	$misc->printTrail('table');
+	$misc->printTrail($subject);
 	$misc->printTitle($lang['strcreateindex'], 'pg.index.create');
 	$misc->printMsg($msg);
 
@@ -142,8 +149,8 @@ function doCreateIndex($msg = '')
 			</tr>
 			<tr>
 				<td class="data1" colspan="3">
-					<input type="text" name="formIndexName" size="32" maxlength="<?= $pg->_maxNameLen ?>"
-						value="<?= html_esc($_POST['formIndexName']) ?>" />
+					<input type="text" name="formIndexName" id="formIndexName" size="32" maxlength="<?= $pg->_maxNameLen ?>"
+						data-suffix="idx" value="<?= html_esc($_POST['formIndexName']) ?>" />
 				</td>
 			</tr>
 			<tr>
@@ -208,7 +215,8 @@ function doCreateIndex($msg = '')
 		<p>
 			<input type="hidden" name="action" value="save_create_index" />
 			<?= $misc->form ?>
-			<input type="hidden" name="table" value="<?= html_esc($_REQUEST['table']) ?>" />
+			<input type="hidden" name="subject" value="<?= htmlspecialchars($subject) ?>" />
+			<input type="hidden" name="<?= htmlspecialchars($subject) ?>" value="<?= htmlspecialchars($table) ?>" />
 			<input type="submit" value="<?= $lang['strcreate'] ?>" />
 			<input type="submit" name="cancel" value="<?= $lang['strcancel'] ?>" />
 		</p>
@@ -226,6 +234,9 @@ function doSaveCreateIndex()
 	$lang = AppContainer::getLang();
 	$indexActions = new IndexActions($pg);
 
+	$subject = $_REQUEST['subject'] ?? 'table';
+	$table = $_REQUEST[$subject];
+
 	// Handle databases that don't have partial indexes
 	if (!isset($_POST['formWhere']))
 		$_POST['formWhere'] = '';
@@ -241,7 +252,7 @@ function doSaveCreateIndex()
 	else {
 		$status = $indexActions->createIndex(
 			$_POST['formIndexName'],
-			$_POST['table'],
+			$table,
 			$_POST['IndexColumnList'],
 			$_POST['formIndexType'],
 			isset($_POST['formUnique']),
@@ -282,6 +293,9 @@ function doConfirmDropIndex()
 	$misc = AppContainer::getMisc();
 	$lang = AppContainer::getLang();
 
+	$subject = $_REQUEST['subject'] ?? 'table';
+	$table = $_REQUEST[$subject];
+
 	$misc->printTrail('index');
 	$misc->printTitle($lang['strdrop'], 'pg.index.drop');
 	?>
@@ -289,7 +303,8 @@ function doConfirmDropIndex()
 
 	<form action="indexes.php" method="post">
 		<input type="hidden" name="action" value="drop_index" />
-		<input type="hidden" name="table" value="<?= html_esc($_REQUEST['table']) ?>" />
+		<input type="hidden" name="subject" value="<?= htmlspecialchars($subject) ?>" />
+		<input type="hidden" name="<?= htmlspecialchars($subject) ?>" value="<?= htmlspecialchars($table) ?>" />
 		<input type="hidden" name="index" value="<?= html_esc($_REQUEST['index']) ?>" />
 		<?= $misc->form ?>
 		<p><input type="checkbox" id="cascade" name="cascade" /> <label for="cascade"><?= $lang['strcascade'] ?></label></p>
@@ -319,12 +334,14 @@ function doDefault($msg = '')
 		return $actions;
 	};
 
-	$misc->printTrail('table');
-	$misc->printTabs('table', 'indexes');
+	$subject = $_REQUEST['subject'] ?? 'table';
+	$table = $_REQUEST[$subject];
+
+	$misc->printTrail($subject);
+	$misc->printTabs($subject, 'indexes');
 	$misc->printMsg($msg);
 
-	$indexes = $indexActions->getIndexes($_REQUEST['table']);
-
+	$indexes = $indexActions->getIndexes($table);
 	$columns = [
 		'index' => [
 			'title' => $lang['strname'],
@@ -366,7 +383,8 @@ function doDefault($msg = '')
 					'url' => 'indexes.php',
 					'urlvars' => [
 						'action' => 'confirm_cluster_index',
-						'table' => $_REQUEST['table'],
+						'subject' => $subject,
+						$subject => $table,
 						'index' => field('indname')
 					]
 				]
@@ -380,7 +398,8 @@ function doDefault($msg = '')
 					'url' => 'indexes.php',
 					'urlvars' => [
 						'action' => 'reindex',
-						'table' => $_REQUEST['table'],
+						'subject' => $subject,
+						$subject => $table,
 						'index' => field('indname')
 					]
 				]
@@ -394,7 +413,8 @@ function doDefault($msg = '')
 					'url' => 'indexes.php',
 					'urlvars' => [
 						'action' => 'confirm_drop_index',
-						'table' => $_REQUEST['table'],
+						'subject' => $subject,
+						$subject => $table,
 						'index' => field('indname')
 					]
 				]
@@ -422,7 +442,8 @@ function doDefault($msg = '')
 							'server' => $_REQUEST['server'],
 							'database' => $_REQUEST['database'],
 							'schema' => $_REQUEST['schema'],
-							'table' => $_REQUEST['table']
+							'subject' => $subject,
+							$subject => $table,
 						]
 					]
 				],
@@ -439,7 +460,9 @@ function doTree()
 	$pg = AppContainer::getPostgres();
 	$indexActions = new IndexActions($pg);
 
-	$indexes = $indexActions->getIndexes($_REQUEST['table']);
+	$table = $_REQUEST['table'] ?? $_REQUEST['view'] ?? '';
+
+	$indexes = $indexActions->getIndexes($table);
 
 	//$reqvars = $misc->getRequestVars('table');
 
@@ -467,12 +490,13 @@ $lang = AppContainer::getLang();
 
 $action = $_REQUEST['action'] ?? '';
 
+$table = $_REQUEST['table'] ?? $_REQUEST['view'] ?? '';
 
 if ($action == 'tree')
 	doTree();
 
 $scripts = "<script defer src=\"js/indexes.js\" type=\"text/javascript\"></script>";
-$misc->printHeader($lang['strindexes'], $scripts);
+$misc->printHeader($table . ' - ' . $lang['strindexes'], $scripts);
 
 $misc->printBody();
 

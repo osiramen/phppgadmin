@@ -860,4 +860,140 @@
 	);
 
 	//#endregion End Popup Field Editor
+
+	//#region Query EXPLAIN Helper
+
+	let explainAnalyzeCheckbox = null;
+	let explainBuffersCheckbox = null;
+	let explainVerboseCheckbox = null;
+	let explainFormatSelect = null;
+	let explainQueryElement = null;
+	let queryEditorElement = null;
+	let expandStringsElement = null;
+
+	function addExplainPrefix(ifExists = false) {
+		let query = queryEditorElement.value.trimLeft();
+
+		const found = /^\s*EXPLAIN/i.test(query);
+
+		// Remove existing EXPLAIN
+		query = query
+			.replace(/^\s*EXPLAIN(\s*\(.*?\))?(\s+ANALY[ZS]E|VERBOSE)*/i, "")
+			.trimLeft();
+
+		let newQuery = "";
+
+		if (!ifExists && found) {
+			// Toggle EXPLAIN on/off
+			newQuery = query;
+			explainQueryElement.classList.remove("success");
+		} else {
+			// Get options
+			let options = [];
+			if (explainAnalyzeCheckbox && explainAnalyzeCheckbox.checked) {
+				options.push("ANALYZE");
+			}
+			if (explainVerboseCheckbox && explainVerboseCheckbox.checked) {
+				options.push("VERBOSE");
+			}
+			if (explainBuffersCheckbox && explainBuffersCheckbox.checked) {
+				options.push("BUFFERS");
+			}
+			if (explainFormatSelect && explainFormatSelect.value) {
+				options.push("FORMAT " + explainFormatSelect.value);
+			}
+
+			let prefix = "EXPLAIN";
+			if (options.length > 0) {
+				prefix += " (" + options.join(", ") + ")";
+			}
+
+			// Prepend prefix
+			newQuery = prefix + "\n" + query;
+			explainQueryElement.classList.add("success");
+			if (expandStringsElement) {
+				expandStringsElement.checked = true;
+			}
+		}
+
+		// Set back to editor
+		if (queryEditorElement.beginEdit) {
+			queryEditorElement.beginEdit(newQuery);
+		} else {
+			queryEditorElement.value = newQuery;
+		}
+	}
+
+	function parseExplainOptions() {
+		const matches =
+			/^\s*EXPLAIN(\s*\(.*?\))?(\s+ANALY[ZS]E|VERBOSE)*/i.exec(
+				queryEditorElement.value,
+			);
+		if (matches) {
+			const optionsStr = matches[0] || "";
+			if (/ANALY[SZ]E/i.test(optionsStr)) {
+				if (explainAnalyzeCheckbox)
+					explainAnalyzeCheckbox.checked = true;
+			}
+			if (/BUFFERS/i.test(optionsStr)) {
+				if (explainBuffersCheckbox)
+					explainBuffersCheckbox.checked = true;
+			}
+			if (/VERBOSE/i.test(optionsStr)) {
+				if (explainVerboseCheckbox)
+					explainVerboseCheckbox.checked = true;
+			}
+			const formatMatch = /FORMAT\s+(\w+)/i.exec(optionsStr);
+			if (formatMatch && explainFormatSelect) {
+				const formatValue = formatMatch[1].toUpperCase();
+				for (const option of explainFormatSelect.options) {
+					if (option.value.toUpperCase() === formatValue) {
+						explainFormatSelect.value = option.value;
+						break;
+					}
+				}
+			}
+			explainQueryElement.classList.add("success");
+		}
+	}
+
+	document.addEventListener(
+		"frameLoaded",
+		() => {
+			explainAnalyzeCheckbox = document.getElementById("explain-analyze");
+			explainBuffersCheckbox = document.getElementById("explain-buffers");
+			explainVerboseCheckbox = document.getElementById("explain-verbose");
+			explainFormatSelect = document.getElementById("explain-format");
+			explainQueryElement = document.getElementById("explain-query");
+			queryEditorElement = document.getElementById("query-editor");
+			expandStringsElement = document.getElementById("expand-strings");
+
+			if (!queryEditorElement || !explainQueryElement) {
+				return;
+			}
+
+			parseExplainOptions();
+
+			explainQueryElement.onclick = () => addExplainPrefix(false);
+
+			if (explainBuffersCheckbox) {
+				explainBuffersCheckbox.onchange = () => addExplainPrefix(true);
+			}
+
+			if (explainAnalyzeCheckbox) {
+				explainAnalyzeCheckbox.onchange = () => addExplainPrefix(true);
+			}
+
+			if (explainVerboseCheckbox) {
+				explainVerboseCheckbox.onchange = () => addExplainPrefix(true);
+			}
+
+			if (explainFormatSelect) {
+				explainFormatSelect.onchange = () => addExplainPrefix(true);
+			}
+		},
+		{ once: true },
+	);
+
+	//#endregion End Query EXPLAIN Helper
 })();

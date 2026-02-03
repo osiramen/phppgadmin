@@ -45,14 +45,35 @@ class ViewActions extends ActionsBase
         return $this->connection->selectSet($sql);
     }
 
+    public function isMaterializedView($view)
+    {
+        if (empty($view)) {
+            return false;
+        }
+        $rs = $this->getView($view);
+        if (!is_object($rs) || $rs->EOF) {
+            return false;
+        }
+        return $rs->fields['relkind'] === 'm';
+    }
+
     /**
      * Returns all details for a particular view.
      */
     public function getView($view)
     {
+        static $cache = [];
         $c_schema = $this->connection->_schema;
         $this->connection->clean($c_schema);
         $this->connection->clean($view);
+        $cacheKey = $c_schema . '.' . $view;
+        if (isset($cache[$cacheKey])) {
+            $result = $cache[$cacheKey];
+            if ($result instanceof \ADORecordSet) {
+                $result->MoveFirst();
+            }
+            return $result;
+        }
 
         $sql =
             "SELECT c.oid, c.relname, c.relkind, n.nspname,
@@ -63,7 +84,9 @@ class ViewActions extends ActionsBase
             LEFT JOIN pg_catalog.pg_namespace n ON (n.oid = c.relnamespace)
             WHERE (c.relname = '{$view}') AND n.nspname='{$c_schema}'";
 
-        return $this->connection->selectSet($sql);
+        $result = $this->connection->selectSet($sql);
+        $cache[$cacheKey] = $result;
+        return $result;
     }
 
     /**

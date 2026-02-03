@@ -7,6 +7,7 @@ use PhpPgAdmin\Database\Actions\AclActions;
 use PhpPgAdmin\Database\Actions\RoleActions;
 use PhpPgAdmin\Database\Actions\TableActions;
 use PhpPgAdmin\Database\Actions\PartitionActions;
+use PhpPgAdmin\Database\Actions\ViewActions;
 
 class TabsRenderer extends AppContext
 {
@@ -522,6 +523,24 @@ class TabsRenderer extends AppContext
                         'urlvars' => ['action' => 'confselectrows', 'view' => field('view'),],
                         'help' => 'pg.sql.select',
                     ],
+                    'indexes' => [
+                        'title' => $lang['strindexes'],
+                        'url' => 'indexes.php',
+                        'urlvars' => ['subject' => 'view', 'view' => field('view')],
+                        'help' => 'pg.index',
+                        'icon' => 'Indexes',
+                        'branch' => true,
+                    ],
+                    /*
+                    'constraints' => [
+                        'title' => $lang['strconstraints'],
+                        'url' => 'constraints.php',
+                        'urlvars' => ['subject' => 'view', 'view' => field('view')],
+                        'help' => 'pg.constraint',
+                        'icon' => 'Constraints',
+                        'branch' => true,
+                    ],
+                    */
                     'definition' => [
                         'title' => $lang['strdefinition'],
                         'url' => 'viewproperties.php',
@@ -555,6 +574,13 @@ class TabsRenderer extends AppContext
                     unset(
                         $tabs['rules']
                     );
+                }
+                $viewActions = new ViewActions($pg);
+                $isMaterialized = $viewActions->isMaterializedView(
+                    $_REQUEST['view'] ?? ''
+                );
+                if (!$isMaterialized) {
+                    unset($tabs['indexes']);
                 }
                 break;
 

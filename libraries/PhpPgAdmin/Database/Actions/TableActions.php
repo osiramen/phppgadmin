@@ -114,21 +114,28 @@ class TableActions extends ActionsBase
     /**
      * Get type of table/view.
      */
-    public function getTableType($schema, $table)
+    public function getTableType($schema, $table, $detailed = false)
     {
+        static $cache = [];
         $this->connection->clean($schema);
         $this->connection->clean($table);
-        $sql = "SELECT c.relkind
+        $cacheKey = $schema . '.' . $table;
+        if (isset($cache[$cacheKey])) {
+            $type = $cache[$cacheKey];
+        } else {
+            $sql = "SELECT c.relkind
             FROM pg_catalog.pg_class c
             JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
             WHERE n.nspname = '$schema'
               AND c.relname = '$table'";
-        $type = $this->connection->selectField($sql, 'relkind');
+            $type = $this->connection->selectField($sql, 'relkind');
+            $cache[$cacheKey] = $type;
+        }
         if ($type == 'r' || $type == 'f') {
             return 'table';
         }
         if ($type == 'p') {
-            return 'partitioned_table';
+            return $detailed ? 'partitioned_table' : 'table';
         }
         if ($type == 'v' || $type == 'm') {
             return 'view';
