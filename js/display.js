@@ -848,7 +848,13 @@
 	};
 
 	// Initialize on load
-	FieldPopupEditor.init();
+	document.addEventListener(
+		"frameLoaded",
+		() => {
+			FieldPopupEditor.init();
+		},
+		{ once: true },
+	);
 
 	// Cleanup on unload
 	document.addEventListener(

@@ -649,13 +649,15 @@ class TableActions extends ActionsBase
     /**
      * Truncate a table (delete all rows).
      */
-    public function emptyTable($table)
+    public function emptyTable($table, $cascade = false)
     {
         $f_schema = $this->connection->_schema;
         $this->connection->fieldClean($f_schema);
         $this->connection->fieldClean($table);
 
-        $sql = "TRUNCATE TABLE \"{$f_schema}\".\"{$table}\"";
+        $sql = "TRUNCATE TABLE \"{$f_schema}\".\"{$table}\" RESTART IDENTITY";
+        if ($cascade)
+            $sql .= " CASCADE";
 
         return $this->connection->execute($sql);
     }
@@ -663,7 +665,7 @@ class TableActions extends ActionsBase
     /**
      * Drop a table.
      */
-    public function dropTable($table, $cascade)
+    public function dropTable($table, $cascade = false)
     {
         $f_schema = $this->connection->_schema;
         $this->connection->fieldClean($f_schema);
