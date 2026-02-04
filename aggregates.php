@@ -444,6 +444,18 @@ function doDefault($msg = '')
 		],
 	];
 
+	$footer = [
+		'aggrname' => [
+			'agg' => 'count',
+			'format' => fn($v) => "$v {$lang['straggregates']}",
+			'colspan' => 3,
+		],
+		'owner' => [
+			'text' => $lang['strtotal'],
+			'colspan' => 3,
+		],
+	];
+
 	$actions = [
 		'alter' => [
 			'icon' => $misc->icon('Edit'),
@@ -482,7 +494,15 @@ function doDefault($msg = '')
 		$actions = [];
 	}
 
-	$misc->printTable($aggregates, $columns, $actions, 'aggregates-aggregates', $lang['strnoaggregates']);
+	$misc->printTable(
+		$aggregates,
+		$columns,
+		$actions,
+		'aggregates-aggregates',
+		$lang['strnoaggregates'],
+		null,
+		$footer
+	);
 
 	$navlinks = [
 		'create' => [

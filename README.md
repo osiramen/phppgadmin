@@ -2,9 +2,6 @@
 
 ![Logo](images/themes/bootstrap/title.svg)
 
-> **⚠️ DEVELOPMENT VERSION - NOT YET PRODUCTION READY**  
-> This version is under development and should not be used in production environments. Features are being rewritten, tested, and may contain bugs or incomplete functionality. Use at your own risk.
-
 **Modern web-based PostgreSQL administration tool** — Manage databases, schemas, tables, roles, queries, and backups through an intuitive web interface.
 
 [![License: GPL v2+](https://img.shields.io/badge/License-GPL%20v2+-blue.svg)](LICENSE)

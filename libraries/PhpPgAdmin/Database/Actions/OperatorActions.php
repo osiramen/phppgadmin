@@ -14,9 +14,10 @@ class OperatorActions extends ActionsBase
     {
         $c_schema = $this->connection->_schema;
         $this->connection->clean($c_schema);
-        $sql = "
-            SELECT
+        $sql =
+            "SELECT
                 po.oid, po.oprname,
+                pg_catalog.pg_get_userbyid(po.oprowner) AS oprowner,
                 (SELECT pg_catalog.format_type(oid, NULL) FROM pg_catalog.pg_type pt WHERE pt.oid=po.oprleft) AS oprleftname,
                 (SELECT pg_catalog.format_type(oid, NULL) FROM pg_catalog.pg_type pt WHERE pt.oid=po.oprright) AS oprrightname,
                 po.oprresult::pg_catalog.regtype AS resultname,

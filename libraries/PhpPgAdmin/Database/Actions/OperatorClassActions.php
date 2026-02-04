@@ -16,11 +16,12 @@ class OperatorClassActions extends ActionsBase
     {
         $c_schema = $this->connection->_schema;
         $this->connection->clean($c_schema);
-        $sql = "
-            SELECT
+        $sql =
+            "SELECT
                 opc.oid, opc.opcname, am.amname,
                 opc.opcintype::pg_catalog.regtype AS opcintype,
                 opc.opcdefault,
+                pg_catalog.pg_get_userbyid(opc.opcowner) AS opcowner,
                 pg_catalog.obj_description(opc.oid, 'pg_opclass') AS opccomment
             FROM
                 pg_catalog.pg_opclass opc

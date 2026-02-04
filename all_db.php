@@ -499,6 +499,7 @@ function doDefault($msg = '')
 			'title' => $lang['strsize'],
 			'field' => field('dbsize'),
 			'type' => 'prettysize',
+			'class' => 'text-end',
 		],
 		'actions' => [
 			'title' => $lang['stractions'],
@@ -506,6 +507,28 @@ function doDefault($msg = '')
 		'comment' => [
 			'title' => $lang['strcomment'],
 			'field' => field('datcomment'),
+		],
+	];
+
+	$footer = [
+		'database' => [
+			'agg' => 'count',
+			'format' => fn($v) => "$v {$lang['strdatabases']}",
+			'colspan' => 2,
+		],
+		'encoding' => [
+			'text' => $lang['strtotal'],
+			'colspan' => 4,
+		],
+		'dbsize' => [
+			'agg' => 'sum',
+			'type' => 'prettysize',
+			'class' => 'text-end',
+			//'params' => ['class' => 'numeric'],
+		],
+		'actions' => [
+			'text' => '',
+			'colspan' => 2,
 		],
 	];
 
@@ -570,7 +593,15 @@ function doDefault($msg = '')
 	if (!isset($pg->privlist['database']))
 		unset($actions['privileges']);
 
-	$misc->printTable($databases, $columns, $actions, 'all_db-databases', $lang['strnodatabases']);
+	$misc->printTable(
+		$databases,
+		$columns,
+		$actions,
+		'all_db-databases',
+		$lang['strnodatabases'],
+		null,
+		$footer
+	);
 
 	$navlinks = [
 		'create' => [

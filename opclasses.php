@@ -46,15 +46,39 @@ function doDefault($msg = '')
 			'field' => field('opcdefault'),
 			'type' => 'yesno',
 		],
+		'owner' => [
+			'title' => $lang['strowner'],
+			'field' => field('opcowner'),
+		],
 		'comment' => [
 			'title' => $lang['strcomment'],
 			'field' => field('opccomment'),
 		],
 	];
 
+	$footer = [
+		'accessmethod' => [
+			'agg' => 'count',
+			'format' => fn($v) => "$v {$lang['stropclasses']}",
+			'colspan' => 4,
+		],
+		'owner' => [
+			'text' => $lang['strtotal'],
+			'colspan' => 2,
+		],
+	];
+
 	$actions = [];
 
-	$misc->printTable($opClasses, $columns, $actions, 'opclasses-opclasses', $lang['strnoopclasses']);
+	$misc->printTable(
+		$opClasses,
+		$columns,
+		$actions,
+		'opclasses-opclasses',
+		$lang['strnoopclasses'],
+		null,
+		$footer
+	);
 }
 
 /**

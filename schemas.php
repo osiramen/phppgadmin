@@ -34,7 +34,7 @@ function doDefault($msg = '')
 	$misc->printMsg($msg);
 
 	// Check that the DB actually supports schemas
-	$schemas = $schemaActions->getSchemas();
+	$schemas = $schemaActions->getSchemasWithSize();
 
 	$columns = [
 		'schema' => [
@@ -49,12 +49,38 @@ function doDefault($msg = '')
 			'title' => $lang['strowner'],
 			'field' => field('nspowner'),
 		],
+		'size' => [
+			'title' => $lang['strsize'],
+			'field' => field('total_size'),
+			'type' => 'prettysize',
+			'class' => 'text-end',
+		],
 		'actions' => [
 			'title' => $lang['stractions'],
 		],
 		'comment' => [
 			'title' => $lang['strcomment'],
 			'field' => field('nspcomment'),
+		],
+	];
+
+	$footer = [
+		'schema' => [
+			'agg' => 'count',
+			'format' => fn($v) => "$v {$lang['strschemas']}",
+		],
+		'owner' => [
+			'text' => $lang['strtotal'],
+		],
+		'size' => [
+			'agg' => 'sum',
+			'type' => 'prettysize',
+			'class' => 'text-end',
+			//'params' => ['class' => 'numeric'],
+		],
+		'actions' => [
+			'text' => '',
+			'colspan' => 2,
 		],
 	];
 
@@ -105,7 +131,15 @@ function doDefault($msg = '')
 		]
 	];
 
-	$misc->printTable($schemas, $columns, $actions, 'schemas-schemas', $lang['strnoschemas']);
+	$misc->printTable(
+		$schemas,
+		$columns,
+		$actions,
+		'schemas-schemas',
+		$lang['strnoschemas'],
+		null,
+		$footer
+	);
 
 	$misc->printNavLinks([
 		'create' => [

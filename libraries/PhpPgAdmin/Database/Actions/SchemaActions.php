@@ -44,6 +44,29 @@ class SchemaActions extends ActionsBase
         return $this->connection->selectSet($sql);
     }
 
+    public function getSchemasWithSize()
+    {
+        $sql =
+            "SELECT
+            n.nspname,
+            n.oid,
+            r.rolname AS nspowner,
+            pg_catalog.obj_description(n.oid, 'pg_namespace') AS nspcomment,
+            (
+                SELECT COALESCE(SUM(pg_total_relation_size(c.oid)), 0)
+                FROM pg_class c
+                WHERE c.relnamespace = n.oid
+            ) AS total_size
+            FROM pg_namespace n
+            LEFT JOIN pg_roles r ON r.oid = n.nspowner
+            WHERE n.nspname NOT LIKE 'pg_%'
+            AND n.nspname <> 'information_schema'
+            ORDER BY n.nspname;
+        ";
+
+        return $this->connection->selectSet($sql);
+    }
+
     /**
      * Return only system catalog schemas (pg_catalog and information_schema).
      * These are always shown regardless of show_system setting.

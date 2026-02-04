@@ -586,6 +586,15 @@ EOT;
 			case 'callback':
 				$out = $params['function']($str, $params);
 				break;
+			case 'prettyint':
+				$align = 'right';
+				$out = number_format(
+					$str,
+					0,
+					$lang['strdecimalsep'],
+					$lang['strthousandssep']
+				);
+				break;
 			case 'prettysize':
 				if ($str == -1) {
 					$out = $lang['strnoaccess'];

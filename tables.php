@@ -979,9 +979,18 @@ function doDefault($msg = '')
 			'field' => field('tablespace')
 		],
 		'tuples' => [
-			'title' => $lang['strestimatedrowcount'],
+			'title' => $lang['strrows2'],
 			'field' => field('reltuples'),
-			'type' => 'numeric'
+			'type' => 'prettyint',
+			'class' => 'text-end',
+			'params' => ['class' => 'numeric'],
+		],
+		'size' => [
+			'title' => $lang['strsize'],
+			'field' => field('total_size'),
+			'type' => 'prettysize',
+			'class' => 'text-end',
+			//'params' => ['class' => 'numeric'],
 		],
 		'actions' => [
 			'title' => $lang['stractions'],
@@ -989,6 +998,33 @@ function doDefault($msg = '')
 		'comment' => [
 			'title' => $lang['strcomment'],
 			'field' => field('relcomment'),
+		],
+	];
+
+	$footer = [
+		'table' => [
+			'agg' => 'count',
+			'format' => fn($v) => "$v {$lang['strtables']}",
+		],
+		'owner' => [
+			'text' => $lang['strtotal'],
+			'colspan' => 2,
+		],
+		'tuples' => [
+			'agg' => 'sum',
+			'type' => 'prettyint',
+			'class' => 'text-end',
+			'params' => ['class' => 'numeric'],
+		],
+		'size' => [
+			'agg' => 'sum',
+			'type' => 'prettysize',
+			'class' => 'text-end',
+			//'params' => ['class' => 'numeric'],
+		],
+		'actions' => [
+			'text' => '',
+			'colspan' => 2,
 		],
 	];
 
@@ -1155,7 +1191,15 @@ function doDefault($msg = '')
 		};
 	}
 
-	$misc->printTable($tables, $columns, $actions, 'tables-tables', $lang['strnotables']);
+	$misc->printTable(
+		$tables,
+		$columns,
+		$actions,
+		'tables-tables',
+		$lang['strnotables'],
+		null,
+		$footer
+	);
 
 	$navlinks = [
 		'create' => [

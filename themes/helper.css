@@ -1,10 +1,12 @@
 /* Helper Classes */
 
-.text-start {
+.text-start,
+.text-left {
 	text-align: left !important;
 }
 
-.text-end {
+.text-end,
+.text-right {
 	text-align: right !important;
 }
 

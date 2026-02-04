@@ -546,6 +546,18 @@ function doDefault($msg = '')
 		],
 	];
 
+	$footer = [
+		'domain' => [
+			'agg' => 'count',
+			'format' => fn($v) => "$v {$lang['strdomains']}",
+			'colspan' => 4,
+		],
+		'owner' => [
+			'text' => $lang['strtotal'],
+			'colspan' => 3,
+		],
+	];
+
 	$actions = [
 		'alter' => [
 			'icon' => $misc->icon('Edit'),
@@ -581,7 +593,15 @@ function doDefault($msg = '')
 		unset($columns['actions']);
 	}
 
-	$misc->printTable($domains, $columns, $actions, 'domains-domains', $lang['strnodomains']);
+	$misc->printTable(
+		$domains,
+		$columns,
+		$actions,
+		'domains-domains',
+		$lang['strnodomains'],
+		null,
+		$footer
+	);
 
 	$navlinks = [
 		'create' => [

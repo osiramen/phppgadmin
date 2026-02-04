@@ -34,7 +34,8 @@ class ViewActions extends ActionsBase
         $sql =
             "SELECT c.oid, c.relname, c.relkind,
                 pg_catalog.pg_get_userbyid(c.relowner) AS relowner,
-                pg_catalog.obj_description(c.oid, 'pg_class') AS relcomment
+                pg_catalog.obj_description(c.oid, 'pg_class') AS relcomment,
+                pg_total_relation_size(c.oid) AS total_size
             FROM pg_catalog.pg_class c
             LEFT JOIN pg_catalog.pg_namespace n ON (n.oid = c.relnamespace)
             WHERE n.nspname = '{$c_schema}'

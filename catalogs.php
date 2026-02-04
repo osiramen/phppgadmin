@@ -50,6 +50,16 @@ function doDefault($msg = '')
         ],
     ];
 
+    $footer = [
+        'catalog' => [
+            'agg' => 'count',
+            'format' => fn($v) => "$v {$lang['strcatalogs']}",
+        ],
+        'owner' => [
+            'text' => $lang['strtotal'],
+        ],
+    ];
+
     $actions = [
         'privileges' => [
             'icon' => $misc->icon('Privileges'),
@@ -66,7 +76,15 @@ function doDefault($msg = '')
         ],
     ];
 
-    $misc->printTable($catalogs, $columns, $actions, 'catalogs-catalogs', $lang['strnocatalogs']);
+    $misc->printTable(
+        $catalogs,
+        $columns,
+        $actions,
+        'catalogs-catalogs',
+        $lang['strnocatalogs'],
+        null,
+        $footer
+    );
 }
 
 /**

@@ -61,6 +61,18 @@ function doDefault($msg = '')
 		],
 	];
 
+	$footer = [
+		'sequence' => [
+			'agg' => 'count',
+			'format' => fn($v) => "$v {$lang['strsequences']}",
+			'colspan' => 2,
+		],
+		'owner' => [
+			'text' => $lang['strtotal'],
+			'colspan' => 3,
+		],
+	];
+
 	$actions = [
 		'multiactions' => [
 			'keycols' => ['sequence' => 'seqname'],
@@ -109,7 +121,15 @@ function doDefault($msg = '')
 		],
 	];
 
-	$misc->printTable($sequences, $columns, $actions, 'sequences-sequences', $lang['strnosequences']);
+	$misc->printTable(
+		$sequences,
+		$columns,
+		$actions,
+		'sequences-sequences',
+		$lang['strnosequences'],
+		null,
+		$footer
+	);
 
 	$misc->printNavLinks([
 		'create' => [

@@ -710,15 +710,8 @@ function doDefault($msg = '')
 	$misc->printTabs('schema', 'views');
 	$misc->printMsg($msg);
 
-	$views = $viewActions->getViews(true, true); // Get both normal and materialized views
-
-	$preFnc = function (&$row, $actions) {
-		if ($row->fields['relkind'] != 'm') {
-			// Remove refresh action for normal views
-			unset($actions['refresh']);
-		}
-		return $actions;
-	};
+	// Get both normal and materialized views
+	$views = $viewActions->getViews(true, true);
 
 	$columns = [
 		'view' => [
@@ -731,15 +724,22 @@ function doDefault($msg = '')
 			}),
 			'class' => 'nowrap',
 		],
+		'owner' => [
+			'title' => $lang['strowner'],
+			'field' => field('relowner'),
+		],
 		'type' => [
 			'title' => $lang['strtype'],
 			'field' => callback(function ($row) use ($lang) {
 				return ($row['relkind'] == 'm') ? $lang['strmaterializedview'] : $lang['strview'];
 			}),
 		],
-		'owner' => [
-			'title' => $lang['strowner'],
-			'field' => field('relowner'),
+		'size' => [
+			'title' => $lang['strsize'],
+			'field' => field('total_size'),
+			'type' => 'prettysize',
+			'class' => 'text-end',
+			//'params' => ['class' => 'numeric'],
 		],
 		'actions' => [
 			'title' => $lang['stractions'],
@@ -747,6 +747,27 @@ function doDefault($msg = '')
 		'comment' => [
 			'title' => $lang['strcomment'],
 			'field' => field('relcomment'),
+		],
+	];
+
+	$footer = [
+		'view' => [
+			'agg' => 'count',
+			'format' => fn($v) => "$v {$lang['strviews']}",
+		],
+		'owner' => [
+			'text' => $lang['strtotal'],
+			'colspan' => 2,
+		],
+		'size' => [
+			'agg' => 'sum',
+			'type' => 'prettysize',
+			'class' => 'text-end',
+			//'params' => ['class' => 'numeric'],
+		],
+		'actions' => [
+			'text' => '',
+			'colspan' => 2,
 		],
 	];
 
@@ -845,7 +866,15 @@ function doDefault($msg = '')
 		);
 	}
 
-	$misc->printTable($views, $columns, $actions, 'views-views', $lang['strnoviews']);
+	$misc->printTable(
+		$views,
+		$columns,
+		$actions,
+		'views-views',
+		$lang['strnoviews'],
+		null,
+		$footer
+	);
 
 	$navlinks = [
 		'create' => [

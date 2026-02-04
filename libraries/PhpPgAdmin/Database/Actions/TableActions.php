@@ -162,7 +162,8 @@ class TableActions extends ActionsBase
             $sql = "SELECT c.relname, c.relkind, pg_catalog.pg_get_userbyid(c.relowner) AS relowner,
                         pg_catalog.obj_description(c.oid, 'pg_class') AS relcomment,
                         reltuples::bigint,
-                        (SELECT spcname FROM pg_catalog.pg_tablespace pt WHERE pt.oid=c.reltablespace) AS tablespace
+                        (SELECT spcname FROM pg_catalog.pg_tablespace pt WHERE pt.oid=c.reltablespace) AS tablespace,
+                        pg_total_relation_size(c.oid) AS total_size
                     FROM pg_catalog.pg_class c
                     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
                     LEFT JOIN pg_inherits i ON c.oid = i.inhrelid 

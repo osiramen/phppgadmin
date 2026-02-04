@@ -43,9 +43,25 @@ function doDefault($msg = '')
 		'actions' => [
 			'title' => $lang['stractions'],
 		],
+		'owner' => [
+			'title' => $lang['strowner'],
+			'field' => field('cfgowner'),
+		],
 		'comment' => [
 			'title' => $lang['strcomment'],
 			'field' => field('comment'),
+		],
+	];
+
+	$footer = [
+		'configuration' => [
+			'agg' => 'count',
+			'format' => fn($v) => "$v {$lang['strftsconfigs']}",
+			'colspan' => 3,
+		],
+		'owner' => [
+			'text' => $lang['strtotal'],
+			'colspan' => 2,
 		],
 	];
 
@@ -84,7 +100,15 @@ function doDefault($msg = '')
 		unset($columns['actions']);
 	}
 
-	$misc->printTable($cfgs, $columns, $actions, 'fulltext-fulltext', $lang['strftsnoconfigs']);
+	$misc->printTable(
+		$cfgs,
+		$columns,
+		$actions,
+		'fulltext-fulltext',
+		$lang['strftsnoconfigs'],
+		null,
+		$footer
+	);
 
 	$navlinks = [
 		'createconf' => [
@@ -443,9 +467,29 @@ function doViewParsers($msg = '')
 		],
 	];
 
+	$footer = [
+		'name' => [
+			'agg' => 'count',
+			'format' => fn($v) => "$v {$lang['strftsparsers']}",
+			'colspan' => 2,
+		],
+		'comment' => [
+			'text' => $lang['strtotal'],
+			'colspan' => 1,
+		],
+	];
+
 	$actions = [];
 
-	$misc->printTable($parsers, $columns, $actions, 'fulltext-viewparsers', $lang['strftsnoparsers']);
+	$misc->printTable(
+		$parsers,
+		$columns,
+		$actions,
+		'fulltext-viewparsers',
+		$lang['strftsnoparsers'],
+		null,
+		$footer
+	);
 
 	//TODO: navlink to "create parser"
 }
@@ -481,9 +525,25 @@ function doViewDicts($msg = '')
 		'actions' => [
 			'title' => $lang['stractions'],
 		],
+		'owner' => [
+			'title' => $lang['strowner'],
+			'field' => field('dictowner'),
+		],
 		'comment' => [
 			'title' => $lang['strcomment'],
 			'field' => field('comment'),
+		],
+	];
+
+	$footer = [
+		'name' => [
+			'agg' => 'count',
+			'format' => fn($v) => "$v {$lang['strftsdicts']}",
+			'colspan' => 3,
+		],
+		'owner' => [
+			'text' => $lang['strtotal'],
+			'colspan' => 2,
 		],
 	];
 
@@ -522,7 +582,15 @@ function doViewDicts($msg = '')
 		unset($columns['actions']);
 	}
 
-	$misc->printTable($dicts, $columns, $actions, 'fulltext-viewdicts', $lang['strftsnodicts']);
+	$misc->printTable(
+		$dicts,
+		$columns,
+		$actions,
+		'fulltext-viewdicts',
+		$lang['strftsnodicts'],
+		null,
+		$footer
+	);
 
 	$navlinks = [
 		'createdict' => [

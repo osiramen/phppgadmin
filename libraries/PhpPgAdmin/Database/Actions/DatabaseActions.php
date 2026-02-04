@@ -23,7 +23,7 @@ class DatabaseActions extends ActionsBase
 
     /**
      * Return all databases available on the server, honoring owned_only/show_system.
-     * @param string $currentdatabase database name that should be on top of the resultset
+     * @param ?string $currentdatabase database name that should be on top of the resultset
      * @param bool $accessible_only if true, only return databases the current user can CONNECT to
      */
     public function getDatabases($currentdatabase = null, $accessible_only = true)
@@ -62,8 +62,8 @@ class DatabaseActions extends ActionsBase
             $accessible_clause = '';
         }
 
-        $sql = "
-            SELECT pdb.datname AS datname, pr.rolname AS datowner, pg_encoding_to_char(encoding) AS datencoding,
+        $sql =
+            "SELECT pdb.datname AS datname, pr.rolname AS datowner, pg_encoding_to_char(encoding) AS datencoding,
                 (SELECT description FROM pg_catalog.pg_shdescription pd WHERE pdb.oid=pd.objoid AND pd.classoid='pg_database'::regclass) AS datcomment,
                 (SELECT spcname FROM pg_catalog.pg_tablespace pt WHERE pt.oid=pdb.dattablespace) AS tablespace,
                 CASE WHEN pg_catalog.has_database_privilege(current_user, pdb.oid, 'CONNECT') 

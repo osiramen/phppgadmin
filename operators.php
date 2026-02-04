@@ -395,12 +395,28 @@ function doDefault($msg = '')
 			'title' => $lang['strreturns'],
 			'field' => field('resultname'),
 		],
+		'owner' => [
+			'title' => $lang['strowner'],
+			'field' => field('oprowner'),
+		],
 		'actions' => [
 			'title' => $lang['stractions'],
 		],
 		'comment' => [
 			'title' => $lang['strcomment'],
 			'field' => field('oprcomment'),
+		],
+	];
+
+	$footer = [
+		'operator' => [
+			'agg' => 'count',
+			'format' => fn($v) => "$v {$lang['stroperators']}",
+			'colspan' => 4,
+		],
+		'owner' => [
+			'text' => $lang['strtotal'],
+			'colspan' => 3,
 		],
 	];
 
@@ -430,7 +446,15 @@ function doDefault($msg = '')
 		unset($columns['actions']);
 	}
 
-	$misc->printTable($operators, $columns, $actions, 'operators-operators', $lang['strnooperators']);
+	$misc->printTable(
+		$operators,
+		$columns,
+		$actions,
+		'operators-operators',
+		$lang['strnooperators'],
+		null,
+		$footer
+	);
 
 	if ($isCatalogSchema) {
 		return;

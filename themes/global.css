@@ -103,6 +103,17 @@ thead.sticky-thead th {
 	z-index: 5;
 }
 
+table.data td.table-footer-cell {
+	font-weight: bold;
+	/*border-top: 0.12em solid #f1f1f1;*/
+}
+
+/*
+table.data tr.table-footer {
+	background: rgba(0, 0, 0, 0.03);
+}
+*/
+
 #loading-indicator {
 	position: fixed;
 	left: 0;

@@ -554,9 +554,9 @@ class Misc extends AppContext
 	 * @param callable $pre_fn Function to call before rendering each row.
 	 *        The function will be passed the row data as an associative array.
 	 */
-	function printTable($tabledata, $columns, $actions, $place, $nodata = null, $pre_fn = null)
+	function printTable($tabledata, $columns, $actions, $place, $nodata = null, $pre_fn = null, $footerrow = null)
 	{
-		return $this->getTableRenderer()->printTable($tabledata, $columns, $actions, $place, $nodata, $pre_fn);
+		return $this->getTableRenderer()->printTable($tabledata, $columns, $actions, $place, $nodata, $pre_fn, $footerrow);
 	}
 
 	/** Produce XML data for the browser tree

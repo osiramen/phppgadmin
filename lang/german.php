@@ -8,8 +8,8 @@
 $lang['applang'] = 'Deutsch';
 $lang['applocale'] = 'de-DE';
 $lang['applangdir'] = 'ltr';
-$lang['appdecimalsep'] = ',';
-$lang['appthousandssep'] = '.';
+$lang['strdecimalsep'] = ',';
+$lang['strthousandssep'] = '.';
 
 // Welcome
 $lang['strintro'] = 'Willkommen bei phpPgAdmin.';
@@ -323,7 +323,7 @@ $lang['strconfvacuumtable'] = 'Sind sie sicher, dass Sie VACUUM auf "%s" ausfüh
 $lang['strconfanalyzetable'] = 'Sind sie sicher, dass Sie ANALYZE auf "%s" ausführen wollen?';
 $lang['strconfreindextable'] = 'Sind Sie sicher, dass Sie "%s" neu indizieren möchten?';
 $lang['strconfclustertable'] = 'Sind Sie sicher, dass Sie "%s" clustern möchten?';
-$lang['strestimatedrowcount'] = 'Datensätze';
+$lang['strestimatedrowcount'] = 'Datensätze (geschätzt)';
 $lang['strspecifytabletoanalyze'] = 'Sie müssen mindestens eine Tabelle angeben, die analysiert werden soll.';
 $lang['strspecifytabletoempty'] = 'Sie müssen mindestens eine Tabelle angeben, deren Inhalt gelöscht werden soll.';
 $lang['strspecifytabletodrop'] = 'Sie müssen mindestens eine Tabelle angeben, die gelöscht werden soll.';
@@ -763,6 +763,8 @@ $lang['strbasetype'] = 'Basis-Typ';
 $lang['strcompositetype'] = 'Zusammengesetzt';
 $lang['strpseudotype'] = 'Pseudo';
 $lang['strenum'] = 'Aufzählend';
+$lang['strrangetype'] = 'Bereich';
+$lang['strmultirangetype'] = 'Mehrfachbereich';
 $lang['strenumvalues'] = 'Wert';
 $lang['straddenumvalue'] = 'Enum-Wert hinzufügen';
 $lang['strrenamevalue'] = 'Umbenennen zu';

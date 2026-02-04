@@ -63,10 +63,11 @@ class FtsActions extends ActionsBase
     {
         $c_schema = $this->connection->_schema;
         $this->connection->clean($c_schema);
-        $sql = "
-            SELECT
+        $sql =
+            "SELECT
                 n.nspname as schema,
                 c.cfgname as name,
+                pg_catalog.pg_get_userbyid(c.cfgowner) AS cfgowner,
                 pg_catalog.obj_description(c.oid, 'pg_ts_config') as comment
             FROM
                 pg_catalog.pg_ts_config c
@@ -91,8 +92,8 @@ class FtsActions extends ActionsBase
         $c_schema = $this->connection->_schema;
         $this->connection->clean($c_schema);
         $this->connection->clean($ftscfg);
-        $sql = "
-            SELECT
+        $sql =
+            "SELECT
                 n.nspname as schema,
                 c.cfgname as name,
                 p.prsname as parser,
@@ -150,8 +151,8 @@ class FtsActions extends ActionsBase
     {
         $c_schema = $this->connection->_schema;
         $this->connection->clean($c_schema);
-        $sql = "
-            SELECT
+        $sql =
+            "SELECT
                n.nspname as schema,
                p.prsname as name,
                pg_catalog.obj_description(p.oid, 'pg_ts_parser') as comment
@@ -175,9 +176,10 @@ class FtsActions extends ActionsBase
     {
         $c_schema = $this->connection->_schema;
         $this->connection->clean($c_schema);
-        $sql = "
-            SELECT
+        $sql =
+            "SELECT
                 n.nspname as schema, d.dictname as name,
+                pg_catalog.pg_get_userbyid(d.dictowner) AS dictowner,
                 pg_catalog.obj_description(d.oid, 'pg_ts_dict') as comment
             FROM pg_catalog.pg_ts_dict d
                 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = d.dictnamespace
@@ -197,8 +199,8 @@ class FtsActions extends ActionsBase
      */
     public function getFtsDictionaryTemplates()
     {
-        $sql = "
-            SELECT
+        $sql =
+            "SELECT
                 n.nspname as schema,
                 t.tmplname as name,
                 ( SELECT COALESCE(np.nspname, '(null)')::pg_catalog.text || '.' || p.proname
@@ -291,9 +293,15 @@ class FtsActions extends ActionsBase
     /**
      * Creates a new FTS dictionary or FTS dictionary template.
      */
-    public function createFtsDictionary($dictname, $isTemplate = false, $template = '', $lexize = '',
-                                       $init = '', $option = '', $comment = '')
-    {
+    public function createFtsDictionary(
+        $dictname,
+        $isTemplate = false,
+        $template = '',
+        $lexize = '',
+        $init = '',
+        $option = '',
+        $comment = ''
+    ) {
         $f_schema = $this->connection->_schema;
         $this->connection->fieldClean($f_schema);
         $this->connection->fieldClean($dictname);

@@ -963,6 +963,17 @@ function doDefault($msg = '')
 		],
 	];
 
+	$footer = [
+		'function' => [
+			'agg' => 'count',
+			'format' => fn($v) => "$v {$lang['strfunctions']}",
+		],
+		'returns' => [
+			'text' => $lang['strtotal'],
+			'colspan' => 5,
+		],
+	];
+
 	$actions = [
 		'multiactions' => [
 			'keycols' => ['function' => 'proproto', 'function_oid' => 'prooid'],
@@ -1022,7 +1033,15 @@ function doDefault($msg = '')
 		unset($columns['actions']);
 	}
 
-	$misc->printTable($funcs, $columns, $actions, 'functions-functions', $lang['strnofunctions']);
+	$misc->printTable(
+		$funcs,
+		$columns,
+		$actions,
+		'functions-functions',
+		$lang['strnofunctions'],
+		null,
+		$footer
+	);
 
 	$navlinks = [
 		'createpl' => [

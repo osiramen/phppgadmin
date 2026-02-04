@@ -11,8 +11,8 @@
 $lang['applang'] = 'English';
 $lang['applocale'] = 'en-US';
 $lang['applangdir'] = 'ltr';
-$lang['appdecimalsep'] = '.';
-$lang['appthousandssep'] = ',';
+$lang['strdecimalsep'] = '.';
+$lang['strthousandssep'] = ',';
 
 // Welcome
 $lang['strintro'] = 'Welcome to phpPgAdmin.';
@@ -326,7 +326,7 @@ $lang['strconfvacuumtable'] = 'Are you sure you want to vacuum "%s"?';
 $lang['strconfanalyzetable'] = 'Are you sure you want to analyze "%s"?';
 $lang['strconfreindextable'] = 'Are you sure you want to reindex "%s"?';
 $lang['strconfclustertable'] = 'Are you sure you want to cluster "%s"?';
-$lang['strestimatedrowcount'] = 'Estimated row count';
+$lang['strestimatedrowcount'] = 'Rows (estimated)';
 $lang['strspecifytabletoanalyze'] = 'You must specify at least one table to analyze.';
 $lang['strspecifytabletoempty'] = 'You must specify at least one table to empty.';
 $lang['strspecifytabletodrop'] = 'You must specify at least one table to drop.';
@@ -766,6 +766,8 @@ $lang['strbasetype'] = 'Base';
 $lang['strcompositetype'] = 'Composite';
 $lang['strpseudotype'] = 'Pseudo';
 $lang['strenum'] = 'Enum';
+$lang['strrangetype'] = 'Range';
+$lang['strmultirangetype'] = 'Multirange';
 $lang['strenumvalues'] = 'Enum values';
 $lang['straddenumvalue'] = 'Add enum value';
 $lang['strrenamevalue'] = 'Rename to';

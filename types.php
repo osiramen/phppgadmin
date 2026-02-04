@@ -836,24 +836,26 @@ function doDefault($msg = '')
 			'icon' => $misc->icon('Type'),
 			'class' => 'nowrap'
 		],
-		'owner' => [
-			'title' => $lang['strowner'],
-			'field' => field('typowner'),
-		],
 		'flavour' => [
 			'title' => $lang['strflavor'],
 			'field' => field('typtype'),
 			'type' => 'verbatim',
+			'class' => 'text-center',
 			'params' => [
 				'map' => [
 					'b' => $lang['strbasetype'],
 					'c' => $lang['strcompositetype'],
 					'd' => $lang['strdomain'],
-					'p' => $lang['strpseudotype'],
 					'e' => $lang['strenum'],
+					'p' => $lang['strpseudotype'],
+					'r' => $lang['strrangetype'],
+					'm' => $lang['strmultirangetype'],
 				],
-				'align' => 'center',
 			],
+		],
+		'owner' => [
+			'title' => $lang['strowner'],
+			'field' => field('typowner'),
 		],
 		'actions' => [
 			'title' => $lang['stractions'],
@@ -864,8 +866,17 @@ function doDefault($msg = '')
 		],
 	];
 
-	if (!isset($types->fields['typtype']))
-		unset($columns['flavour']);
+	$footer = [
+		'type' => [
+			'agg' => 'count',
+			'format' => fn($v) => "$v {$lang['strtypes']}",
+			'colspan' => 2,
+		],
+		'owner' => [
+			'text' => $lang['strtotal'],
+			'colspan' => 3,
+		],
+	];
 
 	$actions = [
 		'edit' => [
@@ -903,7 +914,15 @@ function doDefault($msg = '')
 		$actions = [];
 	}
 
-	$misc->printTable($types, $columns, $actions, 'types-types', $lang['strnotypes']);
+	$misc->printTable(
+		$types,
+		$columns,
+		$actions,
+		'types-types',
+		$lang['strnotypes'],
+		null,
+		$footer
+	);
 
 	$navlinks = [
 		'create_enum' => [

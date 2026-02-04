@@ -71,6 +71,18 @@ function doDefault($msg = '')
 		],
 	];
 
+	$footer = [
+		'source_type' => [
+			'agg' => 'count',
+			'format' => fn($v) => "$v {$lang['strcasts']}",
+			'colspan' => 2,
+		],
+		'function' => [
+			'text' => $lang['strtotal'],
+			'colspan' => 2,
+		],
+	];
+
 	$actions = [
 		'drop' => [
 			'icon' => $misc->icon('Delete'),
@@ -97,7 +109,15 @@ function doDefault($msg = '')
 		return $actions;
 	};
 
-	$misc->printTable($casts, $columns, $actions, 'casts-casts', $lang['strnocasts'], $pre_fn);
+	$misc->printTable(
+		$casts,
+		$columns,
+		$actions,
+		'casts-casts',
+		$lang['strnocasts'],
+		$pre_fn,
+		$footer
+	);
 
 	$misc->printNavLinks(
 		[

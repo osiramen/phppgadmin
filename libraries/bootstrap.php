@@ -26,7 +26,7 @@ error_reporting(E_ALL);
 AppContainer::setAppName($appName = 'phpPgAdmin');
 
 // Application version
-AppContainer::setAppVersion($appVersion = '8.0.dev.3');
+AppContainer::setAppVersion($appVersion = '8.0.rc1');
 
 // PostgreSQL minimum version
 AppContainer::setPgServerMinVersion($postgresqlMinVer = '9.0');
