@@ -335,34 +335,37 @@ abstract class ExportDumper extends AppContext
      */
     public static function isBuiltinFunction($funcName)
     {
-        static $builtins = array_flip([
-        'now',
-        'current_timestamp',
-        'current_date',
-        'current_time',
-        'nextval',
-        'currval',
-        'setval',
-        'random',
-        'uuid_generate_v4',
-        'lower',
-        'upper',
-        'length',
-        'trim',
-        'count',
-        'sum',
-        'avg',
-        'min',
-        'max',
-        'abs',
-        'round',
-        'floor',
-        'ceil',
-        'coalesce',
-        'nullif',
-        'greatest',
-        'least',
-        ]);
+        static $builtins = null;
+        if ($builtins === null) {
+            $builtins = array_flip([
+                'now',
+                'current_timestamp',
+                'current_date',
+                'current_time',
+                'nextval',
+                'currval',
+                'setval',
+                'random',
+                'uuid_generate_v4',
+                'lower',
+                'upper',
+                'length',
+                'trim',
+                'count',
+                'sum',
+                'avg',
+                'min',
+                'max',
+                'abs',
+                'round',
+                'floor',
+                'ceil',
+                'coalesce',
+                'nullif',
+                'greatest',
+                'least',
+            ]);
+        }
 
         return isset($builtins[strtolower($funcName)]);
     }
