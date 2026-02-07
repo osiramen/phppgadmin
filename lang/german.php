@@ -467,6 +467,30 @@ $lang['strconfvacuumdatabase'] = 'Sind Sie sicher, dass Sie alle Tabellen in der
 $lang['strconfreindexdatabase'] = 'Sind Sie sicher, dass Sie alle Tabellen in der Datenbank "%s" neu indizieren möchten?';
 $lang['strconfclusterdatabase'] = 'Sind Sie sicher, dass Sie alle Tabellen in der Datenbank "%s" clustern möchten?';
 
+// Statistics
+$lang['strstatistics'] = 'Statistiken';
+$lang['strdatabasestatistics'] = 'Datenbankstatistiken';
+$lang['strdatabasesessions'] = 'Datenbanksitzungen';
+$lang['strtransactionspersecond'] = 'Transaktionen pro Sekunde';
+$lang['strtuplinesin'] = 'Zeilen eingehend';
+$lang['strtuplinesout'] = 'Zeilen ausgehend';
+$lang['strblockio'] = 'Block I/O';
+$lang['strtotal'] = 'Gesamt';
+$lang['stractive'] = 'Aktiv';
+$lang['stridle'] = 'Leerlauf';
+$lang['strcommits'] = 'Commits';
+$lang['strrollbacks'] = 'Rollbacks';
+$lang['strtransactions'] = 'Transaktionen';
+$lang['strinserts'] = 'Inserts';
+$lang['strupdates'] = 'Updates';
+$lang['strdeletes'] = 'Deletes';
+$lang['strfetched'] = 'Abgeholt';
+$lang['strreturned'] = 'Zurückgegeben';
+$lang['strreads'] = 'Gelesen';
+$lang['strhits'] = 'Treffer';
+$lang['strpauserefresh'] = 'Aktualisierung pausieren';
+$lang['strresumerefresh'] = 'Aktualisierung fortsetzen';
+
 // Export dialog strings
 $lang['strexporttype'] = 'Exporttyp';
 $lang['strexportmethod'] = 'Exportmethode';

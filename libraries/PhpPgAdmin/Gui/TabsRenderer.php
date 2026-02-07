@@ -174,6 +174,14 @@ class TabsRenderer extends AppContext
                         'tree' => false,
                         'icon' => 'Variables',
                     ],
+                    'statistics' => [
+                        'title' => $lang['strstatistics'],
+                        'url' => 'statistics.php',
+                        'urlvars' => ['subject' => 'database', 'action' => 'statistics'],
+                        'help' => 'pg.statistics',
+                        'tree' => false,
+                        'icon' => 'Statistics',
+                    ],
                     'processes' => [
                         'title' => $lang['strprocesses'],
                         'url' => 'database.php',

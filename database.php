@@ -380,6 +380,7 @@ function doImport($msg = '')
 	]);
 }
 
+
 /**
  * Show the current status of all database variables
  */

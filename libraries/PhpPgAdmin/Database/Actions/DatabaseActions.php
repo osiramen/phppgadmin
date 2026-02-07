@@ -230,5 +230,66 @@ class DatabaseActions extends ActionsBase
         return $this->connection->endTransaction();
     }
 
+    /**
+     * Get database statistics including sessions, transactions, tuples, and block I/O
+     * Returns data from pg_stat_activity and pg_stat_database for the current database
+     * 
+     * @return array Array with keys: sessions, transactions, tuples_in, tuples_out, blocks, timestamp
+     */
+    public function getDatabaseStats()
+    {
+        $stats = [
+            'timestamp' => microtime(true),
+            'sessions' => ['total' => 0, 'active' => 0, 'idle' => 0],
+            'transactions' => ['commits' => 0, 'rollbacks' => 0],
+            'tuples_in' => ['inserts' => 0, 'updates' => 0, 'deletes' => 0],
+            'tuples_out' => ['fetched' => 0, 'returned' => 0],
+            'blocks' => ['reads' => 0, 'hits' => 0]
+        ];
+
+        // Get session statistics from pg_stat_activity
+        $sql = "SELECT state, count(*) as count 
+                FROM pg_stat_activity 
+                WHERE datname = current_database()
+                GROUP BY state";
+        $result = $this->connection->selectSet($sql);
+
+        if ($result && $result->recordCount() > 0) {
+            while (!$result->EOF) {
+                $state = $result->fields['state'];
+                $count = (int) $result->fields['count'];
+                $stats['sessions']['total'] += $count;
+
+                if ($state === 'active') {
+                    $stats['sessions']['active'] = $count;
+                } elseif ($state === 'idle') {
+                    $stats['sessions']['idle'] = $count;
+                }
+                $result->moveNext();
+            }
+        }
+
+        // Get database statistics from pg_stat_database
+        $sql = "SELECT xact_commit, xact_rollback, tup_returned, tup_fetched, 
+                       tup_inserted, tup_updated, tup_deleted, blks_read, blks_hit
+                FROM pg_stat_database 
+                WHERE datname = current_database()";
+        $result = $this->connection->selectSet($sql);
+
+        if ($result && $result->recordCount() > 0) {
+            $stats['transactions']['commits'] = (int) $result->fields['xact_commit'];
+            $stats['transactions']['rollbacks'] = (int) $result->fields['xact_rollback'];
+            $stats['tuples_in']['inserts'] = (int) $result->fields['tup_inserted'];
+            $stats['tuples_in']['updates'] = (int) $result->fields['tup_updated'];
+            $stats['tuples_in']['deletes'] = (int) $result->fields['tup_deleted'];
+            $stats['tuples_out']['fetched'] = (int) $result->fields['tup_fetched'];
+            $stats['tuples_out']['returned'] = (int) $result->fields['tup_returned'];
+            $stats['blocks']['reads'] = (int) $result->fields['blks_read'];
+            $stats['blocks']['hits'] = (int) $result->fields['blks_hit'];
+        }
+
+        return $stats;
+    }
+
 
 }

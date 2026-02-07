@@ -471,6 +471,30 @@ $lang['strconfvacuumdatabase'] = 'Are you sure you want to vacuum all tables in 
 $lang['strconfreindexdatabase'] = 'Are you sure you want to reindex all tables in database "%s"?';
 $lang['strconfclusterdatabase'] = 'Are you sure you want to cluster all tables in database "%s"?';
 
+// Statistics
+$lang['strstatistics'] = 'Statistics';
+$lang['strdatabasestatistics'] = 'Database Statistics';
+$lang['strdatabasesessions'] = 'Database Sessions';
+$lang['strtransactionspersecond'] = 'Transactions per Second';
+$lang['strtuplinesin'] = 'Tuples In';
+$lang['strtuplinesout'] = 'Tuples Out';
+$lang['strblockio'] = 'Block I/O';
+$lang['strtotal'] = 'Total';
+$lang['stractive'] = 'Active';
+$lang['stridle'] = 'Idle';
+$lang['strcommits'] = 'Commits';
+$lang['strrollbacks'] = 'Rollbacks';
+$lang['strtransactions'] = 'Transactions';
+$lang['strinserts'] = 'Inserts';
+$lang['strupdates'] = 'Updates';
+$lang['strdeletes'] = 'Deletes';
+$lang['strfetched'] = 'Fetched';
+$lang['strreturned'] = 'Returned';
+$lang['strreads'] = 'Reads';
+$lang['strhits'] = 'Hits';
+$lang['strpauserefresh'] = 'Pause Refresh';
+$lang['strresumerefresh'] = 'Resume Refresh';
+
 // Export dialog strings
 $lang['strexporttype'] = 'Export Type';
 $lang['strexportmethod'] = 'Export Method';

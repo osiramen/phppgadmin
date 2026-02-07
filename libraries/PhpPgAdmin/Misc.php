@@ -1150,11 +1150,14 @@ class Misc extends AppContext
 
 		$time = microtime(true);
 
-		$history[(string) $time] = [
+		$history[] = [
 			'query' => $sql,
 			'paginate' => $paginate ? 't' : 'f',
 			'queryid' => $time,
 		];
+		if (count($history) > 100) {
+			array_shift($history);
+		}
 	}
 
 
