@@ -231,10 +231,11 @@ class DatabaseActions extends ActionsBase
     }
 
     /**
-     * Get database statistics including sessions, transactions, tuples, and block I/O
-     * Works with PostgreSQL 9.0+ (handles absence of pg_stat_activity.state in < 9.2)
+     * Get database statistics including sessions, transactions, tuples,
+     * and block I/O
      *
-     * @return array Array with keys: sessions, transactions, tuples_in, tuples_out, blocks, timestamp
+     * @return array Array with keys: sessions, transactions,
+     * tuples_in, tuples_out, blocks, timestamp
      */
     public function getDatabaseStats()
     {
@@ -256,7 +257,7 @@ class DatabaseActions extends ActionsBase
                 GROUP BY state";
             $result = $this->connection->selectSet($sql);
 
-            if ($result && $result->recordCount() > 0) {
+            if (\is_object($result)) {
                 while (!$result->EOF) {
                     $state = $result->fields['state'] ?? null;
                     $count = (int) $result->fields['count'];
@@ -283,7 +284,7 @@ class DatabaseActions extends ActionsBase
                 WHERE datname = current_database()";
             $result = $this->connection->selectSet($sql);
 
-            if ($result && $result->recordCount() > 0) {
+            if (\is_object($result) && !$result->EOF) {
                 $stats['sessions']['active'] = (int) $result->fields['active'];
                 $stats['sessions']['idle'] = (int) $result->fields['idle'];
                 $stats['sessions']['idle_in_xact'] = (int) $result->fields['idle_in_xact'];
@@ -298,7 +299,7 @@ class DatabaseActions extends ActionsBase
             WHERE datname = current_database()";
         $result = $this->connection->selectSet($sql);
 
-        if ($result && $result->recordCount() > 0) {
+        if (\is_object($result) && !$result->EOF) {
             $stats['transactions']['commits'] = (int) $result->fields['xact_commit'];
             $stats['transactions']['rollbacks'] = (int) $result->fields['xact_rollback'];
             $stats['tuples_in']['inserts'] = (int) $result->fields['tup_inserted'];
