@@ -217,7 +217,7 @@ class Report extends Plugin
 
 	/**
 	 * Add plugin in the navlinks
-	 * @param $plugin_functions_parameters
+	 * @param $params
 	 */
 	function plugin_navlinks(&$params)
 	{

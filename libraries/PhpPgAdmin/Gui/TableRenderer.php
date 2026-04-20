@@ -38,7 +38,7 @@ class TableRenderer extends AppContext
      * @param $nodata - A message to be shown if there are no rows to display
      * @param $pre_fn - A callback function ($tabledata, $actions) that returns alternate actions
      *        or null to use default actions. Useful for disabling actions on certain rows.
-     * @param $footerrow - Optional footer configuration array.
+     * @param $footerCfg - Optional footer configuration array.
      *        If provided, a <tfoot> row will be rendered after the data rows (only when there are rows).
      *        Footer cells are rendered as <td> and align with the displayed columns.
      *

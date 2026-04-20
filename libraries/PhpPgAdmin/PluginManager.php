@@ -50,7 +50,7 @@ class PluginManager extends AppContext {
 					$plugin = new $activated_plugin($language);
 					$this->add_plugin($plugin);
 				}
-				catch (Exception $e) {
+				catch (\Exception $e) {
 					continue;
 				}
 			} else {

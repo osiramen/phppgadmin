@@ -560,7 +560,7 @@ class Misc extends AppContext
 	}
 
 	/** Produce XML data for the browser tree
-	 * @param \ADORecordSet $treedata A set of records to populate the tree.
+	 * @param \ADORecordSet $_treedata A set of records to populate the tree.
 	 * @param array $attrs Attributes for tree items
 	 *        'text' - the text for the tree node
 	 *        'icon' - an icon for node
@@ -1124,6 +1124,7 @@ class Misc extends AppContext
 		$this->setHREF();
 		return 0;
 	}
+
 
 	/**
 	 * Save the given SQL statement in the history of the database and server.

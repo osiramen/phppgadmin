@@ -19,7 +19,7 @@ if (!defined('ADODB_ERROR_HANDLER'))
  * @param $errno		the native error number from the database
  * @param $errmsg	the native error msg from the database
  * @param $p1		$fn specific parameter - see below
- * @param $P2		$fn specific parameter - see below
+ * @param $p2		$fn specific parameter - see below
  */
 function Error_Handler($dbms, $fn, $errno, $errmsg, $p1 = false, $p2 = false)
 {

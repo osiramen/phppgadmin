@@ -346,6 +346,9 @@ $lang['strexecstats'] = 'Execution took {duration} seconds, affecting {rows:d} r
 $lang['strcolprop'] = 'Column properties';
 $lang['strnotableprovided'] = 'No table provided!';
 $lang['strgeneratedcolumnnoalter'] = 'Generated columns cannot be altered on this PostgreSQL version.';
+$lang['strconfdropcolumns'] = 'Are you sure you want to drop the {count} columns from table "{table}"?';
+$lang['strcolumndroppedbad'] = 'Column drop failed.';
+$lang['strcolumnsdeleted'] = '{count} Column(s) dropped.';
 
 // Users
 $lang['struser'] = 'User';

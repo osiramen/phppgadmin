@@ -422,7 +422,11 @@ class ByteaQueryModifier extends AppContext
      * Only modifies plain column references, leaves expressions/functions alone.
      *
      * @param array $selectItems Original SELECT items
-     * @param array $byteaColumns Array of bytea column names
+     * @param array $relations alias => ['schema'=>..., 'table'=>...]
+     * @param array $byteaColumnsByAlias alias => [byteaCol...]
+     * @param array $keyFieldsByAlias alias => [keyField...]
+     * @param array $selected output of getSelectedColumnsByAlias()
+     * @param array $byteaMetadata (by-ref) collects metadata keyed by output column name
      *
      * @return array Modified SELECT items
      */

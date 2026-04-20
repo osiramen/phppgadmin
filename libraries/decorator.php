@@ -24,22 +24,24 @@ function field($fieldName, $default = null)
  * Create a decorator that merges multiple arrays at evaluation time.
  * Any arguments may be decorators or arrays whose resolution results in arrays.
  *
+ * @param mixed $args
  * @return ArrayMergeDecorator
  */
-function merge(/* ... */)
+function merge(...$args)
 {
-	return new ArrayMergeDecorator(func_get_args());
+	return new ArrayMergeDecorator($args);
 }
 
 /**
  * Concatenate multiple values or decorators into a single string.
  * Arguments can be decorators that resolve into strings or literals.
  *
+ * @param mixed $args
  * @return ConcatDecorator
  */
-function concat(/* ... */)
+function concat(...$args)
 {
-	return new ConcatDecorator(func_get_args());
+	return new ConcatDecorator($args);
 }
 
 /**
@@ -78,18 +80,18 @@ function ifempty($value, $empty, $full = null)
  *
  * @return UrlDecorator
  */
-function url($base, $vars = null /* ... */)
+function url($base, ...$vars)
 {
-	// If more than one array of vars is given,
-	// use an ArrayMergeDecorator to have them merged
-	// at value evaluation time.
-	if (func_num_args() > 2) {
-		$v = func_get_args();
-		array_shift($v);
-		return new UrlDecorator($base, new ArrayMergeDecorator($v));
-	}
-	return new UrlDecorator($base, $vars);
+    $varsCount = count($vars);
+
+    if ($varsCount <= 1) {
+        return new UrlDecorator($base, $vars[0] ?? null);
+    }
+
+    return new UrlDecorator($base, new ArrayMergeDecorator($vars));
 }
+
+
 
 /**
  * Replace placeholders in a template string with resolved values.
@@ -283,10 +285,10 @@ class CallbackDecorator extends Decorator
 	/** @var mixed|null Optional parameters passed to the callback. */
 	private $params;
 
-	function __construct($callback, $param = null)
+	function __construct($callback, $params = null)
 	{
 		$this->callback = $callback;
-		$this->params = $param;
+		$this->params = $params;
 	}
 
 	function value($fields)

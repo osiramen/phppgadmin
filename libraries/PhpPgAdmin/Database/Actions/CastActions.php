@@ -68,8 +68,6 @@ class CastActions extends ActionsBase
         return $this->connection->selectSet($sql);
     }
 
-
-
     /**
      * Returns candidate functions for CREATE CAST ... WITH FUNCTION.
      *
