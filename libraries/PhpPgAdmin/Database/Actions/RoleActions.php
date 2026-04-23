@@ -35,14 +35,17 @@ class RoleActions extends ActionsBase
 			$clause .= " AND r.rolname != '{$rolename}'";
 		}
 
-		$sql =
-			"SELECT r.rolname, r.rolsuper, r.rolinherit, r.rolcreaterole,
+		$sql = <<<SQL
+		SELECT r.rolname, r.rolsuper, r.rolinherit, r.rolcreaterole,
 				r.rolcreatedb, r.rolcanlogin, r.rolconnlimit, r.rolvaliduntil,
 				r.rolconfig,
 				shobj_description(r.oid, 'pg_authid') AS rolcomment
 			FROM pg_catalog.pg_roles r
 			WHERE {$clause}
-			ORDER BY r.rolname";
+			ORDER BY
+				(r.rolname LIKE 'pg_%') ASC,
+				r.rolname ASC
+		SQL;
 
 		return $this->connection->selectSet($sql);
 	}
@@ -56,12 +59,13 @@ class RoleActions extends ActionsBase
 	{
 		$this->connection->clean($rolename);
 
-		$sql =
-			"SELECT r.rolname, r.rolsuper, r.rolinherit, r.rolcreaterole, r.rolcreatedb, 
-				   r.rolcanlogin, r.rolconnlimit, r.rolvaliduntil, r.rolconfig,
-				   shobj_description(r.oid, 'pg_authid') AS rolcomment
-			FROM pg_catalog.pg_roles r
-			WHERE r.rolname = '{$rolename}'";
+		$sql = <<<SQL
+		SELECT r.rolname, r.rolsuper, r.rolinherit, r.rolcreaterole, r.rolcreatedb, 
+			   r.rolcanlogin, r.rolconnlimit, r.rolvaliduntil, r.rolconfig,
+			   shobj_description(r.oid, 'pg_authid') AS rolcomment
+		FROM pg_catalog.pg_roles r
+		WHERE r.rolname = '{$rolename}'
+		SQL;
 
 		return $this->connection->selectSet($sql);
 	}
@@ -123,27 +127,16 @@ class RoleActions extends ActionsBase
 	 */
 	public function getUsers()
 	{
-		$sql = "
-			SELECT usename, usesuper, usecreatedb, valuntil, useconfig
-			FROM pg_catalog.pg_user
-			ORDER BY usename";
-
-		return $this->connection->selectSet($sql);
-	}
-
-	/**
-	 * Returns information for a specific user (legacy API - users are now roles)
-	 * @param string $username The user name
-	 * @return ADORecordSet A recordset
-	 */
-	public function getUser($username)
-	{
-		$this->connection->clean($username);
-
-		$sql = "
-			SELECT usename, usesuper, usecreatedb, valuntil, useconfig
-			FROM pg_catalog.pg_user
-			WHERE usename = '{$username}'";
+		$sql = "SELECT rolname AS usename,
+			rolsuper AS usesuper,
+			rolcreatedb AS usecreatedb,
+			rolvaliduntil AS valuntil,
+			rolconfig AS useconfig,
+			rolcanlogin AS canlogin
+        FROM pg_catalog.pg_roles
+        ORDER BY
+            (rolname LIKE 'pg_%') ASC,
+            rolname ASC";
 
 		return $this->connection->selectSet($sql);
 	}
@@ -162,6 +155,7 @@ class RoleActions extends ActionsBase
 	 * @param array $memberof Array of roles to add this role to (optional)
 	 * @param array $members Array of roles/users to add to this role (optional)
 	 * @param array $adminmembers Array of roles/users to add as admin members (optional)
+	 * @param mixed $comment
 	 * @return int 0 success
 	 */
 	public function createRole(
@@ -178,7 +172,8 @@ class RoleActions extends ActionsBase
 		$members = [],
 		$adminmembers = [],
 		$comment = ''
-	) {
+	)
+	{
 		$this->connection->fieldClean($rolename);
 
 		$sql = "CREATE ROLE \"{$rolename}\"";
@@ -190,30 +185,35 @@ class RoleActions extends ActionsBase
 		}
 
 		// Set role attributes
-		if ($superuser)
+		if ($superuser) {
 			$sql .= " SUPERUSER";
-		else
+		} else {
 			$sql .= " NOSUPERUSER";
+		}
 
-		if ($createdb)
+		if ($createdb) {
 			$sql .= " CREATEDB";
-		else
+		} else {
 			$sql .= " NOCREATEDB";
+		}
 
-		if ($createrole)
+		if ($createrole) {
 			$sql .= " CREATEROLE";
-		else
+		} else {
 			$sql .= " NOCREATEROLE";
+		}
 
-		if ($inherits)
+		if ($inherits) {
 			$sql .= " INHERIT";
-		else
+		} else {
 			$sql .= " NOINHERIT";
+		}
 
-		if ($login)
+		if ($login) {
 			$sql .= " LOGIN";
-		else
+		} else {
 			$sql .= " NOLOGIN";
+		}
 
 		if (!empty($connlimit) && $connlimit != -1) {
 			$sql .= " CONNECTION LIMIT {$connlimit}";
@@ -241,8 +241,9 @@ class RoleActions extends ActionsBase
 		}
 
 		$status = $this->connection->beginTransaction();
-		if ($status != 0)
+		if ($status != 0) {
 			return -1;
+		}
 
 		$status = $this->connection->execute($sql);
 		if ($status != 0) {
@@ -300,7 +301,8 @@ class RoleActions extends ActionsBase
 		$memberofold = [],
 		$membersold = [],
 		$adminmembersold = []
-	) {
+	)
+	{
 		$this->connection->fieldClean($rolename);
 
 		$sql = "ALTER ROLE \"{$rolename}\"";
@@ -312,30 +314,35 @@ class RoleActions extends ActionsBase
 		}
 
 		// Set role attributes
-		if ($superuser)
+		if ($superuser) {
 			$sql .= " SUPERUSER";
-		else
+		} else {
 			$sql .= " NOSUPERUSER";
+		}
 
-		if ($createdb)
+		if ($createdb) {
 			$sql .= " CREATEDB";
-		else
+		} else {
 			$sql .= " NOCREATEDB";
+		}
 
-		if ($createrole)
+		if ($createrole) {
 			$sql .= " CREATEROLE";
-		else
+		} else {
 			$sql .= " NOCREATEROLE";
+		}
 
-		if ($inherits)
+		if ($inherits) {
 			$sql .= " INHERIT";
-		else
+		} else {
 			$sql .= " NOINHERIT";
+		}
 
-		if ($login)
+		if ($login) {
 			$sql .= " LOGIN";
-		else
+		} else {
 			$sql .= " NOLOGIN";
+		}
 
 		if (!empty($connlimit) && $connlimit != -1) {
 			$sql .= " CONNECTION LIMIT {$connlimit}";
@@ -347,8 +354,9 @@ class RoleActions extends ActionsBase
 		}
 
 		$status = $this->connection->execute($sql);
-		if ($status != 0)
+		if ($status != 0) {
 			return $status;
+		}
 
 		// Handle memberof changes
 		if (is_array($memberofold) && is_array($memberof)) {
@@ -357,14 +365,16 @@ class RoleActions extends ActionsBase
 
 			foreach ($revoke as $role) {
 				$status = $this->revokeRole($role, $rolename);
-				if ($status != 0)
+				if ($status != 0) {
 					return $status;
+				}
 			}
 
 			foreach ($grant as $role) {
 				$status = $this->grantRole($role, $rolename);
-				if ($status != 0)
+				if ($status != 0) {
 					return $status;
+				}
 			}
 		}
 
@@ -375,14 +385,16 @@ class RoleActions extends ActionsBase
 
 			foreach ($revoke as $member) {
 				$status = $this->revokeRole($rolename, $member);
-				if ($status != 0)
+				if ($status != 0) {
 					return $status;
+				}
 			}
 
 			foreach ($grant as $member) {
 				$status = $this->grantRole($rolename, $member);
-				if ($status != 0)
+				if ($status != 0) {
 					return $status;
+				}
 			}
 		}
 
@@ -393,14 +405,16 @@ class RoleActions extends ActionsBase
 
 			foreach ($revoke as $member) {
 				$status = $this->revokeRole($rolename, $member, 1);
-				if ($status != 0)
+				if ($status != 0) {
 					return $status;
+				}
 			}
 
 			foreach ($grant as $member) {
 				$status = $this->grantRole($rolename, $member, 1);
-				if ($status != 0)
+				if ($status != 0) {
 					return $status;
+				}
 			}
 		}
 
@@ -464,10 +478,12 @@ class RoleActions extends ActionsBase
 		$membersold = [],
 		$adminmembersold = [],
 		$comment = ''
-	) {
+	)
+	{
 		$status = $this->connection->beginTransaction();
-		if ($status != 0)
+		if ($status != 0) {
 			return -1;
+		}
 
 		if ($rolename != $newrolename) {
 			$status = $this->renameRole($rolename, $newrolename);
@@ -609,8 +625,9 @@ class RoleActions extends ActionsBase
 		if (empty($username)) {
 			// Try to get from connection parameter
 			$val = pg_parameter_status($this->connection->conn->_connectionID, 'is_superuser');
-			if ($val !== false)
+			if ($val !== false) {
 				return $val == 'on';
+			}
 		}
 
 		$sql = "SELECT rolsuper FROM pg_catalog.pg_roles WHERE rolname='{$username}'";
