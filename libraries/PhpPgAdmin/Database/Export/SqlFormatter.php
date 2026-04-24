@@ -25,6 +25,7 @@ class SqlFormatter extends OutputFormatter
     private const ESCAPE_NONE = 0;
     private const ESCAPE_STRING = 1;
     private const ESCAPE_BYTEA = 2;
+    private const ESCAPE_BOOLEAN = 3;
 
     private $escapeModes = null;
     private $insertBegin = null;
@@ -145,9 +146,9 @@ class SqlFormatter extends OutputFormatter
             ) {
                 $escapeModes[$i] = self::ESCAPE_NONE;
             }
-            // Boolean - no escaping
-            elseif (in_array($type, ['bool', 'boolean'])) {
-                $escapeModes[$i] = self::ESCAPE_NONE;
+            // Boolean - format specially for SQL/COPY output
+            elseif (strpos($type, 'bool') !== false) {
+                $escapeModes[$i] = self::ESCAPE_BOOLEAN;
             }
             // Bytea - special escaping
             elseif ($type === 'bytea') {
@@ -185,9 +186,17 @@ class SqlFormatter extends OutputFormatter
                 if ($escapeModes[$i] === self::ESCAPE_BYTEA) {
                     // Bytea - octal escaping for COPY
                     $line .= bytea_to_octal($v);
+                } elseif ($escapeModes[$i] === self::ESCAPE_BOOLEAN) {
+                    // Booleans in COPY use 't'/'f'
+                    if (is_bool($v)) {
+                        $line .= ($v ? 't' : 'f');
+                    } else {
+                        $lv = strtolower((string)$v);
+                        $line .= in_array($lv, ['t', 'true', '1', 'yes', 'y'], true) ? 't' : 'f';
+                    }
                 } else {
                     // COPY escaping: backslash and special chars
-                    $v = addcslashes($v, "\0\\\n\r\t");
+                    $v = addcslashes((string)$v, "\0\\\n\r\t");
                     $line .= $v;
                 }
             }
@@ -221,6 +230,14 @@ class SqlFormatter extends OutputFormatter
             } elseif ($escapeModes[$i] === self::ESCAPE_BYTEA) {
                 // Bytea escaping
                 $values .= "'\\x" . bin2hex($v) . "'";
+            } elseif ($escapeModes[$i] === self::ESCAPE_BOOLEAN) {
+                // Booleans should be emitted as SQL boolean literals
+                if (is_bool($v)) {
+                    $values .= ($v ? 'TRUE' : 'FALSE');
+                } else {
+                    $lv = strtolower((string)$v);
+                    $values .= in_array($lv, ['t', 'true', '1', 'yes', 'y'], true) ? 'TRUE' : 'FALSE';
+                }
             } else {
                 // No escaping (numeric/boolean)
                 $values .= $v;

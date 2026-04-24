@@ -553,14 +553,16 @@ function doEmpty($confirm)
 
 		echo "<input type=\"hidden\" name=\"action\" value=\"empty\" />\n";
 		echo $misc->form;
+		// Offer CASCADE option for TRUNCATE
+		echo "<p><input type=\"checkbox\" id=\"cascade\" name=\"cascade\" /> <label for=\"cascade\">{$lang['strcascade']}</label></p>\n";
 		echo "<input type=\"submit\" name=\"empty\" value=\"{$lang['strempty']}\" /> <input type=\"submit\" name=\"cancel\" value=\"{$lang['strcancel']}\" />\n";
 		echo "</form>\n";
 	} // END if confirm
 	else { // Do Empty
 		if (is_array($_REQUEST['table'])) {
 			$msg = '';
-			foreach ($_REQUEST['table'] as $t) {
-				$status = $tableActions->emptyTable($t);
+				foreach ($_REQUEST['table'] as $t) {
+					$status = $tableActions->emptyTable($t, isset($_POST['cascade']));
 				if ($status == 0)
 					$msg .= sprintf('%s: %s<br />', htmlentities($t, ENT_QUOTES, 'UTF-8'), $lang['strtableemptied']);
 				else {
@@ -571,7 +573,7 @@ function doEmpty($confirm)
 			doDefault($msg);
 		} // END multi empty
 		else {
-			$status = $tableActions->emptyTable($_POST['table']);
+				$status = $tableActions->emptyTable($_POST['table'], isset($_POST['cascade']));
 			if ($status == 0)
 				doDefault($lang['strtableemptied']);
 			else
