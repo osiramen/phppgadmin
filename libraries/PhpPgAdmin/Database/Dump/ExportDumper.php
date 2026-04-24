@@ -166,7 +166,9 @@ abstract class ExportDumper extends AppContext
      */
     protected function writeOwner($objectName, $objectType, $owner)
     {
-        if (!empty($this->dumpOptions['no_owner'])) {
+        // Skip owner statements when explicitly requested or when performing
+        // a data-only dump since owner changes are part of structure, not data.
+        if (!empty($this->dumpOptions['no_owner']) || !empty($this->dumpOptions['data_only'])) {
             return;
         }
 
