@@ -143,7 +143,8 @@ Test SQL fixtures are in `tests/fixtures/`:
 1. **Function → Function**: Direct function calls
 2. **Function → Table**: Composite type usage (return/argument types, including arrays)
 3. **Table → Function**: DEFAULT, CHECK, GENERATED expressions
-4. **Domain → Function**: CHECK constraints
+4. **Table → Table**: Foreign-key parent/child ordering, with FK DDL still deferred until all tables are created
+5. **Domain → Function**: CHECK constraints
 
 ### Built-in Function Filtering
 

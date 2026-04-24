@@ -66,6 +66,7 @@ class DependencyAnalyzer
         $this->addFunctionToFunctionDependencies($graph);
         $this->addFunctionToTableDependencies($graph);
         $this->addTableToFunctionDependencies($graph);
+        $this->addTableToTableDependencies($graph);
         // Note: Domain dependencies are handled separately in SchemaDumper::dumpDomains()
         $this->addAggregateToFunctionDependencies($graph);
 
@@ -528,7 +529,54 @@ class DependencyAnalyzer
         }
     }
 
-    /**     * Add dependencies for aggregates on their supporting functions.
+    /**
+     * Add table → table dependencies from foreign keys.
+     *
+     * Foreign-key constraints are still deferred during table creation, but the
+     * referenced table must be dumped before the referencing table so imports
+     * can be replayed in dependency order.
+     *
+     * @param DependencyGraph $graph Graph to populate
+     */
+    private function addTableToTableDependencies(DependencyGraph $graph)
+    {
+        $schemaList = $this->escapeSchemaList();
+
+        $sql = "SELECT DISTINCT
+                    c.conrelid AS table_oid,
+                    c.confrelid AS depends_on_oid
+                FROM pg_catalog.pg_constraint c
+                JOIN pg_catalog.pg_class src ON src.oid = c.conrelid
+                JOIN pg_catalog.pg_namespace nsrc ON nsrc.oid = src.relnamespace
+                JOIN pg_catalog.pg_class dst ON dst.oid = c.confrelid
+                JOIN pg_catalog.pg_namespace ndst ON ndst.oid = dst.relnamespace
+                WHERE c.contype = 'f'
+                AND src.relkind IN ('r', 'p')
+                AND dst.relkind IN ('r', 'p')
+                AND nsrc.nspname IN ($schemaList)
+                AND ndst.nspname IN ($schemaList)
+                AND c.conrelid <> c.confrelid";
+
+        $result = $this->connection->selectSet($sql);
+
+        while ($result && !$result->EOF) {
+            $sourceOid = $result->fields['table_oid'];
+            $targetOid = $result->fields['depends_on_oid'];
+
+            $sourceNode = $graph->getNode($sourceOid);
+            $targetNode = $graph->getNode($targetOid);
+
+            if ($sourceNode && $targetNode) {
+                // Edge direction: referencing table depends on referenced table.
+                $graph->addEdge($sourceOid, $targetOid);
+            }
+
+            $result->moveNext();
+        }
+    }
+
+    /**     
+     * Add dependencies for aggregates on their supporting functions.
      * Aggregates depend on:
      * - aggtransfn (SFUNC)
      * - aggfinalfn (FINALFUNC)

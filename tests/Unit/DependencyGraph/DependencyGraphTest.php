@@ -86,6 +86,32 @@ class DependencyGraphTest extends TestCase
     }
 
     /**
+     * Test table depending on another table via foreign key.
+     *
+     * This mirrors the failing export case where a child table was dumped before
+     * the parent table because table nodes were only ordered alphabetically.
+     */
+    public function testTableDependsOnReferencedTable()
+    {
+        $graph = new DependencyGraph();
+
+        $child = new ObjectNode('200', 'table', 'license_devices', 'license');
+        $parent = new ObjectNode('100', 'table', 'licenses', 'license');
+
+        $graph->addNode($child);
+        $graph->addNode($parent);
+
+        // Child table depends on parent table via foreign key.
+        $graph->addEdge('200', '100');
+
+        $sorted = $graph->topologicalSort();
+
+        $this->assertCount(2, $sorted);
+        $this->assertEquals('100', $sorted[0]->oid);
+        $this->assertEquals('200', $sorted[1]->oid);
+    }
+
+    /**
      * Test circular dependency detection.
      */
     public function testCircularDependency()
