@@ -813,10 +813,6 @@ class SchemaDumper extends ExportDumper
     {
         $this->write("\n-- Sequences in schema $this->schemaQuoted\n");
         //$this->dumpRelkindObjects($schema, $options, 'S', 'sequence');
-
-        if ($this->dumpOptions['data_only'] ?? false) {
-            return;
-        }
         
         $sql = "SELECT c.relname
                 FROM pg_catalog.pg_class c
