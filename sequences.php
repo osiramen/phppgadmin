@@ -14,6 +14,24 @@ use PhpPgAdmin\Database\Actions\SequenceActions;
 // Include application functions
 include_once('./libraries/bootstrap.php');
 
+function ownedSequenceNames($sequenceActions, $sequences)
+{
+	$owned = [];
+	foreach ($sequences as $sequenceName) {
+		$sequence = $sequenceActions->getSequence($sequenceName);
+		if (
+			is_object($sequence)
+			&& $sequence->recordCount() > 0
+			&& !empty($sequence->fields['owned_table'])
+			&& !empty($sequence->fields['owned_column'])
+		) {
+			$owned[] = $sequenceName;
+		}
+	}
+
+	return $owned;
+}
+
 /**
  * Display list of all sequences in the database/schema
  */
@@ -46,7 +64,7 @@ function doDefault($msg = '')
 			'title' => $lang['strtable'],
 			'field' => field('tablename'),
 			'url' => "tblproperties.php?{$misc->href}&amp;subject=table&amp;",
-			'vars' => ['table' => 'tablename'],
+			'vars' => ['schema' => 'owned_table_schema', 'table' => 'tablename'],
 		],
 		'owner' => [
 			'title' => $lang['strowner'],
@@ -95,6 +113,9 @@ function doDefault($msg = '')
 		'drop' => [
 			'icon' => $misc->icon('Delete'),
 			'content' => $lang['strdrop'],
+			'disable' => callback(function ($fields) {
+				return !empty($fields['tablename']);
+			}),
 			'attr' => [
 				'href' => [
 					'url' => 'sequences.php',
@@ -204,6 +225,19 @@ function doProperties($msg = '')
 		// Show comment if any
 		if ($sequence->fields['seqcomment'] !== null)
 			echo "<p class=\"comment\">", $misc->formatVal($sequence->fields['seqcomment']), "</p>\n";
+
+		if (!empty($sequence->fields['owned_table']) && !empty($sequence->fields['owned_column'])) {
+			$ownedTableSchema = $sequence->fields['owned_table_schema'] ?: $_REQUEST['schema'];
+			echo "<table border=\"0\">";
+			echo "<tr><th class=\"data\">{$lang['strtable']}</th><th class=\"data\">{$lang['strcolumn']}</th></tr>";
+			echo "<tr>";
+			echo "<td class=\"data1 no-wrap\"><a href=\"tblproperties.php?{$misc->href}&amp;subject=table&amp;schema=", urlencode($ownedTableSchema), "&amp;table=", urlencode($sequence->fields['owned_table']), "\">";
+			echo "<img src=\"", $misc->icon('Table'), "\" alt=\"Table\" class=\"icon\" />", $misc->formatVal("{$ownedTableSchema}.{$sequence->fields['owned_table']}"), "</a></td>";
+			echo "<td class=\"data1 no-wrap\"><a href=\"colproperties.php?{$misc->href}&amp;subject=column&amp;schema=", urlencode($ownedTableSchema), "&amp;table=", urlencode($sequence->fields['owned_table']), "&amp;column=", urlencode($sequence->fields['owned_column']), "&amp;action=properties\">";
+			echo "<img src=\"", $misc->icon('Column'), "\" alt=\"Column\" class=\"icon\" />", $misc->formatVal($sequence->fields['owned_column']), "</a></td>";
+			echo "</tr>";
+			echo "</table>";
+		}
 
 		echo "<table border=\"0\">";
 		echo "<tr><th class=\"data\">{$lang['strname']}</th>";
@@ -352,6 +386,28 @@ function doDrop($confirm, $msg = '')
 	if (empty($_REQUEST['sequence']) && empty($_REQUEST['ma'])) {
 		doDefault($lang['strspecifysequencetodrop']);
 		exit();
+	}
+
+	$requestedSequences = [];
+	if (isset($_REQUEST['ma'])) {
+		foreach ($_REQUEST['ma'] as $v) {
+			$a = unserialize(htmlspecialchars_decode($v, ENT_QUOTES));
+			if (!empty($a['sequence'])) {
+				$requestedSequences[] = $a['sequence'];
+			}
+		}
+	} elseif (isset($_REQUEST['sequence'])) {
+		if (is_array($_REQUEST['sequence'])) {
+			$requestedSequences = $_REQUEST['sequence'];
+		} else {
+			$requestedSequences = [$_REQUEST['sequence']];
+		}
+	}
+
+	$ownedSequences = ownedSequenceNames($sequenceActions, $requestedSequences);
+	if (!empty($ownedSequences)) {
+		doDefault($lang['strsystemobjectdenied']);
+		return;
 	}
 
 	if ($confirm) {

@@ -49,7 +49,7 @@ class SequenceActions extends ActionsBase
             }
 
             $sql =
-                "SELECT
+                "SELECT DISTINCT ON (c.oid)
                     c.relname AS seqname,
                     s.last_value, s.log_cnt, s.is_called,
                     m.seqstart AS start_value,
@@ -61,18 +61,26 @@ class SequenceActions extends ActionsBase
                     pg_catalog.obj_description(c.oid, 'pg_class') as seqcomment,
                     pg_catalog.pg_get_userbyid(c.relowner) as seqowner,
                     n.nspname,
+                    tn.nspname AS owned_table_schema,
                     t.relname AS owned_table,
                     a.attname AS owned_column
                 FROM pg_class c
                 JOIN pg_namespace n ON n.oid = c.relnamespace
                 JOIN pg_sequence m ON m.seqrelid = c.oid
-                LEFT JOIN pg_depend d ON d.objid = c.oid AND d.deptype = 'a'
+                LEFT JOIN pg_depend d ON d.objid = c.oid AND d.deptype IN ('a', 'i')
                 LEFT JOIN pg_class t ON t.oid = d.refobjid
+                LEFT JOIN pg_namespace tn ON tn.oid = t.relnamespace
                 LEFT JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = d.refobjsubid
                 {$join}
                 WHERE c.relkind = 'S'
                 AND c.relname = '{$c_sequence}'
                 AND n.nspname = '{$c_schema}'
+                ORDER BY c.oid,
+                    CASE d.deptype
+                        WHEN 'a' THEN 0
+                        WHEN 'i' THEN 1
+                        ELSE 2
+                    END
             ";
 
             return $this->connection->selectSet($sql);
@@ -100,12 +108,14 @@ class SequenceActions extends ActionsBase
                 pg_catalog.obj_description(c.oid, 'pg_class') as seqcomment,
                 pg_catalog.pg_get_userbyid(c.relowner) as seqowner,
                 n.nspname,
+                tn.nspname AS owned_table_schema,
                 t.relname AS owned_table,
                 a.attname AS owned_column
             FROM pg_class c
             JOIN pg_namespace n ON n.oid = c.relnamespace
             LEFT JOIN pg_depend d ON d.objid = c.oid AND d.deptype = 'a'
             LEFT JOIN pg_class t ON t.oid = d.refobjid
+            LEFT JOIN pg_namespace tn ON tn.oid = t.relnamespace
             LEFT JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = d.refobjsubid
             CROSS JOIN (
                 SELECT
@@ -137,7 +147,7 @@ class SequenceActions extends ActionsBase
         $this->connection->clean($c_schema);
 
         $sql =
-            "SELECT
+            "SELECT DISTINCT ON (n.nspname, c.relname)
                 n.nspname,
                 c.relname AS seqname,
                 pg_catalog.obj_description(c.oid, 'pg_class') AS seqcomment,
@@ -145,6 +155,7 @@ class SequenceActions extends ActionsBase
                     FROM pg_catalog.pg_tablespace pt
                     WHERE pt.oid = c.reltablespace) AS tablespace,
                 pg_catalog.pg_get_userbyid(c.relowner) AS seqowner,
+                clsns.nspname AS owned_table_schema,
                 cls.relname AS tablename,
                 att.attname AS columnname
             FROM
@@ -154,9 +165,11 @@ class SequenceActions extends ActionsBase
                     ON d.objid = c.oid
                     AND d.classid = 'pg_class'::regclass
                     AND d.refclassid = 'pg_class'::regclass
-                    AND d.deptype = 'a'
+                    AND d.deptype IN ('a', 'i')
                 LEFT JOIN pg_catalog.pg_class cls
                     ON cls.oid = d.refobjid
+                LEFT JOIN pg_catalog.pg_namespace clsns
+                    ON clsns.oid = cls.relnamespace
                 LEFT JOIN pg_catalog.pg_attribute att
                     ON att.attrelid = d.refobjid
                     AND att.attnum = d.refobjsubid
@@ -165,7 +178,13 @@ class SequenceActions extends ActionsBase
                 AND n.nspname = '{$c_schema}'
                 AND pg_catalog.pg_table_is_visible(c.oid)
             ORDER BY
-                nspname, seqname";
+                n.nspname,
+                c.relname,
+                CASE d.deptype
+                    WHEN 'a' THEN 0
+                    WHEN 'i' THEN 1
+                    ELSE 2
+                END";
 
         return $this->connection->selectSet($sql);
     }

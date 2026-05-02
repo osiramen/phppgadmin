@@ -484,6 +484,7 @@ function doDefault($msg = '')
 
 	$attPre = function ($rowdata, $actions) {
 		$pg = AppContainer::getPostgres();
+		$misc = AppContainer::getMisc();
 		$lang = AppContainer::getLang();
 		$rowdata->fields['+type'] = $pg->formatType($rowdata->fields['type'], $rowdata->fields['atttypmod']);
 		$attname = $rowdata->fields['attname'];
@@ -508,6 +509,31 @@ function doDefault($msg = '')
 			}
 		} else {
 			$rowdata->fields['+default'] = '';
+		}
+
+		$sequenceName = $rowdata->fields['sequence_name'] ?? '';
+		$sequenceSchema = $rowdata->fields['sequence_schema'] ?? $_REQUEST['schema'];
+		$rowdata->fields['+sequence'] = null;
+		if ($sequenceName !== '') {
+			$rowdata->fields['+sequence'] = !empty($sequenceSchema)
+				? "{$sequenceSchema}.{$sequenceName}"
+				: $sequenceName;
+
+			$actions['sequence'] = [
+				'icon' => $misc->icon('Sequence'),
+				'content' => $lang['strsequence'],
+				'attr' => [
+					'href' => [
+						'url' => 'sequences.php',
+						'urlvars' => [
+							'subject' => 'sequence',
+							'action' => 'properties',
+							'schema' => $sequenceSchema,
+							'sequence' => $sequenceName,
+						],
+					],
+				],
+			];
 		}
 
 		$actions['browse']['attr']['href']['urlvars']['query'] =
@@ -661,6 +687,19 @@ function doDefault($msg = '')
 			'field' => field('+default'),
 			'type' => 'verbatim',
 		],
+		/*
+		'sequence' => [
+			'title' => $lang['strsequence'],
+			'field' => field('+sequence'),
+			'url' => "sequences.php?action=properties&amp;{$misc->href}&amp;",
+			'vars' => [
+				'schema' => 'sequence_schema',
+				'sequence' => 'sequence_name',
+			],
+			'icon' => 'Sequence',
+			'class' => 'no-wrap',
+		],
+		*/
 		'keyprop' => [
 			'title' => $lang['strconstraints'],
 			'class' => 'constraint_cell',
@@ -690,8 +729,8 @@ function doDefault($msg = '')
 			],
 		],
 		'browse' => [
-			'icon' => $misc->icon('Table'),
-			'content' => $lang['strbrowse'],
+			'schema' => field('sequence_schema'),
+			'sequence' => field('sequence_name'),
 			'attr' => [
 				'href' => [
 					'url' => 'display.php',

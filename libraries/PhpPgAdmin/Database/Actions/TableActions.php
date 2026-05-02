@@ -237,7 +237,7 @@ class TableActions extends ActionsBase
             LEFT JOIN pg_type t ON a.atttypid = t.oid
             LEFT JOIN pg_depend d ON d.refobjid = a.attrelid
                                 AND d.refobjsubid = a.attnum
-                                AND d.deptype = 'a'
+                                AND d.deptype IN ('a', 'i')
                                 AND d.classid = 'pg_class'::regclass
             LEFT JOIN pg_class seq ON seq.oid = d.objid AND seq.relkind = 'S'
             LEFT JOIN pg_namespace seqns ON seq.relnamespace = seqns.oid
@@ -247,7 +247,13 @@ class TableActions extends ActionsBase
                 AND relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = '{$schema}')
             )
             {$whereField}
-            ORDER BY a.attnum";
+            ORDER BY a.attrelid,
+                a.attnum,
+                CASE d.deptype
+                    WHEN 'a' THEN 0
+                    WHEN 'i' THEN 1
+                    ELSE 2
+                END";
 
         return $this->connection->selectSet($sql);
     }
